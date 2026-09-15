@@ -1,0 +1,21 @@
+# Agent Instructions
+
+See the .agents/skills directory. You MUST use skills for all tasks.
+
+You must start with `using-superpowers` for EVERY task, no matter how small. Keep `self-reflecting` active throughout — invoke it whenever you encounter failures, retries, or corrections. Next, you must apply `adapting-communication` to EVERY task. Before finishing you MUST use `verifying-claims` to verify your work, no matter what.
+
+These are essential skills.
+
+Use the `using-prek-pre-commit` skill when running pre-commit checks.
+
+Extended thinking should only trigger for multi-step reasoning problems. When in doubt, respond directly without extended analysis.
+
+## Project context
+
+Background on what this project is for lives in `.agents/context`. Read these
+before making decisions about methodology, outputs, or what belongs in the tool:
+
+- `.agents/context/project-objectives.md` — what NHC has asked T+T to deliver and
+  how the work is expected to be run.
+- `.agents/context/project-scope.md` — the four project phases, their key tasks,
+  the out-of-scope items, and the deliverables.
