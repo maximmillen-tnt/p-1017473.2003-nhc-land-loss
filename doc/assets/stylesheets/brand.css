@@ -1,0 +1,28 @@
+/* T+T Brand Overrides for Material for MkDocs
+ *
+ * Canonical source: https://tonkintaylor.github.io/assets/css/ttt-brand.css
+ * Google Fonts is disabled in mkdocs.yml (font: false) so we control the stack.
+ *
+ * Do NOT hard-code hex values here — reference the canonical CSS custom
+ * properties exposed by ttt-brand.css.
+ */
+
+@import url("https://tonkintaylor.github.io/assets/css/ttt-brand.css");
+
+:root {
+  /* Typography — map brand tokens to Material theme variables */
+  --md-text-font: var(--ttt-font-primary);
+  --md-code-font: "Roboto Mono", "Consolas", monospace;
+}
+
+/* Slate (dark) scheme — map brand colours to Material primary/accent */
+[data-md-color-scheme="slate"] {
+  --md-primary-fg-color: var(--ttt-blue);
+  --md-accent-fg-color: var(--ttt-light-turquoise);
+}
+
+/* Default (light) scheme */
+[data-md-color-scheme="default"] {
+  --md-primary-fg-color: var(--ttt-blue);
+  --md-accent-fg-color: var(--ttt-teal);
+}

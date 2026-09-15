@@ -1,0 +1,50 @@
+# MkDocs configuration — Material for MkDocs
+# Docs: https://squidfunk.github.io/mkdocs-material/
+
+site_name: "landloss"
+site_description: "NHC land loss"
+docs_dir: doc
+site_dir: site
+
+theme:
+  name: material
+  favicon: assets/favicon.ico
+  logo: https://tonkintaylor.github.io/assets/logos/tt-logo-horizontal-white.png
+  palette:
+    - scheme: slate
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/brightness-7
+        name: Switch to light mode
+    - scheme: default
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/brightness-4
+        name: Switch to dark mode
+  font: false
+  features:
+    - navigation.indexes
+    - navigation.sections
+    - search.highlight
+
+extra_css:
+  - assets/stylesheets/brand.css
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: [src]
+          options:
+            docstring_style: google
+            show_source: false
+  - api-autonav:
+      modules: ['src/landloss']
+      exclude: ['re:.*\._version']
+
+nav:
+  - Home: index.md
+  - API Reference: reference/

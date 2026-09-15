@@ -1,0 +1,12 @@
+# Changes here will be overwritten by Copier
+_commit: v0.6.2
+_src_path: git+https://bitbucket.org/tonkintaylor/python-template
+ci_platform: github
+is_advanced: false
+is_confluence_used: false
+is_jira_used: false
+is_sonarqube_used: false
+name_slug: landloss
+project_name: NHC land loss project
+project_short_description: NHC land loss
+tt_job_num: '1017473.2003'
