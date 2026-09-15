@@ -7,6 +7,8 @@ Guidance for Claude Code when working in this repository.
 `landloss` — NHC land loss project (job number 1017473.2003). Python 3.13, managed
 with `uv`. Source lives in `src/landloss`, tests in `tests`.
 
+See instructions under AGENTS.md
+
 ## Always run the pre-commit hooks after making changes
 
 This repo uses [prek](https://github.com/j178/prek) (a drop-in pre-commit runner)

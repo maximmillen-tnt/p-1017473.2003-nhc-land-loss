@@ -19,3 +19,5 @@ before making decisions about methodology, outputs, or what belongs in the tool:
   how the work is expected to be run.
 - `.agents/context/project-scope.md` — the four project phases, their key tasks,
   the out-of-scope items, and the deliverables.
+- `.agents/context/nhc-event-parameters-email.md` — NHC's brief on the event
+  geography, exposure and insurance profile the study should be shaped around.

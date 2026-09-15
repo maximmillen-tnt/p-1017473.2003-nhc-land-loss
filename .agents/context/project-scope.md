@@ -13,7 +13,8 @@ include:
    scenario analysis would have limited impact on the outputs, and return period
    based demands provide a better basis for social equality analysis.
 2. Decide on spatial extent that covers a portfolio that meets the requirements
-   detailed in Bridget Attwood's email dated 10/09/26.
+   detailed in Bridget Attwood's email dated 10/09/26 (reproduced in
+   `nhc-event-parameters-email.md`).
 3. Provide a prototype Excel based tool that implements 8–12 branches of a
    decision tree, where the selected variables and their values would be based on
    existing work to date by NHC and engineering judgement. Some key variables that
