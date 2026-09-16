@@ -1,5 +1,8 @@
 # Project scope
 
+> Refinements below each item were added after the kick-off meeting on
+> 16 September 2026. They annotate the agreed scope rather than replace it.
+
 ## Phase 1: Establish initial tool
 
 The first phase would focus on establishing the process and understanding the key
@@ -12,9 +15,30 @@ include:
    acceleration of ~1g) the spatial correlation effects typically captured in
    scenario analysis would have limited impact on the outputs, and return period
    based demands provide a better basis for social equality analysis.
+
+   Refinements:
+
+   - The TS1170.5 demands are confirmed as the basis; the remaining decision
+     is the VS site class, expected to be one value for flat land and another
+     for sloping land. Kevin Foster's site class work is an alternative.
+   - The NHC loss modelling team accepted the single high-demand approach but
+     noted that settlement behaviour, and therefore the equity conclusions,
+     may differ at lower demands.
 2. Decide on spatial extent that covers a portfolio that meets the requirements
    detailed in Bridget Attwood's email dated 10/09/26 (reproduced in
    `nhc-event-parameters-email.md`).
+
+   Refinements:
+
+   - Proposed extent is Wellington City, Lower Hutt, Upper Hutt and Porirua.
+     Each of Bridget's principles was tested against it and passes; Porirua
+     was added to be confident of capturing lower-value land.
+   - The whole Wellington region was rejected as too large and too far from
+     the population centres.
+   - The difficult south coast of Wellington may be cut from the extent if it
+     proves too complicated, and revisited later.
+   - The unique identifier is expected to be the LINZ property ID, because
+     insurance attaches at property rather than dwelling level.
 3. Provide a prototype Excel based tool that implements 8–12 branches of a
    decision tree, where the selected variables and their values would be based on
    existing work to date by NHC and engineering judgement. Some key variables that
@@ -34,6 +58,29 @@ include:
    10. Cost surge factors and property access
    11. Insurance penetration
 
+   Refinements:
+
+   - Geology, geomorphology and the flat versus sloping land split come from
+     the National Liquefaction Model, as does the liquefaction damage given a
+     level of shaking. The lateral spreading pilot has just finished its first
+     stage and can be used too.
+   - Slope gradient is calculated by T+T from the LINZ DEM, with more than one
+     gradient measure likely: one feeding retaining walls and one feeding
+     slope failure.
+   - Retaining wall prevalence will be an SME estimate from Nick Peters,
+     varied by suburb, with LIDAR used to inform roughly where within a suburb
+     the walls are.
+   - Insurance penetration is a fixed 90% per Bridget's brief, exposed as an
+     editable model variable.
+   - Land and capital values are expected from the councils rather than QV,
+     which charges for the data.
+   - Cost surge and property access were confirmed as already within the level
+     of effort, including local surcharge effects.
+   - Multi-unit buildings, cross-lease and shared land are excluded from this
+     phase. This narrows the brief, which asked for them explicitly, and the
+     exclusion is to be evidenced by quantifying what proportion of the
+     population they represent.
+
 ## Phase 2: Refine estimates, additional variables
 
 Based on the work from phase 1, the prioritisation of analyses to support
@@ -51,6 +98,21 @@ settings and assumptions. Key tasks in this phase would include:
 2. Include additional variables within the tool by evaluating claims settled from
    previous events to understand key attributes of a property that drive costs and
    understand the different reasons for a claim
+
+   Refinements:
+
+   - NHC can extract claims data but is unsure it can do so in time, and the
+     data is not disaggregated by damage type. A sample of around 50 claims
+     was offered; reviewing that by hand is considered worthwhile even if AI
+     extraction is not viable.
+   - The team should plan on the realistic assumption that no claims data
+     arrives.
+   - Existing Christchurch cost data held by T+T, and a possible unfiltered
+     version held by Nathan at NHC that includes hill properties, are
+     alternative sources.
+   - The retaining wall pilot may be replaced or supplemented by a suburb-level
+     SME estimate, with LIDAR analysis validated against SME judgement rather
+     than the other way around.
 
 ## Phase 3: Probabilistic spatial analysis
 
@@ -91,6 +153,19 @@ Key tasks include:
    value.
 5. Produce per comparison and summary charts, e.g. number of claims per suburb.
 
+Refinements:
+
+- A decision is outstanding on whether to estimate the spatial extent of each
+  landslide, or to classify each property as fully, partially or not affected.
+  Extent modelling handles landslides crossing several properties; the simpler
+  classification reaches an answer faster.
+- Local guidance is that most earthquake-induced landslides will be confined to
+  a single property and associated with a failed retaining wall, an oversteep
+  cut or a fill embankment, with multi-property failures concentrated in
+  gullies where colluvium and higher water tables allow global failures.
+- The model is built end to end on assumptions first, then improved as datasets
+  arrive; the modular structure is what makes this work.
+
 ## Phase 4: Reporting
 
 This phase would collate the key findings to support:
@@ -121,6 +196,15 @@ Key tasks include:
    how the damage predictions can be extended to lower shaking demand levels to be
    converted to land damage vulnerability functions.
 
+Refinements:
+
+- Reporting must carry the evidence behind assumptions, including the
+  assumptions used to justify excluding parts of the population, so that the
+  NHC board can see the exclusions were checked rather than asserted.
+- The interpretation of the NHC Act and the exact land cover wording need to be
+  agreed with NHC before the report can describe the policy settings, and the
+  settings NHC wants tested have not yet been supplied.
+
 ## Out of scope
 
 The following services are out-of-scope:
@@ -131,6 +215,15 @@ The following services are out-of-scope:
 - Consideration of aftershocks
 - Consideration of fault surface rupture hazard
 - Consideration of tectonic subsidence / uplift
+
+Refinements:
+
+- Fault surface rupture was reconfirmed as excluded, despite a fault line
+  running through the study area that would drive loss of property access.
+- Multi-unit buildings, cross-lease and shared land are added to the exclusions
+  in practice, parked for a possible later sub-study.
+- Privately owned service connections cannot be mapped, as councils hold only
+  public services and the connection points.
 
 ## Deliverables
 

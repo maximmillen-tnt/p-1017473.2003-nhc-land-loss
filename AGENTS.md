@@ -21,3 +21,13 @@ before making decisions about methodology, outputs, or what belongs in the tool:
   the out-of-scope items, and the deliverables.
 - `.agents/context/nhc-event-parameters-email.md` — NHC's brief on the event
   geography, exposure and insurance profile the study should be shaped around.
+- `.agents/context/nhc-land-cover-and-settlement.md` — how NHC cover attaches to a
+  property, how retaining walls and sub-caps are settled, and what is still unconfirmed.
+- `.agents/context/land-damage-mechanisms.md` — the team's working picture of how land
+  damage actually occurs in Wellington, and what that means for the model.
+- `.agents/context/data-sources.md` — which dataset comes from where, and what is not
+  obtainable.
+
+The live register of tasks, limitations and future improvements is
+`.agents/context/register.json`, rendered to `project-register.xlsx`. Edit the JSON and
+regenerate; see the `recording-project-context` skill.
