@@ -16,3 +16,17 @@ API_KEY_ENV_VARS = {
 
 # https://data.linz.govt.nz/layer/123113-nz-addresses/
 NZ_ADDRESSES_LAYER_ID = 123113
+
+# Territorial Authority 2025 boundaries, mirrored on the T+T Koordinates
+# instance. LINZ does not publish territorial authority boundaries; they
+# originate from Stats NZ.
+TERRITORIAL_AUTHORITY_LAYER_ID = 122409
+
+# The four territorial authorities making up the study area, by their
+# TA2025_V1_00 code, as agreed at the kick-off meeting.
+STUDY_AREA_TA_CODES = {
+    "044": "Porirua City",
+    "045": "Upper Hutt City",
+    "046": "Lower Hutt City",
+    "047": "Wellington City",
+}
