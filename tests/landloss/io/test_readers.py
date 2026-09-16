@@ -1,0 +1,382 @@
+"""Tests for the vector dataset readers."""
+
+from pathlib import Path
+
+import geopandas as gpd
+import pytest
+from shapely.geometry import Point, Polygon
+
+from landloss.domain.constants import (
+    DEFAULT_CRS,
+    LINZ_DOMAIN,
+    NZ_ADDRESSES_LAYER_ID,
+    TTGROUP_DOMAIN,
+)
+from landloss.io import readers
+from landloss.io.area_of_interest import SMALL_WLG_PILOT
+from landloss.io.readers import (
+    get_nz_addresses,
+    load_koordinates_layer_extent,
+    resolve_api_key,
+)
+
+# One square well inside the bbox used below, one entirely outside it, and one
+# straddling its eastern edge.
+INSIDE = Polygon([(1000, 1000), (1010, 1000), (1010, 1010), (1000, 1010)])
+OUTSIDE = Polygon([(5000, 5000), (5010, 5000), (5010, 5010), (5000, 5010)])
+STRADDLING = Polygon([(1990, 1000), (2010, 1000), (2010, 1010), (1990, 1010)])
+
+BBOX = (0.0, 0.0, 2000.0, 2000.0)
+
+
+@pytest.fixture(autouse=True)
+def _cache_in_tmp(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep the extent cache out of the working tree during tests."""
+    monkeypatch.setenv("KOOPCACHE_DIR", str(tmp_path / "koopcache"))
+
+
+@pytest.fixture
+def layer_file(tmp_path: Path) -> Path:
+    """Write a three-feature layer to disk and return its path."""
+    gdf = gpd.GeoDataFrame(
+        {"name": ["inside", "outside", "straddling"]},
+        geometry=[INSIDE, OUTSIDE, STRADDLING],
+        crs=DEFAULT_CRS,
+    )
+    path = tmp_path / "layer.gpkg"
+    gdf.to_file(path)
+    return path
+
+
+class FakeConnection:
+    """Stands in for KoordinatesConnection, recording how it was built."""
+
+    def __init__(self, api_key: str, domain: str) -> None:
+        self.api_key = api_key
+        self.domain = domain
+        self.closed = False
+
+    def close(self) -> None:
+        self.closed = True
+
+
+@pytest.fixture
+def fake_koordinates(
+    layer_file: Path, monkeypatch: pytest.MonkeyPatch
+) -> dict[str, object]:
+    """Serve layer_file in place of a Koordinates download, recording the call."""
+    calls: dict[str, object] = {}
+
+    def fake_connection(*, api_key: str, domain: str) -> FakeConnection:
+        conn = FakeConnection(api_key=api_key, domain=domain)
+        calls["conn"] = conn
+        return conn
+
+    def fake_get_latest_layer(*, conn: FakeConnection, layer_id: int) -> Path:
+        calls["layer_id"] = layer_id
+        return layer_file
+
+    monkeypatch.setattr(readers, "KoordinatesConnection", fake_connection)
+    monkeypatch.setattr(readers, "get_latest_layer", fake_get_latest_layer)
+    monkeypatch.setenv("TNT_KOORDINATES_API_KEY", "tnt-key")
+    monkeypatch.setenv("LINZ_API_KEY", "linz-key")
+    return calls
+
+
+# --- reading and clipping ----------------------------------------------------
+
+
+def test_loads_every_feature_from_a_path(layer_file: Path) -> None:
+    """Without a bbox, the whole layer comes back."""
+    result = load_koordinates_layer_extent(layer=layer_file)
+
+    assert sorted(result["name"]) == ["inside", "outside", "straddling"]
+
+
+def test_defaults_to_nztm(layer_file: Path) -> None:
+    """The default CRS is NZTM, which is what the rest of the model works in."""
+    result = load_koordinates_layer_extent(layer=layer_file)
+
+    assert result.crs.to_string() == DEFAULT_CRS
+
+
+def test_reprojects_to_the_requested_crs(layer_file: Path) -> None:
+    """The layer is returned in the CRS the caller asked for, not its own."""
+    result = load_koordinates_layer_extent(layer=layer_file, crs="EPSG:4326")
+
+    assert result.crs.to_string() == "EPSG:4326"
+
+
+def test_bbox_excludes_features_outside_it(layer_file: Path) -> None:
+    """A feature wholly outside the bounding box is dropped."""
+    result = load_koordinates_layer_extent(layer=layer_file, bbox=BBOX)
+
+    assert "outside" not in set(result["name"])
+
+
+def test_bbox_cuts_a_straddling_feature_at_the_edge(layer_file: Path) -> None:
+    """A feature crossing the boundary is clipped rather than kept or dropped."""
+    result = load_koordinates_layer_extent(layer=layer_file, bbox=BBOX)
+
+    straddling = result.loc[result["name"] == "straddling"]
+    assert len(straddling) == 1
+
+    # The original spans x from 1990 to 2010; only the half inside should remain.
+    minx, _, maxx, _ = straddling.total_bounds
+    assert minx == pytest.approx(1990.0)
+    assert maxx == pytest.approx(2000.0)
+
+
+def test_bbox_leaves_an_interior_feature_intact(layer_file: Path) -> None:
+    """A feature wholly inside the bounding box keeps its original area."""
+    result = load_koordinates_layer_extent(layer=layer_file, bbox=BBOX)
+
+    inside = result.loc[result["name"] == "inside"]
+    assert inside.geometry.iloc[0].area == pytest.approx(INSIDE.area)
+
+
+def test_an_empty_bbox_returns_an_empty_frame(layer_file: Path) -> None:
+    """A bounding box matching nothing gives an empty frame, not an error."""
+    result = load_koordinates_layer_extent(layer=layer_file, bbox=(-10, -10, -5, -5))
+
+    assert result.empty
+
+
+def test_point_geometry_is_selected_by_bbox(tmp_path: Path) -> None:
+    """Clipping works for points as well as polygons."""
+    gdf = gpd.GeoDataFrame(
+        {"name": ["in", "out"]},
+        geometry=[Point(100, 100), Point(9000, 9000)],
+        crs=DEFAULT_CRS,
+    )
+    path = tmp_path / "points.gpkg"
+    gdf.to_file(path)
+
+    result = load_koordinates_layer_extent(layer=path, bbox=BBOX)
+
+    assert list(result["name"]) == ["in"]
+
+
+def test_a_bbox_in_another_crs_is_transformed(tmp_path: Path) -> None:
+    """A WGS84 bbox selects the right NZTM features, not an empty or full set."""
+    pilot = SMALL_WLG_PILOT.bbox()
+    inside_pilot = Point((pilot[0] + pilot[2]) / 2, (pilot[1] + pilot[3]) / 2)
+    outside_pilot = Point(pilot[2] + 5000, pilot[3] + 5000)
+
+    gdf = gpd.GeoDataFrame(
+        {"name": ["in", "out"]},
+        geometry=[inside_pilot, outside_pilot],
+        crs=DEFAULT_CRS,
+    )
+    path = tmp_path / "wellington.gpkg"
+    gdf.to_file(path)
+
+    result = load_koordinates_layer_extent(
+        layer=path, crs="EPSG:4326", bbox=SMALL_WLG_PILOT.bbox("EPSG:4326")
+    )
+
+    assert list(result["name"]) == ["in"]
+    assert result.crs.to_string() == "EPSG:4326"
+
+
+# --- API keys ----------------------------------------------------------------
+
+
+def test_resolve_api_key_reads_the_variable_for_the_domain(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Each domain has its own key, chosen by domain rather than a shared name."""
+    monkeypatch.setenv("TNT_KOORDINATES_API_KEY", "tnt-key")
+    monkeypatch.setenv("LINZ_API_KEY", "linz-key")
+
+    assert resolve_api_key(TTGROUP_DOMAIN) == "tnt-key"
+    assert resolve_api_key(LINZ_DOMAIN) == "linz-key"
+
+
+def test_resolve_api_key_rejects_an_unknown_domain() -> None:
+    """An unconfigured domain fails loudly rather than sending no key."""
+    with pytest.raises(ValueError, match="No API key variable is configured"):
+        resolve_api_key("example.koordinates.com")
+
+
+def test_resolve_api_key_requires_the_variable_to_be_set(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A missing key names the variable to set, rather than failing at the API."""
+    monkeypatch.delenv("LINZ_API_KEY", raising=False)
+
+    with pytest.raises(ValueError, match="LINZ_API_KEY"):
+        resolve_api_key(LINZ_DOMAIN)
+
+
+def test_the_domain_key_is_used_for_the_connection(
+    fake_koordinates: dict[str, object],
+) -> None:
+    """Reading a LINZ layer uses the LINZ key, not the T+T one."""
+    load_koordinates_layer_extent(layer=1, domain=LINZ_DOMAIN)
+
+    conn = fake_koordinates["conn"]
+    assert conn.api_key == "linz-key"
+    assert conn.domain == LINZ_DOMAIN
+
+
+def test_the_connection_is_closed(fake_koordinates: dict[str, object]) -> None:
+    """The session is closed after use rather than left open."""
+    load_koordinates_layer_extent(layer=1)
+
+    assert fake_koordinates["conn"].closed
+
+
+def test_an_integer_layer_is_downloaded_from_koordinates(
+    fake_koordinates: dict[str, object],
+) -> None:
+    """An integer is treated as a layer ID and fetched, not opened as a path."""
+    result = load_koordinates_layer_extent(layer=121398)
+
+    assert fake_koordinates["layer_id"] == 121398
+    assert len(result) == 3
+
+
+def test_a_path_never_touches_koordinates(
+    layer_file: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Reading from a path must not open a connection, which would need a key."""
+
+    def fail(*args: object, **kwargs: object) -> None:
+        msg = "Koordinates should not be contacted when given a path"
+        raise AssertionError(msg)
+
+    monkeypatch.setattr(readers, "KoordinatesConnection", fail)
+    monkeypatch.setattr(readers, "get_latest_layer", fail)
+
+    result = load_koordinates_layer_extent(layer=layer_file)
+
+    assert len(result) == 3
+
+
+# --- caching -----------------------------------------------------------------
+
+
+def test_the_same_extent_is_not_reread(
+    layer_file: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A second request for the same extent is served from the cache."""
+    first = load_koordinates_layer_extent(layer=layer_file, bbox=BBOX)
+
+    def fail(*args: object, **kwargs: object) -> None:
+        msg = "the source should not be read again for a cached extent"
+        raise AssertionError(msg)
+
+    monkeypatch.setattr(readers, "_read_extent", fail)
+    second = load_koordinates_layer_extent(layer=layer_file, bbox=BBOX)
+
+    assert sorted(second["name"]) == sorted(first["name"])
+    assert len(second) == len(first)
+
+
+def test_use_cache_false_recomputes(
+    layer_file: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Passing use_cache=False reads the source even when a cache entry exists."""
+    load_koordinates_layer_extent(layer=layer_file, bbox=BBOX)
+
+    calls: list[int] = []
+    original = readers._read_extent  # noqa: SLF001
+
+    def counting(*args: object, **kwargs: object) -> gpd.GeoDataFrame:
+        calls.append(1)
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(readers, "_read_extent", counting)
+    load_koordinates_layer_extent(layer=layer_file, bbox=BBOX, use_cache=False)
+
+    assert len(calls) == 1
+
+
+def test_a_different_bbox_is_cached_separately(layer_file: Path) -> None:
+    """The cache key includes the bbox, so a new extent is not served stale."""
+    whole = load_koordinates_layer_extent(layer=layer_file)
+    clipped = load_koordinates_layer_extent(layer=layer_file, bbox=BBOX)
+
+    assert len(whole) == 3
+    assert len(clipped) == 2
+
+
+def test_a_different_crs_is_cached_separately(layer_file: Path) -> None:
+    """The cache key includes the CRS, so a reprojection is not served stale."""
+    nztm = load_koordinates_layer_extent(layer=layer_file)
+    wgs84 = load_koordinates_layer_extent(layer=layer_file, crs="EPSG:4326")
+
+    assert nztm.crs.to_string() == DEFAULT_CRS
+    assert wgs84.crs.to_string() == "EPSG:4326"
+
+
+def test_the_cache_key_includes_the_layer_version(
+    layer_file: Path, tmp_path: Path
+) -> None:
+    """Two source files cache separately, so a new layer version is not masked."""
+    other = tmp_path / "layer_v2.gpkg"
+    gpd.GeoDataFrame({"name": ["only"]}, geometry=[INSIDE], crs=DEFAULT_CRS).to_file(
+        other
+    )
+
+    first = load_koordinates_layer_extent(layer=layer_file, bbox=BBOX)
+    second = load_koordinates_layer_extent(layer=other, bbox=BBOX)
+
+    assert len(first) == 2
+    assert list(second["name"]) == ["only"]
+
+
+def test_an_unclipped_read_is_not_cached(layer_file: Path) -> None:
+    """Without a bbox there is no clip to skip, so no duplicate is written."""
+    result = load_koordinates_layer_extent(layer=layer_file)
+
+    assert len(result) == 3
+    assert not readers.extent_cache_path(layer_file, DEFAULT_CRS, None).exists()
+    assert not any(readers.extent_cache_dir().iterdir())
+
+
+def test_an_empty_result_is_not_cached(layer_file: Path) -> None:
+    """An empty extent is returned without a cache file being written."""
+    empty_bbox = (-10.0, -10.0, -5.0, -5.0)
+    result = load_koordinates_layer_extent(layer=layer_file, bbox=empty_bbox)
+
+    assert result.empty
+    assert not readers.extent_cache_path(layer_file, DEFAULT_CRS, empty_bbox).exists()
+
+
+# --- NZ Addresses ------------------------------------------------------------
+
+
+def test_get_nz_addresses_requests_the_linz_layer(
+    fake_koordinates: dict[str, object],
+) -> None:
+    """The helper points at the LINZ addresses layer with the LINZ key."""
+    get_nz_addresses(bbox=BBOX)
+
+    assert fake_koordinates["layer_id"] == NZ_ADDRESSES_LAYER_ID
+    assert fake_koordinates["conn"].domain == LINZ_DOMAIN
+    assert fake_koordinates["conn"].api_key == "linz-key"
+
+
+def test_get_nz_addresses_applies_the_bbox(
+    fake_koordinates: dict[str, object],
+) -> None:
+    """The extent is passed through, rather than the whole country returned."""
+    result = get_nz_addresses(bbox=BBOX)
+
+    assert "outside" not in set(result["name"])
+
+
+def test_get_nz_addresses_applies_the_crs(
+    fake_koordinates: dict[str, object],
+) -> None:
+    """The requested CRS is passed through to the reader."""
+    result = get_nz_addresses(crs="EPSG:4326")
+
+    assert result.crs.to_string() == "EPSG:4326"
+
+
+def test_nz_addresses_layer_id_matches_linz() -> None:
+    """Guards the layer ID against an accidental edit."""
+    assert NZ_ADDRESSES_LAYER_ID == 123113

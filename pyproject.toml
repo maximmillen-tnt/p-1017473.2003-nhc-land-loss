@@ -18,7 +18,12 @@ license = { file = "LICENSE.txt" }
 readme = "README.md"
 requires-python = ">=3.13"
 dynamic = ["version"]
-dependencies = []
+dependencies = [
+    "geopandas>=1.1.1",
+    "python-dotenv>=1.0.0",
+    "shapely>=2.1.1",
+    "ttpy-gis",
+]
 
 [dependency-groups]
 dev = [
@@ -70,6 +75,9 @@ required-version = ">=0.10.2"
 link-mode = "copy"
 exclude-newer = "7 days"
 exclude-newer-package = { rastr = false, ruru = false }
+
+[tool.uv.sources]
+ttpy-gis = { git = "ssh://git@bitbucket.org/tonkintaylor/ttpy-gis", rev = "5df8d8725a9ca58bfbdccc666a6a4a456317c021" }
 
 [tool.towncrier]
 directory = "doc/whatsnew"
@@ -152,6 +160,7 @@ flake8-import-conventions.banned-from = ["ruru"]
 [tool.ruff.lint.per-file-ignores]
 "tests/**/*.py" = [
   "ANN",     # We don't need annotations in tests
+  "ARG",     # Fixtures used for their side effects, and stubs accepting any call
   "D",       # We don't need docstrings in tests
   "PLR0913", # When we use fixtures, our test functions can have many arguments
   "S101",    # Using assert is fine in tests
@@ -160,6 +169,9 @@ flake8-import-conventions.banned-from = ["ruru"]
 ]
 ".agents/skills/**/*.py" = [
   "INP",     # Standalone skill scripts, not an importable package
+]
+"src/landloss/io/**" = [
+  "A005",    # Only ever imported as landloss.io, so it shadows nothing
 ]
 "!tests/**/*py" = [
   "PT015",   # This is pytest specific and not applicable outside of the tests directory
