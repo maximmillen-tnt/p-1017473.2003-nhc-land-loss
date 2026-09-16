@@ -10,12 +10,14 @@ from landloss.domain.constants import (
     DEFAULT_CRS,
     LINZ_DOMAIN,
     NZ_ADDRESSES_LAYER_ID,
+    NZ_RIVER_NAME_LINES_LAYER_ID,
     TTGROUP_DOMAIN,
 )
 from landloss.io import readers
 from landloss.io.area_of_interest import SMALL_WLG_PILOT
 from landloss.io.readers import (
     get_nz_addresses,
+    get_nz_river_name_lines,
     load_koordinates_layer_extent,
     resolve_api_key,
 )
@@ -380,3 +382,28 @@ def test_get_nz_addresses_applies_the_crs(
 def test_nz_addresses_layer_id_matches_linz() -> None:
     """Guards the layer ID against an accidental edit."""
     assert NZ_ADDRESSES_LAYER_ID == 123113
+
+
+def test_get_nz_river_name_lines_requests_the_linz_layer(
+    fake_koordinates: dict[str, object],
+) -> None:
+    """The helper points at the LINZ river name lines layer with the LINZ key."""
+    get_nz_river_name_lines(bbox=BBOX)
+
+    assert fake_koordinates["layer_id"] == NZ_RIVER_NAME_LINES_LAYER_ID
+    assert fake_koordinates["conn"].domain == LINZ_DOMAIN
+    assert fake_koordinates["conn"].api_key == "linz-key"
+
+
+def test_get_nz_river_name_lines_applies_the_bbox(
+    fake_koordinates: dict[str, object],
+) -> None:
+    """The extent is passed through, rather than the whole country returned."""
+    result = get_nz_river_name_lines(bbox=BBOX)
+
+    assert "outside" not in set(result["name"])
+
+
+def test_nz_river_name_lines_layer_id_matches_linz() -> None:
+    """Guards the layer ID against an accidental edit."""
+    assert NZ_RIVER_NAME_LINES_LAYER_ID == 103632

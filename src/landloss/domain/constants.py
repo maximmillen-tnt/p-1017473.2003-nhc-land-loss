@@ -17,6 +17,12 @@ API_KEY_ENV_VARS = {
 # https://data.linz.govt.nz/layer/123113-nz-addresses/
 NZ_ADDRESSES_LAYER_ID = 123113
 
+# https://data.linz.govt.nz/layer/103632-nz-river-name-lines-pilot/
+# River name lines carry the ``name`` and ``feat_type`` attributes that the
+# topo50 river centrelines lack, which is what lets named rivers be told apart
+# from the smaller streams and creeks.
+NZ_RIVER_NAME_LINES_LAYER_ID = 103632
+
 # Territorial Authority 2025 boundaries, mirrored on the T+T Koordinates
 # instance. LINZ does not publish territorial authority boundaries; they
 # originate from Stats NZ.

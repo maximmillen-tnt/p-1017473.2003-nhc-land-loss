@@ -30,6 +30,7 @@ from landloss.domain.constants import (
     DEFAULT_CRS,
     LINZ_DOMAIN,
     NZ_ADDRESSES_LAYER_ID,
+    NZ_RIVER_NAME_LINES_LAYER_ID,
     TTGROUP_DOMAIN,
 )
 
@@ -205,6 +206,42 @@ def get_nz_addresses(
     """
     return load_koordinates_layer_extent(
         layer=NZ_ADDRESSES_LAYER_ID,
+        crs=crs,
+        bbox=bbox,
+        domain=LINZ_DOMAIN,
+        use_cache=use_cache,
+    )
+
+
+def get_nz_river_name_lines(
+    bbox: tuple[float, float, float, float] | None = None,
+    crs: int | str = DEFAULT_CRS,
+    *,
+    use_cache: bool = True,
+) -> gpd.GeoDataFrame:
+    """Load the LINZ NZ River Name Lines layer for an extent.
+
+    This is the named watercourse centreline layer at
+    https://data.linz.govt.nz/layer/103632-nz-river-name-lines-pilot/. Unlike the
+    topo50 river centrelines it carries a ``name`` and a ``feat_type`` per
+    feature, which is what allows the major named rivers to be separated from the
+    streams and creeks.
+
+    The layer covers the whole country, so passing a bounding box is strongly
+    preferred; the first call for a given extent downloads and clips the layer,
+    and later calls for the same extent are served from the cache.
+
+    Args:
+        bbox: The extent to clip to (minx, miny, maxx, maxy) in ``crs``. Omitting
+            it returns every river name line in New Zealand.
+        crs: The coordinate reference system to return the lines in.
+        use_cache: Whether to read and write the clipped extent cache.
+
+    Returns:
+        A GeoDataFrame of watercourse centrelines.
+    """
+    return load_koordinates_layer_extent(
+        layer=NZ_RIVER_NAME_LINES_LAYER_ID,
         crs=crs,
         bbox=bbox,
         domain=LINZ_DOMAIN,

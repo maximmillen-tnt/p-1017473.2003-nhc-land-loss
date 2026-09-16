@@ -168,3 +168,6 @@ src/**/_version.py
 .idea/
 temp/
 .koopcache/
+
+# Generated report figures
+fig/

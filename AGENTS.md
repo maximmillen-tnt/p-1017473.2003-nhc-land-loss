@@ -27,6 +27,8 @@ before making decisions about methodology, outputs, or what belongs in the tool:
   damage actually occurs in Wellington, and what that means for the model.
 - `.agents/context/data-sources.md` — which dataset comes from where, and what is not
   obtainable.
+- `.agents/context/nhc-natural-hazards-portal.md` — why the public Natural Hazards
+  Portal must not be scraped, and what to ask NHC for instead.
 - `.agents/context/code-structure.md` — the four analysis modules, the library and
   scripts split, and the causes of financial land loss the model represents.
 
