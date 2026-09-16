@@ -27,6 +27,8 @@ before making decisions about methodology, outputs, or what belongs in the tool:
   damage actually occurs in Wellington, and what that means for the model.
 - `.agents/context/data-sources.md` — which dataset comes from where, and what is not
   obtainable.
+- `.agents/context/code-structure.md` — the four analysis modules, the library and
+  scripts split, and the causes of financial land loss the model represents.
 
 The live register of tasks, limitations and future improvements is
 `.agents/context/register.json`. It renders to a workbook in the OneDrive project
