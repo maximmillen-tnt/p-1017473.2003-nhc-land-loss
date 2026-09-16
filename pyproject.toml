@@ -158,6 +158,9 @@ flake8-import-conventions.banned-from = ["ruru"]
   "FBT001",  # Fine for fixtures
   "INP",     # Tests don't need __init__.py files
 ]
+".agents/skills/**/*.py" = [
+  "INP",     # Standalone skill scripts, not an importable package
+]
 "!tests/**/*py" = [
   "PT015",   # This is pytest specific and not applicable outside of the tests directory
   "T201",    # Print statements forbidden in tests but not elsewhere

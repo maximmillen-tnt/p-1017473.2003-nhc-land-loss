@@ -29,5 +29,6 @@ before making decisions about methodology, outputs, or what belongs in the tool:
   obtainable.
 
 The live register of tasks, limitations and future improvements is
-`.agents/context/register.json`, rendered to `project-register.xlsx`. Edit the JSON and
+`.agents/context/register.json`. It renders to a workbook in the OneDrive project
+folder rather than the repo. Edit the JSON and
 regenerate; see the `recording-project-context` skill.
