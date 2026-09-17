@@ -10,6 +10,27 @@ Use the `using-prek-pre-commit` skill when running pre-commit checks.
 
 Extended thinking should only trigger for multi-step reasoning problems. When in doubt, respond directly without extended analysis.
 
+## Script naming
+
+A script is named for what it produces, so a directory listing says what each
+file is for without opening it. Use these prefixes:
+
+| Prefix | Produces |
+| --- | --- |
+| `fig_` | A figure, for the report or for a validation. |
+| `table_` | A CSV table for the report. |
+| `gen_` | A generated layer — data this project derives and writes out. |
+| `get_` | A retrieved layer — data fetched from a source someone else maintains. |
+
+Do not use `plot_`; a figure script is `fig_`. The `gen_` and `get_` distinction
+is the one that carries weight: it separates code that creates new data, which
+has to be re-run deliberately and its output tracked, from code that only fetches
+what already exists. Reading a LINZ layer through Koordinates is a `get_`;
+deriving the study area boundaries from that layer is a `gen_`.
+
+`gen_` and `get_` apply to functions as well as to filenames, so a function that
+retrieves a layer is `get_`, not `load_` or `fetch_`.
+
 ## Project context
 
 Background on what this project is for lives in `.agents/context`. Read these

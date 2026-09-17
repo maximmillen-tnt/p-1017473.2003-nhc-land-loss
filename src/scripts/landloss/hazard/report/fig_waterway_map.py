@@ -6,7 +6,7 @@ lateral spreading, so the figure shows both: the rivers the assessment measures
 to, and the watercourses it does not, which is the part a reader has to be able
 to check.
 
-    uv run --frozen python src/scripts/landloss/hazard/report/plot_waterway_map.py
+    uv run --frozen python src/scripts/landloss/hazard/report/fig_waterway_map.py
 
 The first run downloads the national river name lines layer from LINZ, which is
 slow; later runs read it from the cache. Pass --pilot to work over the small
@@ -37,9 +37,9 @@ import requests
 from matplotlib.lines import Line2D
 
 from landloss.common.utils.plot import style_basemap_ax
-from landloss.domain.constants import DEFAULT_CRS
-from landloss.hazard.waterways import load_waterways
-from landloss.io.area_of_interest import SMALL_WLG_PILOT, load_study_areas
+from landloss.domain import constants
+from landloss.hazard.waterways import get_waterways
+from landloss.io.area_of_interest import SMALL_WLG_PILOT, get_study_areas
 
 # Repo root, from src/scripts/landloss/hazard/report/ -- five levels up.
 REPO_ROOT = Path(__file__).resolve().parents[5]
@@ -141,12 +141,14 @@ def main():
     )
     args = parser.parse_args()
 
-    study_areas = load_study_areas(DEFAULT_CRS)
+    study_areas = get_study_areas(constants.DEFAULT_CRS)
 
     if args.pilot:
-        extent = SMALL_WLG_PILOT.to_geoseries(DEFAULT_CRS).to_frame("geometry")
+        extent = SMALL_WLG_PILOT.to_geoseries(constants.DEFAULT_CRS).to_frame(
+            "geometry"
+        )
         extent = extent.set_geometry("geometry")
-        bbox = SMALL_WLG_PILOT.bbox(DEFAULT_CRS)
+        bbox = SMALL_WLG_PILOT.bbox(constants.DEFAULT_CRS)
         print(f"Extent: {SMALL_WLG_PILOT.name}")
     else:
         extent = study_areas
@@ -161,7 +163,7 @@ def main():
     try:
         # Cut to the real territorial authority boundaries, not just their
         # bounding box, which would also take in much of the Wairarapa.
-        waterways = load_waterways(
+        waterways = get_waterways(
             bbox=bbox,
             clip_to=None if args.pilot else study_areas,
             use_cache=not args.fresh,

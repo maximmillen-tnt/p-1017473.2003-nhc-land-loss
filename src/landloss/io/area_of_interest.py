@@ -12,7 +12,7 @@ from pathlib import Path
 import geopandas as gpd
 from shapely.geometry import Polygon, box
 
-from landloss.domain.constants import DEFAULT_CRS
+from landloss.domain import constants
 
 WGS84 = "EPSG:4326"
 
@@ -35,7 +35,9 @@ class AreaOfInterest:
     east: float
     north: float
 
-    def bbox(self, crs: int | str = DEFAULT_CRS) -> tuple[float, float, float, float]:
+    def bbox(
+        self, crs: int | str = constants.DEFAULT_CRS
+    ) -> tuple[float, float, float, float]:
         """Return the extent as (minx, miny, maxx, maxy) in the given CRS.
 
         Args:
@@ -48,11 +50,11 @@ class AreaOfInterest:
         minx, miny, maxx, maxy = (float(value) for value in bounds)
         return (minx, miny, maxx, maxy)
 
-    def polygon(self, crs: int | str = DEFAULT_CRS) -> Polygon:
+    def polygon(self, crs: int | str = constants.DEFAULT_CRS) -> Polygon:
         """Return the extent as a polygon in the given CRS."""
         return self.to_geoseries(crs).iloc[0]
 
-    def to_geoseries(self, crs: int | str = DEFAULT_CRS) -> gpd.GeoSeries:
+    def to_geoseries(self, crs: int | str = constants.DEFAULT_CRS) -> gpd.GeoSeries:
         """Return the extent as a single-element GeoSeries in the given CRS."""
         return gpd.GeoSeries(
             [box(self.west, self.south, self.east, self.north)], crs=WGS84
@@ -74,7 +76,7 @@ SMALL_WLG_PILOT = AreaOfInterest(
 STUDY_AREAS_PATH = Path(__file__).resolve().parent / "assets" / "study-areas.geoparquet"
 
 
-def load_study_areas(crs: int | str = DEFAULT_CRS) -> gpd.GeoDataFrame:
+def get_study_areas(crs: int | str = constants.DEFAULT_CRS) -> gpd.GeoDataFrame:
     """Load the four territorial authorities making up the study area.
 
     Each authority is a separate row, so results can be reported per territorial
@@ -102,7 +104,9 @@ def load_study_areas(crs: int | str = DEFAULT_CRS) -> gpd.GeoDataFrame:
     return gpd.read_parquet(STUDY_AREAS_PATH).to_crs(crs)
 
 
-def load_study_area(name: str, crs: int | str = DEFAULT_CRS) -> gpd.GeoDataFrame:
+def get_study_area(
+    name: str, crs: int | str = constants.DEFAULT_CRS
+) -> gpd.GeoDataFrame:
     """Load a single territorial authority by name.
 
     Args:
@@ -116,7 +120,7 @@ def load_study_area(name: str, crs: int | str = DEFAULT_CRS) -> gpd.GeoDataFrame
     Raises:
         KeyError: If no authority of that name is in the study area.
     """
-    study_areas = load_study_areas(crs)
+    study_areas = get_study_areas(crs)
     match = study_areas.loc[study_areas["name"].str.lower() == name.lower()]
 
     if match.empty:
@@ -127,7 +131,9 @@ def load_study_area(name: str, crs: int | str = DEFAULT_CRS) -> gpd.GeoDataFrame
     return match.reset_index(drop=True)
 
 
-def study_area_bbox(crs: int | str = DEFAULT_CRS) -> tuple[float, float, float, float]:
+def study_area_bbox(
+    crs: int | str = constants.DEFAULT_CRS,
+) -> tuple[float, float, float, float]:
     """Return the bounding box covering all four territorial authorities.
 
     Args:
@@ -136,5 +142,5 @@ def study_area_bbox(crs: int | str = DEFAULT_CRS) -> tuple[float, float, float, 
     Returns:
         The bounding box (minx, miny, maxx, maxy), ready to pass to a reader.
     """
-    minx, miny, maxx, maxy = load_study_areas(crs).total_bounds
+    minx, miny, maxx, maxy = get_study_areas(crs).total_bounds
     return (float(minx), float(miny), float(maxx), float(maxy))

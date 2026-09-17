@@ -4,12 +4,12 @@ import geopandas as gpd
 import pytest
 from shapely.geometry import LineString, Polygon
 
-from landloss.domain.constants import DEFAULT_CRS
+from landloss.domain import constants
 from landloss.hazard import waterways as waterways_module
 from landloss.hazard.waterways import (
     WATERWAY_TYPES,
     classify_waterways,
-    load_waterways,
+    get_waterways,
 )
 
 
@@ -17,7 +17,9 @@ def make_waterways(names: list[str | None], geometries: list | None = None):
     """Build a watercourse frame with one feature per name."""
     if geometries is None:
         geometries = [LineString([(0, i), (10, i)]) for i, _ in enumerate(names)]
-    return gpd.GeoDataFrame({"name": names}, geometry=geometries, crs=DEFAULT_CRS)
+    return gpd.GeoDataFrame(
+        {"name": names}, geometry=geometries, crs=constants.DEFAULT_CRS
+    )
 
 
 # --- classification -----------------------------------------------------------
@@ -129,7 +131,7 @@ def fake_source(monkeypatch: pytest.MonkeyPatch):
 
 def test_without_a_clip_everything_read_is_kept(fake_source) -> None:
     """Omitting clip_to leaves the bounding box read untouched."""
-    result = load_waterways()
+    result = get_waterways()
 
     assert len(result) == 2
 
@@ -137,9 +139,10 @@ def test_without_a_clip_everything_read_is_kept(fake_source) -> None:
 def test_clip_to_removes_what_falls_outside_the_boundary(fake_source) -> None:
     """A bounding box is a rectangle; clip_to cuts back to the real boundary."""
     boundary = gpd.GeoDataFrame(
-        geometry=[Polygon([(-5, -5), (50, -5), (50, 50), (-5, 50)])], crs=DEFAULT_CRS
+        geometry=[Polygon([(-5, -5), (50, -5), (50, 50), (-5, 50)])],
+        crs=constants.DEFAULT_CRS,
     )
 
-    result = load_waterways(clip_to=boundary)
+    result = get_waterways(clip_to=boundary)
 
     assert list(result["name"]) == ["Inside River"]

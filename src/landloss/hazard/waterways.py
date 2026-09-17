@@ -14,7 +14,7 @@ import geopandas as gpd
 from shapely import is_empty, is_missing
 from shapely.geometry.base import BaseGeometry
 
-from landloss.domain.constants import DEFAULT_CRS
+from landloss.domain import constants
 from landloss.io.readers import get_nz_river_name_lines
 
 # A feature is treated as a river when this appears in its name, matched case
@@ -29,7 +29,7 @@ WATERWAY_TYPES = ("river", "other")
 def classify_waterways(waterways: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     """Tag each watercourse as a named river or as other, and drop empty geometry.
 
-    Kept separate from :func:`load_waterways` so that the classification can be
+    Kept separate from :func:`get_waterways` so that the classification can be
     exercised without reaching for the network.
 
     Args:
@@ -54,9 +54,9 @@ def classify_waterways(waterways: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     return classified.loc[keep].reset_index(drop=True)
 
 
-def load_waterways(
+def get_waterways(
     bbox: tuple[float, float, float, float] | None = None,
-    crs: int | str = DEFAULT_CRS,
+    crs: int | str = constants.DEFAULT_CRS,
     clip_to: gpd.GeoDataFrame | gpd.GeoSeries | BaseGeometry | None = None,
     *,
     use_cache: bool = True,

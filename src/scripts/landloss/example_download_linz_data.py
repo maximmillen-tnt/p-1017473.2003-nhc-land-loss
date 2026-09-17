@@ -19,14 +19,9 @@ from pathlib import Path
 
 import requests
 
-from landloss.domain.constants import (
-    API_KEY_ENV_VARS,
-    DEFAULT_CRS,
-    LINZ_DOMAIN,
-    NZ_ADDRESSES_LAYER_ID,
-)
+from landloss.domain import constants
 from landloss.io.area_of_interest import SMALL_WLG_PILOT, WGS84
-from landloss.io.readers import load_koordinates_layer_extent
+from landloss.io.readers import get_koordinates_layer_extent
 
 RULE = "-" * 72
 
@@ -39,7 +34,7 @@ def describe_extent():
     west, south, east, north = SMALL_WLG_PILOT.bbox(WGS84)
     print(f"  WGS84 : {west:.6f}, {south:.6f} to {east:.6f}, {north:.6f}")
 
-    minx, miny, maxx, maxy = SMALL_WLG_PILOT.bbox(DEFAULT_CRS)
+    minx, miny, maxx, maxy = SMALL_WLG_PILOT.bbox(constants.DEFAULT_CRS)
     print(f"  NZTM  : {minx:,.0f}, {miny:,.0f} to {maxx:,.0f}, {maxy:,.0f}")
     print(f"  Size  : {(maxx - minx) / 1000:.1f} x {(maxy - miny) / 1000:.1f} km")
     print(f"  Area  : {SMALL_WLG_PILOT.polygon().area / 1e6:.1f} km2")
@@ -64,7 +59,7 @@ def describe_cache():
 def fetch(label, layer, bbox, domain, *, use_cache):
     """Fetch one extent, printing how long it took and what came back."""
     start = time.perf_counter()
-    gdf = load_koordinates_layer_extent(
+    gdf = get_koordinates_layer_extent(
         layer=layer, bbox=bbox, domain=domain, use_cache=use_cache
     )
     elapsed = time.perf_counter() - start
@@ -77,13 +72,13 @@ def main():
     parser.add_argument(
         "--layer",
         type=int,
-        default=NZ_ADDRESSES_LAYER_ID,
+        default=constants.NZ_ADDRESSES_LAYER_ID,
         help="Koordinates layer ID to download (default: NZ Addresses).",
     )
     parser.add_argument(
         "--domain",
-        default=LINZ_DOMAIN,
-        choices=sorted(API_KEY_ENV_VARS),
+        default=constants.LINZ_DOMAIN,
+        choices=sorted(constants.API_KEY_ENV_VARS),
         help="Koordinates domain to download from (default: LINZ).",
     )
     parser.add_argument(
@@ -94,7 +89,7 @@ def main():
     args = parser.parse_args()
 
     describe_extent()
-    bbox = SMALL_WLG_PILOT.bbox(DEFAULT_CRS)
+    bbox = SMALL_WLG_PILOT.bbox(constants.DEFAULT_CRS)
 
     print(RULE)
     print(f"Downloading layer {args.layer} from {args.domain}")

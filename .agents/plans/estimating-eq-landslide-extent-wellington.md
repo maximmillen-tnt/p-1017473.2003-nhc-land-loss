@@ -83,7 +83,7 @@ Build the per-cell inputs over the hill country of the four territorial
 authorities.
 
 - **Add a raster reader.** `io/readers.py` is vector-only today. Add
-  `load_koordinates_raster_extent`, mirroring `load_koordinates_layer_extent`
+  `load_koordinates_raster_extent`, mirroring `get_koordinates_layer_extent`
   exactly (int layer ID vs `Path`, bbox, CRS, same caching decision). Use
   `ttpy.gis.raster.io.load_raster`, as the hurunui project does at
   `p-1099456-hurunui-high-level-geotech/src/hgeo/io/readers.py`.
@@ -177,7 +177,7 @@ typed — ruff runs `select = ["ALL"]` here):
   `NZ_ADDRESSES_LAYER_ID` / `TERRITORIAL_AUTHORITY_LAYER_ID`.
 - `src/landloss/io/readers.py` — a small `load_arcgis_feature_layer` for the GWRC
   service. It is an ArcGIS REST endpoint rather than Koordinates, so
-  `load_koordinates_layer_extent` does not cover it; `geopandas.read_file` reads
+  `get_koordinates_layer_extent` does not cover it; `geopandas.read_file` reads
   the query endpoint directly.
 
 **New one-off:** `src/landloss/io/one_offs/gen_landslide_stats.py` — fit the size
@@ -192,8 +192,8 @@ needs the 31k-polygon inventory day to day.
 
 **Reuse rather than rewrite:**
 
-- `load_koordinates_layer_extent`, `resolve_api_key` — `src/landloss/io/readers.py`
-- `load_study_areas`, `study_area_bbox`, `SMALL_WLG_PILOT` —
+- `get_koordinates_layer_extent`, `resolve_api_key` — `src/landloss/io/readers.py`
+- `get_study_areas`, `study_area_bbox`, `SMALL_WLG_PILOT` —
   `src/landloss/io/area_of_interest.py`. Develop against `SMALL_WLG_PILOT`
   (4.7 km²) before running the full 59 × 54 km extent.
 - The one-off + committed-asset pattern — `src/landloss/io/one_offs/gen_study_extent.py`

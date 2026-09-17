@@ -21,13 +21,8 @@ from pathlib import Path
 
 import geopandas as gpd
 
-from landloss.domain.constants import (
-    DEFAULT_CRS,
-    STUDY_AREA_TA_CODES,
-    TERRITORIAL_AUTHORITY_LAYER_ID,
-    TTGROUP_DOMAIN,
-)
-from landloss.io.readers import load_koordinates_layer_extent
+from landloss.domain import constants
+from landloss.io.readers import get_koordinates_layer_extent
 
 # Columns in the source layer.
 CODE_COLUMN = "TA2025_V1_00"
@@ -38,7 +33,7 @@ ASSET_PATH = Path(__file__).resolve().parents[1] / "assets" / "study-areas.geopa
 
 
 def build_study_areas(
-    layer: int = TERRITORIAL_AUTHORITY_LAYER_ID,
+    layer: int = constants.TERRITORIAL_AUTHORITY_LAYER_ID,
 ) -> gpd.GeoDataFrame:
     """Download the territorial authorities and keep the four in the study area.
 
@@ -56,11 +51,11 @@ def build_study_areas(
         ValueError: If an authority is missing from the layer, or its name no
             longer matches the code it is expected to carry.
     """
-    territorial_authorities = load_koordinates_layer_extent(
-        layer=layer, crs=DEFAULT_CRS, domain=TTGROUP_DOMAIN
+    territorial_authorities = get_koordinates_layer_extent(
+        layer=layer, crs=constants.DEFAULT_CRS, domain=constants.TTGROUP_DOMAIN
     )
 
-    codes = set(STUDY_AREA_TA_CODES)
+    codes = set(constants.STUDY_AREA_TA_CODES)
     study_areas = territorial_authorities.loc[
         territorial_authorities[CODE_COLUMN].isin(codes)
     ].copy()
@@ -68,14 +63,15 @@ def build_study_areas(
     missing = codes - set(study_areas[CODE_COLUMN])
     if missing:
         wanted = ", ".join(
-            f"{code} ({STUDY_AREA_TA_CODES[code]})" for code in sorted(missing)
+            f"{code} ({constants.STUDY_AREA_TA_CODES[code]})"
+            for code in sorted(missing)
         )
         msg = f"Territorial authorities missing from layer {layer}: {wanted}"
         raise ValueError(msg)
 
     # Check the names in the source still match what we expect, so a silent
     # renumbering upstream cannot quietly change which areas are included.
-    for code, expected in STUDY_AREA_TA_CODES.items():
+    for code, expected in constants.STUDY_AREA_TA_CODES.items():
         actual = study_areas.loc[study_areas[CODE_COLUMN] == code, NAME_COLUMN].iloc[0]
         if actual != expected:
             msg = f"Code {code} is {actual!r} in layer {layer}, expected {expected!r}"
@@ -102,7 +98,7 @@ def main() -> int:
     parser.add_argument(
         "--layer",
         type=int,
-        default=TERRITORIAL_AUTHORITY_LAYER_ID,
+        default=constants.TERRITORIAL_AUTHORITY_LAYER_ID,
         help="Koordinates layer ID of the territorial authority boundaries.",
     )
     parser.add_argument(

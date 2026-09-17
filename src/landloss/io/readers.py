@@ -25,14 +25,7 @@ import geopandas as gpd
 from shapely import box
 from ttpy.gis.koop import KoordinatesConnection, get_latest_layer
 
-from landloss.domain.constants import (
-    API_KEY_ENV_VARS,
-    DEFAULT_CRS,
-    LINZ_DOMAIN,
-    NZ_ADDRESSES_LAYER_ID,
-    NZ_RIVER_NAME_LINES_LAYER_ID,
-    TTGROUP_DOMAIN,
-)
+from landloss.domain import constants
 
 dotenv.load_dotenv()
 
@@ -54,9 +47,9 @@ def resolve_api_key(domain: str) -> str:
     Raises:
         ValueError: If the domain is unknown, or its variable is not set.
     """
-    env_var = API_KEY_ENV_VARS.get(domain)
+    env_var = constants.API_KEY_ENV_VARS.get(domain)
     if env_var is None:
-        known = ", ".join(sorted(API_KEY_ENV_VARS))
+        known = ", ".join(sorted(constants.API_KEY_ENV_VARS))
         msg = (
             f"No API key variable is configured for {domain!r}. Known domains: {known}"
         )
@@ -99,11 +92,11 @@ def extent_cache_path(
     return extent_cache_dir() / f"{source.stem}_{digest}.gpkg"
 
 
-def load_koordinates_layer_extent(
+def get_koordinates_layer_extent(
     layer: int | Path,
-    crs: int | str = DEFAULT_CRS,
+    crs: int | str = constants.DEFAULT_CRS,
     bbox: tuple[float, float, float, float] | None = None,
-    domain: str = TTGROUP_DOMAIN,
+    domain: str = constants.TTGROUP_DOMAIN,
     *,
     use_cache: bool = True,
 ) -> gpd.GeoDataFrame:
@@ -181,7 +174,7 @@ def _read_extent(
 
 def get_nz_addresses(
     bbox: tuple[float, float, float, float] | None = None,
-    crs: int | str = DEFAULT_CRS,
+    crs: int | str = constants.DEFAULT_CRS,
     *,
     use_cache: bool = True,
 ) -> gpd.GeoDataFrame:
@@ -204,18 +197,18 @@ def get_nz_addresses(
     Returns:
         A GeoDataFrame of address points.
     """
-    return load_koordinates_layer_extent(
-        layer=NZ_ADDRESSES_LAYER_ID,
+    return get_koordinates_layer_extent(
+        layer=constants.NZ_ADDRESSES_LAYER_ID,
         crs=crs,
         bbox=bbox,
-        domain=LINZ_DOMAIN,
+        domain=constants.LINZ_DOMAIN,
         use_cache=use_cache,
     )
 
 
 def get_nz_river_name_lines(
     bbox: tuple[float, float, float, float] | None = None,
-    crs: int | str = DEFAULT_CRS,
+    crs: int | str = constants.DEFAULT_CRS,
     *,
     use_cache: bool = True,
 ) -> gpd.GeoDataFrame:
@@ -240,10 +233,10 @@ def get_nz_river_name_lines(
     Returns:
         A GeoDataFrame of watercourse centrelines.
     """
-    return load_koordinates_layer_extent(
-        layer=NZ_RIVER_NAME_LINES_LAYER_ID,
+    return get_koordinates_layer_extent(
+        layer=constants.NZ_RIVER_NAME_LINES_LAYER_ID,
         crs=crs,
         bbox=bbox,
-        domain=LINZ_DOMAIN,
+        domain=constants.LINZ_DOMAIN,
         use_cache=use_cache,
     )
