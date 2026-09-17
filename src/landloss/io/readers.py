@@ -22,7 +22,7 @@ from pathlib import Path
 
 import dotenv
 import geopandas as gpd
-from shapely import box
+from shapely import box, make_valid
 from ttpy.gis.koop import KoordinatesConnection, get_latest_layer
 
 from landloss.domain import constants
@@ -238,5 +238,156 @@ def get_nz_river_name_lines(
         crs=crs,
         bbox=bbox,
         domain=constants.LINZ_DOMAIN,
+        use_cache=use_cache,
+    )
+
+
+def get_gwrc_slope_failure(
+    bbox: tuple[float, float, float, float] | None = None,
+    crs: int | str = constants.DEFAULT_CRS,
+    *,
+    use_cache: bool = True,
+) -> gpd.GeoDataFrame:
+    """Load Greater Wellington's earthquake-induced slope failure zones.
+
+    Source
+    ------
+    "Wellington Region Earthquake Induced Slope Failure", published by Greater
+    Wellington Regional Council on the public Koordinates catalogue as layer
+    4069:
+    https://koordinates.com/layer/4069-wellington-region-earthquake-induced-slope-failure/
+
+    The catalogue describes it as "Earthquake induced slope failure
+    susceptibility zones for the Wellington Region. This dataset is compiled from
+    the 'slope failure series' ArcInfo coverages. Refer to Publication
+    WRC/PP-T-95/06 for accompanying notes." Those notes are Kingsbury (1995),
+    which derived five susceptibility zones from slope angle and slope
+    modification, and which excluded failures caused by liquefaction. The
+    underlying mapping is therefore 1995 regional-scale work, published to
+    Koordinates in 2012 — a qualitative zonation rather than a rate, and no
+    substitute for site assessment.
+
+    4,682 polygons covering the Wellington region in NZGD2000 / NZTM
+    (EPSG:2193). Licensed Creative Commons Attribution-No Derivative Works 3.0,
+    so reproducing it requires attribution to Greater Wellington, and publishing
+    a modified version may require their permission.
+
+    Reading it needs ``KOORDINATES_PUBLIC_API_KEY``; the T+T and LINZ keys do not
+    work on this domain. The same data is also mirrored on a public ArcGIS
+    FeatureServer that needs no key, which is a fallback if the Koordinates
+    export stalls:
+    https://services5.arcgis.com/n4qyP7iVOnJlCVth/arcgis/rest/services/WR_SlopeFailure/FeatureServer/0
+
+    Notes:
+    -----
+    Two quirks of the source are corrected here. ``SEVERITY`` is a string whose
+    labels are inconsistent — ``1 Low``, ``2``, ``3 Moderate``, ``4``,
+    ``5 High`` — so a ``severity_rank`` integer is added for sorting and
+    colouring. A minority of the polygons are invalid, which breaks clipping and
+    overlays, so geometries are repaired on the way through.
+
+    Args:
+        bbox: The extent to clip to (minx, miny, maxx, maxy) in ``crs``. Omitting
+            it returns the whole region.
+        crs: The coordinate reference system to return the zones in.
+        use_cache: Whether to read and write the clipped extent cache.
+
+    Returns:
+        A GeoDataFrame of susceptibility polygons carrying the original
+        ``SEVERITY`` and ``LSKEY``, plus a ``severity_rank`` of 1 (low) to 5
+        (high).
+
+    Raises:
+        ValueError: If a ``SEVERITY`` value is not one of the five known classes,
+            which would mean the source has changed.
+    """
+    zones = get_koordinates_layer_extent(
+        layer=constants.GWRC_SLOPE_FAILURE_LAYER_ID,
+        crs=crs,
+        bbox=bbox,
+        domain=constants.KOORDINATES_PUBLIC_DOMAIN,
+        use_cache=use_cache,
+    )
+
+    if zones.empty:
+        return zones
+
+    unknown = set(zones["SEVERITY"]) - set(constants.GWRC_SEVERITY_RANKS)
+    if unknown:
+        known = ", ".join(repr(value) for value in constants.GWRC_SEVERITY_RANKS)
+        msg = (
+            f"Unrecognised SEVERITY values in layer "
+            f"{constants.GWRC_SLOPE_FAILURE_LAYER_ID}: "
+            f"{', '.join(repr(value) for value in sorted(unknown))}. Known: {known}"
+        )
+        raise ValueError(msg)
+
+    zones = zones.copy()
+    zones["severity_rank"] = zones["SEVERITY"].map(constants.GWRC_SEVERITY_RANKS)
+
+    # A minority of the source polygons are self-intersecting, which makes any
+    # later clip or overlay fail. Repairing only the broken ones leaves the rest
+    # bit-identical to the source.
+    invalid = ~zones.geometry.is_valid
+    if invalid.any():
+        zones.loc[invalid, "geometry"] = zones.loc[invalid, "geometry"].apply(
+            make_valid
+        )
+
+    return zones
+
+
+def get_nz_land_cover(
+    bbox: tuple[float, float, float, float] | None = None,
+    crs: int | str = constants.DEFAULT_CRS,
+    *,
+    use_cache: bool = True,
+) -> gpd.GeoDataFrame:
+    """Load the LCDB v6.0 land cover polygons for an extent.
+
+    The New Zealand Land Cover Database, version 6.0 (mainland), at
+    https://lris.scinfo.org.nz/layer/123148-lcdb-v60-land-cover-database-version-60-mainland-new-zealand/.
+    Each polygon carries a land cover class and name at six time steps -- summer
+    1996/97, 2001/02, 2007/08, 2012/13, 2018/19 and 2023/24 -- in the paired
+    ``Class_<year>`` and ``Name_<year>`` columns, so change over time is read
+    across the columns of one feature rather than by joining separate layers.
+    ``Wetland_<yy>`` and ``Onshore_<yy>`` flag wetland and coastal change.
+
+    Licence:
+        Creative Commons Attribution 4.0 International (CC BY 4.0),
+        https://creativecommons.org/licenses/by/4.0/. The data may be shared and
+        adapted, including commercially, provided Landcare Research is credited
+        as the source, a link to the licence is given, and any changes made are
+        indicated. Anything derived from this layer and published -- a figure in
+        the report, a table, a layer handed to NHC -- therefore needs that
+        attribution carried with it.
+
+    Source:
+        Landcare Research, via the LRIS portal. Cite as
+        https://doi.org/10.26060/WM99-RY32.
+
+    The layer covers the whole mainland (542,789 polygons), so passing a
+    bounding box is strongly preferred; the first call for a given extent
+    downloads and clips the layer, and later calls for the same extent are
+    served from the cache.
+
+    Args:
+        bbox: The extent to clip to (minx, miny, maxx, maxy) in ``crs``. Omitting
+            it returns land cover for the whole mainland.
+        crs: The coordinate reference system to return the polygons in.
+        use_cache: Whether to read and write the clipped extent cache.
+
+    Returns:
+        A GeoDataFrame of land cover polygons.
+
+    Raises:
+        ValueError: If LRIS_API_KEY is not set. LRIS is a separate Koordinates
+            instance from LINZ and T+T's, with its own account and key.
+    """
+    return get_koordinates_layer_extent(
+        layer=constants.NZ_LCDB_V60_LAYER_ID,
+        crs=crs,
+        bbox=bbox,
+        domain=constants.LRIS_DOMAIN,
         use_cache=use_cache,
     )

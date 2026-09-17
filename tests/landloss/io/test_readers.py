@@ -10,8 +10,10 @@ from landloss.domain import constants
 from landloss.io import readers
 from landloss.io.area_of_interest import SMALL_WLG_PILOT
 from landloss.io.readers import (
+    get_gwrc_slope_failure,
     get_koordinates_layer_extent,
     get_nz_addresses,
+    get_nz_land_cover,
     get_nz_river_name_lines,
     resolve_api_key,
 )
@@ -405,3 +407,158 @@ def test_get_nz_river_name_lines_applies_the_bbox(
 def test_nz_river_name_lines_layer_id_matches_linz() -> None:
     """Guards the layer ID against an accidental edit."""
     assert constants.NZ_RIVER_NAME_LINES_LAYER_ID == 103632
+
+
+# --- GWRC slope failure ------------------------------------------------------
+
+# A self-intersecting bow tie: invalid as written, and repairable.
+BOW_TIE = Polygon([(0, 0), (10, 10), (10, 0), (0, 10)])
+
+
+@pytest.fixture
+def fake_gwrc(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, object]:
+    """Serve a severity-classed layer in place of a Koordinates download."""
+    gdf = gpd.GeoDataFrame(
+        {
+            "SEVERITY": ["1 Low", "3 Moderate", "5 High"],
+            "LSKEY": [1, 2, 3],
+        },
+        geometry=[INSIDE, STRADDLING, OUTSIDE],
+        crs=constants.DEFAULT_CRS,
+    )
+    path = tmp_path / "gwrc.gpkg"
+    gdf.to_file(path)
+
+    calls: dict[str, object] = {}
+
+    def fake_connection(*, api_key: str, domain: str) -> FakeConnection:
+        conn = FakeConnection(api_key=api_key, domain=domain)
+        calls["conn"] = conn
+        return conn
+
+    def fake_get_latest_layer(*, conn: FakeConnection, layer_id: int) -> Path:
+        calls["layer_id"] = layer_id
+        return path
+
+    monkeypatch.setattr(readers, "KoordinatesConnection", fake_connection)
+    monkeypatch.setattr(readers, "get_latest_layer", fake_get_latest_layer)
+    monkeypatch.setenv("KOORDINATES_PUBLIC_API_KEY", "public-key")
+    calls["path"] = path
+    return calls
+
+
+def test_gwrc_uses_the_public_catalogue_and_its_own_key(
+    fake_gwrc: dict[str, object],
+) -> None:
+    """The layer is on koordinates.com, whose key is neither the T+T nor LINZ one."""
+    get_gwrc_slope_failure()
+
+    assert fake_gwrc["layer_id"] == constants.GWRC_SLOPE_FAILURE_LAYER_ID
+    assert fake_gwrc["conn"].domain == constants.KOORDINATES_PUBLIC_DOMAIN
+    assert fake_gwrc["conn"].api_key == "public-key"
+
+
+def test_gwrc_layer_id_matches_koordinates() -> None:
+    """Guards the layer ID against an accidental edit."""
+    assert constants.GWRC_SLOPE_FAILURE_LAYER_ID == 4069
+
+
+def test_gwrc_severity_is_ranked(fake_gwrc: dict[str, object]) -> None:
+    """SEVERITY is an inconsistently labelled string, so a sortable rank is added."""
+    zones = get_gwrc_slope_failure()
+
+    ranks = dict(zip(zones["SEVERITY"], zones["severity_rank"], strict=False))
+    assert ranks == {"1 Low": 1, "3 Moderate": 3, "5 High": 5}
+
+
+def test_gwrc_keeps_the_original_severity(fake_gwrc: dict[str, object]) -> None:
+    """The source labels survive, so a figure can show what the source says."""
+    zones = get_gwrc_slope_failure()
+
+    assert set(zones["SEVERITY"]) == {"1 Low", "3 Moderate", "5 High"}
+
+
+def test_gwrc_every_known_class_has_a_rank() -> None:
+    """All five classes are present in the real layer, so all five must map."""
+    assert sorted(constants.GWRC_SEVERITY_RANKS.values()) == [1, 2, 3, 4, 5]
+
+
+def test_gwrc_rejects_an_unknown_severity(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A new class upstream must fail loudly rather than become a silent gap."""
+    gdf = gpd.GeoDataFrame(
+        {"SEVERITY": ["6 Extreme"], "LSKEY": [1]},
+        geometry=[INSIDE],
+        crs=constants.DEFAULT_CRS,
+    )
+    path = tmp_path / "unknown.gpkg"
+    gdf.to_file(path)
+
+    monkeypatch.setattr(
+        readers,
+        "KoordinatesConnection",
+        lambda *, api_key, domain: FakeConnection(api_key=api_key, domain=domain),
+    )
+    monkeypatch.setattr(readers, "get_latest_layer", lambda *, conn, layer_id: path)
+    monkeypatch.setenv("KOORDINATES_PUBLIC_API_KEY", "public-key")
+
+    with pytest.raises(ValueError, match="Unrecognised SEVERITY"):
+        get_gwrc_slope_failure()
+
+
+def test_gwrc_repairs_invalid_geometry(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Invalid source polygons would otherwise break every later clip or overlay."""
+    gdf = gpd.GeoDataFrame(
+        {"SEVERITY": ["1 Low"], "LSKEY": [1]},
+        geometry=[BOW_TIE],
+        crs=constants.DEFAULT_CRS,
+    )
+    path = tmp_path / "invalid.gpkg"
+    gdf.to_file(path)
+    assert not gpd.read_file(path).geometry.is_valid.all()
+
+    monkeypatch.setattr(
+        readers,
+        "KoordinatesConnection",
+        lambda *, api_key, domain: FakeConnection(api_key=api_key, domain=domain),
+    )
+    monkeypatch.setattr(readers, "get_latest_layer", lambda *, conn, layer_id: path)
+    monkeypatch.setenv("KOORDINATES_PUBLIC_API_KEY", "public-key")
+
+    zones = get_gwrc_slope_failure()
+
+    assert zones.geometry.is_valid.all()
+
+
+def test_gwrc_applies_the_bbox(fake_gwrc: dict[str, object]) -> None:
+    """The extent is passed through, rather than the whole region returned."""
+    zones = get_gwrc_slope_failure(bbox=BBOX)
+
+    assert "5 High" not in set(zones["SEVERITY"])
+
+
+def test_get_nz_land_cover_requests_the_lris_layer(
+    fake_koordinates: dict[str, object],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The helper points at the LCDB layer on LRIS, with the LRIS key."""
+    monkeypatch.setenv("LRIS_API_KEY", "lris-key")
+
+    get_nz_land_cover(bbox=BBOX)
+
+    assert fake_koordinates["layer_id"] == constants.NZ_LCDB_V60_LAYER_ID
+    assert fake_koordinates["conn"].domain == constants.LRIS_DOMAIN
+    assert fake_koordinates["conn"].api_key == "lris-key"
+
+
+def test_nz_land_cover_layer_id_matches_lris() -> None:
+    """Guards the layer ID against an accidental edit."""
+    assert constants.NZ_LCDB_V60_LAYER_ID == 123148
+
+
+def test_lris_has_its_own_api_key_variable() -> None:
+    """LRIS is a separate Koordinates account, so it needs its own key."""
+    assert constants.API_KEY_ENV_VARS[constants.LRIS_DOMAIN] == "LRIS_API_KEY"
