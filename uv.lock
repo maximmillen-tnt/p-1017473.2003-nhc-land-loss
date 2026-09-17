@@ -11,7 +11,7 @@ resolution-markers = [
 ]
 
 [options]
-exclude-newer = "2026-09-09T22:51:48.1144015Z"
+exclude-newer = "2026-09-10T02:49:12.746507Z"
 exclude-newer-span = "P7D"
 
 [options.exclude-newer-package]
@@ -1591,6 +1591,7 @@ dependencies = [
     { name = "matplotlib" },
     { name = "matplotlib-map-utils" },
     { name = "matplotlib-scalebar" },
+    { name = "pandas" },
     { name = "python-dotenv" },
     { name = "shapely" },
     { name = "ttpy-gis" },
@@ -1636,6 +1637,7 @@ requires-dist = [
     { name = "matplotlib", specifier = ">=3.10.3" },
     { name = "matplotlib-map-utils", specifier = ">=3.0" },
     { name = "matplotlib-scalebar", specifier = ">=0.9" },
+    { name = "pandas", specifier = ">=2.3" },
     { name = "python-dotenv", specifier = ">=1.0.0" },
     { name = "shapely", specifier = ">=2.1.1" },
     { name = "ttpy-gis", git = "ssh://git@bitbucket.org/tonkintaylor/ttpy-gis?rev=5df8d8725a9ca58bfbdccc666a6a4a456317c021" },

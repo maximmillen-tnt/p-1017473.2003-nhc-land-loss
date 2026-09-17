@@ -37,7 +37,41 @@ conversation plus the repo's own skills.
 
 ### Environment
 - [ ] Run `./tasks/dev_sync.ps1` to set up the Python environment (uv, Python 3.13)
-- [ ] Copy `.env.example` to `.env` and fill in `TNT_KOORDINATES_API_KEY` and `LINZ_API_KEY` — ask Maxim for keys. `.env` is gitignored; never commit it
+- [ ] Copy `.env.example` to `.env` and fill in the four Koordinates API keys. `.env` is gitignored; never commit it, and never paste a key into a chat or a ticket
+
+  Each portal is a separate Koordinates account with its own key — a key from one
+  will not work on another. Generate your own rather than sharing someone else's,
+  by signing in and visiting that portal's API keys page:
+
+  | Variable | Portal | Generate at |
+  | --- | --- | --- |
+  | `TNT_KOORDINATES_API_KEY` | T+T's own instance | https://ttgroup.koordinates.com/my/api/ |
+  | `LINZ_API_KEY` | LINZ Data Service | https://data.linz.govt.nz/my/api/ |
+  | `KOORDINATES_PUBLIC_API_KEY` | Public Koordinates catalogue | https://koordinates.com/my/api/ |
+  | `LRIS_API_KEY` | Landcare Research LRIS portal | https://lris.scinfo.org.nz/my/api/ |
+
+  Signing up is free on all but the T+T instance, where your T+T login already
+  works. A reader fails with `Set <VARIABLE> in the .env file to read layers from
+  <domain>` when the matching key is missing, which tells you which one to go get
+
+  **Tick the export scopes when you create the key.** Koordinates keys are
+  scoped, and the default scopes are not enough. Downloading a layer needs
+  `exports:read` and `exports:write` as well as read access to the layer itself.
+  Without them the key looks fine — it will read layer metadata quite happily —
+  and then fails only at download time with a bare
+  `401 Client Error: Unauthorized for url: .../exports/validate/`. If you see
+  that, the key is valid but under-scoped: edit its scopes on the same API keys
+  page rather than generating a new one. You can confirm what a key is missing
+  with:
+
+      curl -s -H "Authorization: key $KEY" https://<domain>/services/api/v1.x/exports/
+
+  which names the missing scope outright. A scope set known to work end to end:
+
+      catalog, documents:read, exports:read, exports:write, items:read,
+      items:write, layers:read, query, sets:read, sources:read, tiles,
+      wxs:esri, wxs:wfs
+- [ ] Set `KOOPCACHE_DIR` — `get_latest_layer` raises if it is unset. `.koopcache` in the repo root is fine; it is gitignored
 - [ ] Check `uv run --frozen pytest` and `uv run --frozen prek -a` both pass before you change anything
 
 ### MCP Servers to Activate
@@ -46,6 +80,7 @@ conversation plus the repo's own skills.
 ### Skills to Know About
 - [ ] `recording-project-context` — turns a meeting transcript, email or note into durable project context: tasks, limitations and improvements in the register workbook, refinements to the objectives and scope, and standalone notes on recurring topics. Use it whenever you hand Claude a transcript
 - [ ] `seismic-landslide-hazard-wellington` — the method reference for earthquake-induced landslide work in the Wellington region: Newmark analysis, displacement methods by source mechanism, topographic amplification, and which GWRC datasets to pull rather than rebuild
+- [ ] `adding-steps-scripts` — the convention every step script folder follows: its own numbered folder, an implementation plan in phases, and a method file describing what is actually implemented. Use it whenever you add or change a step under `steps/`
 - [ ] `/clear` — start a fresh context when you switch tasks. The only built-in command showing up in the stats
 
 ## Team Tips
@@ -69,6 +104,15 @@ them. Today that is:
 
 Claude will not infer this from the code. A question asked without it gets an
 answer that ignores decisions the team has already made.
+
+**Every step folder carries its own plan and method.** A step under
+`src/scripts/landloss/<module>/steps/` lives in its own numbered folder with an
+implementation plan written in phases and a method file describing the
+methodology *as currently implemented*, each bullet pointing at the script,
+function or figure where the detail actually lives. Changing a step's scripts
+without updating its method file is the one thing the convention exists to
+prevent — the report gets assembled from those method files later. The
+`adding-steps-scripts` skill has the templates.
 
 **Everything new goes back into context.** If a meeting, email or call produces
 something durable, use the `recording-project-context` skill so it lands in

@@ -31,6 +31,28 @@ deriving the study area boundaries from that layer is a `gen_`.
 `gen_` and `get_` apply to functions as well as to filenames, so a function that
 retrieves a layer is `get_`, not `load_` or `fetch_`.
 
+## Koordinates readers
+
+Every reader of a Koordinates layer must record that layer's data licence in its
+docstring, under a `Licence:` section, together with what the licence requires of
+us in practice — not just its name. Most of these datasets are CC BY, which
+obliges us to attribute the source in anything derived and published, so the
+obligation has to be visible to whoever is writing the figure or table, not
+buried on a portal page.
+
+Take the licence from the layer's own metadata rather than assuming. The
+Koordinates API answers anonymously for metadata, even where downloading needs a
+key:
+
+    curl -s "https://<domain>/services/api/v1.x/layers/<layer_id>/"
+
+The response carries `license` (title, type, version, url), `publisher` and any
+`doi`, which is everything the docstring needs.
+
+Record the publisher and any DOI in a `Source:` section alongside it. Layer IDs
+belong in `landloss.domain.constants` with the portal URL in a comment, never
+inline in the reader.
+
 ## Project context
 
 Background on what this project is for lives in `.agents/context`. Read these
@@ -57,3 +79,13 @@ The live register of tasks, limitations and future improvements is
 `.agents/context/register.json`. It renders to a workbook in the OneDrive project
 folder rather than the repo. Edit the JSON and
 regenerate; see the `recording-project-context` skill.
+
+## Step scripts
+
+Every step under `src/scripts/landloss/<module>/steps/` lives in its own numbered
+folder carrying, alongside its scripts, an implementation plan written in phases
+and a method file describing the methodology as currently implemented. Any change
+to a step's scripts must update that step's method file in the same change.
+
+Use the `adding-steps-scripts` skill whenever you add a step, change one, or
+wonder where a piece of methodology should be written down.

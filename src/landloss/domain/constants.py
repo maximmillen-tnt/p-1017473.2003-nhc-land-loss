@@ -67,3 +67,14 @@ GWRC_SEVERITY_RANKS = {
     "4": 4,
     "5 High": 5,
 }
+
+# The National Liquefaction Model's flatland model, mirrored on the T+T
+# Koordinates instance. This is the flat versus sloping land split the study
+# takes from the NLM rather than rebuilding; the representation is simplified,
+# which was accepted as a sensible base model (see data-sources.md).
+NLM_FLATLAND_LAYER_ID = 120641
+
+# The National Liquefaction Model's geomorphology model, also on the T+T
+# instance. Carries the landform classes (``l2_geomorphology``) and the
+# liquefaction susceptibility the exposure attributes are built from.
+NLM_GEOMORPHOLOGY_LAYER_ID = 121398

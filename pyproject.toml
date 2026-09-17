@@ -24,6 +24,7 @@ dependencies = [
     "matplotlib>=3.10.3",
     "matplotlib-map-utils>=3.0",
     "matplotlib-scalebar>=0.9",
+    "pandas>=2.3",
     "python-dotenv>=1.0.0",
     "shapely>=2.1.1",
     "ttpy-gis",
