@@ -17,11 +17,18 @@ sloping generalisation, not a site-specific slope assessment -- and the team
 accepted it as a sensible base model rather than an accurate one. Anything
 downstream that is reported per landform class inherits that.
 
-Phase 1 assigns only :data:`HILL` and :data:`FLAT`. :data:`ELEVATED_FLAT` -- flat
-land raised above the surrounding floodplain, which is flat for shaking but not
-exposed to inundation -- needs a DEM to separate from ordinary flat land, and
-arrives in Phase 2. The class is declared here, and its factor sits in the land
-value asset, so that the plumbing is already in place; nothing assigns it yet.
+:func:`classify_landform` assigns only :data:`HILL` and :data:`FLAT`, because the
+flatland layer is all it reads. :data:`ELEVATED_FLAT` -- flat land raised above
+the surrounding valley floor, which is flat for shaking but is out of reach of
+the inundation that the rest of the flat land is exposed to -- cannot be told
+apart from ordinary flat land without a DEM, and is assigned by the separate
+step :func:`assign_elevated_flat`.
+
+The two are kept apart on purpose. The flatland join is a spatial question with
+no raster in it and stays testable without one, and the promotion is arithmetic
+on a column that some other step has already sampled off the terrain. Running
+either without the other is a sensible thing to want: a first pass over a new
+extent can skip the DEM entirely.
 """
 
 import geopandas as gpd
@@ -30,8 +37,9 @@ from shapely.geometry.base import BaseGeometry
 from landloss.domain import constants
 from landloss.io.readers import get_koordinates_layer_extent
 
-# The landform classes the exposure model recognises. Phase 1 assigns the first
-# two only; see the module docstring for why the third is declared but unused.
+# The landform classes the exposure model recognises. ``classify_landform``
+# assigns the first two; ``assign_elevated_flat`` promotes some of the second
+# into the third. See the module docstring for why that is two steps.
 LANDFORM_CLASSES = ("hill", "flat", "elevated_flat")
 
 HILL = "hill"
@@ -41,6 +49,16 @@ ELEVATED_FLAT = "elevated_flat"
 # The column ``classify_landform`` writes its answer into.
 LANDFORM_COLUMN = "landform_class"
 
+# The terrain derivative ``assign_elevated_flat`` reads, in metres above the
+# mean elevation of the neighbourhood around the address. Written by
+# :func:`landloss.common.utils.terrain.topographic_position` and sampled onto
+# the addresses; the window it was measured over is part of what the number
+# means, and is carried in the land value factors asset beside the threshold.
+TOPOGRAPHIC_POSITION_COLUMN = "topographic_position_m"
+
+# What an address frame has to carry before it can be promoted.
+ELEVATED_FLAT_COLUMNS = (LANDFORM_COLUMN, TOPOGRAPHIC_POSITION_COLUMN)
+
 
 def classify_landform(
     addresses: gpd.GeoDataFrame, flatland: gpd.GeoDataFrame
@@ -48,9 +66,10 @@ def classify_landform(
     """Tag each address as sitting on flat land or on a hill.
 
     An address falling inside a flatland polygon is :data:`FLAT`; anything else
-    is :data:`HILL`. There is no third answer in Phase 1 -- :data:`ELEVATED_FLAT`
-    is declared but never assigned, because telling raised flat land apart from
-    ordinary flat land needs the DEM, which is Phase 2 work.
+    is :data:`HILL`. There is no third answer here -- :data:`ELEVATED_FLAT` is
+    never assigned by this function, because telling raised flat land apart from
+    ordinary flat land needs the DEM. :func:`assign_elevated_flat` is the step
+    that does it, and it runs after this one.
 
     The join is deliberately ``within`` rather than ``intersects``: an address is
     a point, so the two agree except on a point lying exactly on a polygon edge,
@@ -90,6 +109,77 @@ def classify_landform(
     classified.loc[is_flat, LANDFORM_COLUMN] = FLAT
 
     return classified
+
+
+def assign_elevated_flat(
+    addresses: gpd.GeoDataFrame, *, min_topographic_position_m: float
+) -> gpd.GeoDataFrame:
+    """Promote flat addresses that stand above the land around them.
+
+    An address is :data:`ELEVATED_FLAT` when it is already :data:`FLAT` and its
+    topographic position -- metres above the mean elevation of the
+    neighbourhood around it -- is above ``min_topographic_position_m``. That is
+    the terrace, the raised river bank and the old beach ridge: ground that
+    behaves as flat land in an earthquake but sits above the valley floor that
+    floods.
+
+    A :data:`HILL` address is never promoted, however high it stands. A spur
+    stands well above its valley and would clear any threshold set here, but it
+    is not flat and nothing about being high up makes it so. The promotion only
+    ever moves an address between the two flat classes.
+
+    An address with no topographic position -- outside the DEM, or on a nodata
+    cell -- stays as it is. NaN fails the comparison, so the effect is to leave
+    the address in the class the flatland join gave it rather than to guess.
+
+    The threshold belongs to the caller rather than to this function, because it
+    is the one number here that is tuned. It is carried in the land value
+    factors asset as ``elevated_flat_min_topographic_position_m``, next to the
+    window width the topographic position has to have been measured over for it
+    to mean anything.
+
+    Args:
+        addresses: Address points carrying :data:`ELEVATED_FLAT_COLUMNS`: the
+            landform class from :func:`classify_landform`, and a topographic
+            position in metres sampled from the DEM.
+        min_topographic_position_m: How far above its neighbourhood an address
+            has to stand, in metres, before it counts as elevated. Compared
+            strictly, so an address exactly on the threshold is not promoted.
+
+    Returns:
+        A new GeoDataFrame with :data:`LANDFORM_COLUMN` updated in place of the
+        old one. The index is left as it was, and the caller's frame is
+        untouched.
+
+    Raises:
+        ValueError: If either required column is absent, naming the ones that
+            are. Without the topographic position every address would silently
+            stay flat, and a whole class quietly going missing is the kind of
+            thing that is noticed three steps downstream.
+    """
+    missing = [
+        column for column in ELEVATED_FLAT_COLUMNS if column not in addresses.columns
+    ]
+    if missing:
+        msg = (
+            f"The address frame is missing the column(s) {', '.join(missing)}, "
+            "so elevated flat land cannot be separated from ordinary flat land. "
+            f"Expected all of: {', '.join(ELEVATED_FLAT_COLUMNS)}."
+        )
+        raise ValueError(msg)
+
+    assigned = addresses.copy()
+
+    # astype rather than to_numeric, so that a column of text fails loudly here
+    # instead of being coerced to NaN and leaving every address unpromoted.
+    position = assigned[TOPOGRAPHIC_POSITION_COLUMN].astype(float)
+    promoted = (assigned[LANDFORM_COLUMN] == FLAT) & (
+        position > min_topographic_position_m
+    )
+
+    assigned[LANDFORM_COLUMN] = assigned[LANDFORM_COLUMN].mask(promoted, ELEVATED_FLAT)
+
+    return assigned
 
 
 def get_flatland(

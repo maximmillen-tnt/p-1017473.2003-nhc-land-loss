@@ -11,14 +11,23 @@ That is what the per-TA table this run prints is there to show.
     uv run --frozen python src/scripts/landloss/exposure/steps/s2_land_value/s4_estimate_land_value.py
 
 The script is numbered s4 within this step, not s1, because terrain,
-accessibility and amenity are s1 to s3 of the same step in later phases. Land
-value is the only one of the four that Phase 1 models, so the gap in the numbers
-is deliberate and the later scripts drop into it without anything being renamed.
+accessibility and amenity are s1 to s3 of the same step. Terrain is the one of
+those three that Phase 2 builds, in s1_build_terrain_attributes.py; the gap at
+s2 and s3 is deliberate and the later scripts drop into it without anything
+being renamed.
 
-Phase 1 classifies only hill and flat. The elevated flat class -- flat land
-raised above the surrounding floodplain -- has a factor in the land value asset
-and is read by the model, but nothing assigns it, because separating it from
-ordinary flat land needs the DEM that arrives in Phase 2.
+Terrain is joined on when that s1 output exists, and it changes the answer in
+two ways. Flat addresses standing above the land around them are promoted to
+elevated flat, which is the class Phase 1 had a factor for but nothing to
+assign; and slope and topographic position feed a continuous modifier that
+spreads value *within* each landform class. Without the modifier every address
+of a class in an authority is worth exactly the same, which is why Phase 1 gave
+136 suburbs only 9 distinct median rates between them. The distinct rate count
+this run prints is what that fix is measured by.
+
+The join is optional on purpose. With no terrain file the run falls back to
+Phase 1 behaviour and says so, so that the two steps can be run independently
+and a new extent can be valued before any DEM has been fetched for it.
 
 The address spine is rebuilt from LINZ if it is not already on disk, so this can
 be run on its own. Pass --pilot to work over the small Wellington box.
@@ -32,12 +41,15 @@ import sys
 from pathlib import Path
 
 import geopandas as gpd
+import pandas as pd
 import requests
 
 from landloss.domain import constants
 from landloss.exposure.addresses import get_addresses
 from landloss.exposure.land_value import (
     COMMON_VALUATION_DATE,
+    SLOPE_COLUMN,
+    TOPOGRAPHIC_POSITION_COLUMN,
     estimate_land_value,
     index_base_rates,
     load_base_rates,
@@ -45,7 +57,11 @@ from landloss.exposure.land_value import (
     summarise_by_suburb,
 )
 from landloss.exposure.landform import (
+    ELEVATED_FLAT,
+    FLAT,
+    HILL,
     LANDFORM_COLUMN,
+    assign_elevated_flat,
     classify_landform,
     get_flatland,
 )
@@ -68,10 +84,29 @@ REPO_ROOT = Path(__file__).resolve().parents[6]
 WORK_DIR = REPO_ROOT / "temp" / "exposure"
 SPINE_NAME = "address-spine.geoparquet"
 PILOT_SPINE_NAME = "address-spine-pilot.geoparquet"
+TERRAIN_NAME = "terrain-by-address.geoparquet"
+PILOT_TERRAIN_NAME = "terrain-by-address-pilot.geoparquet"
 OUT_NAME = "land-value-by-address.geoparquet"
 PILOT_OUT_NAME = "land-value-by-address-pilot.geoparquet"
 COHORTS_NAME = "land-value-by-suburb.csv"
 PILOT_COHORTS_NAME = "land-value-by-suburb-pilot.csv"
+
+# The join key the terrain attributes come back on, and the three columns that
+# have to be there before the join is worth making.
+ID_COLUMN = "address_id"
+TERRAIN_COLUMNS = (ID_COLUMN, SLOPE_COLUMN, TOPOGRAPHIC_POSITION_COLUMN)
+
+# How high a flat address has to stand above its neighbourhood before it is
+# elevated flat. Read from the factors asset rather than set here, because it is
+# a tuned number and belongs beside the window it was tuned against.
+ELEVATED_FLAT_THRESHOLD_PARAMETER = "elevated_flat_min_topographic_position_m"
+
+# Rates are compared to the cent before being counted as distinct. Two addresses
+# whose modelled rates differ in the twelfth decimal place are the same rate as
+# far as any map, ranking or report is concerned, and counting them apart would
+# turn the one measurement this run exists to make into a count of floating point
+# noise.
+RATE_DECIMALS = 2
 
 SUBURB_LIMIT = 10
 RULE = "-" * 72
@@ -106,19 +141,150 @@ def get_spine(path, bbox, clip_to, *, use_cache):
     return spine
 
 
+def read_terrain(path):
+    """Read the sampled terrain attributes, or say why the run goes without them.
+
+    Absence is a supported answer rather than a failure. The terrain step fetches
+    a DEM, which over the full study area is a long background job, and an extent
+    is worth valuing on its landform class alone before that has been run. What
+    is not acceptable is doing it silently, because a run with no terrain looks
+    exactly like a run with terrain until somebody counts the distinct rates.
+
+    Args:
+        path: The geoparquet s1_build_terrain_attributes.py writes.
+
+    Returns:
+        The attributes as a plain DataFrame, with the geometry dropped because
+        the addresses already carry it, or None if the file is not there.
+    """
+    if not path.exists():
+        print(f"\nNo terrain attributes at {path}.")
+        print(
+            "  Valuing on landform class alone, which is Phase 1 behaviour: no\n"
+            "  address can be elevated flat, and every address of a class within a\n"
+            "  territorial authority is worth exactly the same. Run\n"
+            "  s1_build_terrain_attributes.py over this extent to turn the terrain\n"
+            "  modifier on."
+        )
+        return None
+
+    print(f"\nReading the terrain attributes from {path} ...")
+    terrain = gpd.read_parquet(path)
+
+    # Dropped to a plain DataFrame, because the addresses being joined onto carry
+    # the geometry already and two geometry columns in one merge is a silent
+    # rename waiting to happen.
+    return pd.DataFrame(terrain.drop(columns=terrain.geometry.name, errors="ignore"))
+
+
+def attach_terrain(classified, terrain, factors):
+    """Join the terrain onto the addresses and promote the elevated flat ones.
+
+    The join is validated one-to-one. A duplicated address in either frame would
+    otherwise multiply rows through the merge and quietly inflate every count
+    downstream of here, which is a much harder thing to notice than a crash.
+
+    Args:
+        classified: Addresses carrying their landform class and ``address_id``.
+        terrain: The attributes from :func:`read_terrain`.
+        factors: The land value model parameters, carrying the elevated flat
+            threshold.
+
+    Returns:
+        The addresses with the two terrain columns joined on and the landform
+        class updated, or the addresses unchanged if the terrain file does not
+        carry what the join needs.
+    """
+    missing = [column for column in TERRAIN_COLUMNS if column not in terrain.columns]
+    if missing:
+        print(
+            f"  The terrain file is missing {', '.join(missing)}, so it cannot be\n"
+            "  joined. Valuing on landform class alone."
+        )
+        return classified
+
+    joined = classified.merge(
+        terrain[list(TERRAIN_COLUMNS)],
+        on=ID_COLUMN,
+        how="left",
+        validate="one_to_one",
+    )
+
+    # A left join keeps every address, so an address the terrain file says
+    # nothing about arrives here as NaN rather than disappearing. The model reads
+    # that as "nothing distinguishes this address from its cohort", which is the
+    # right default and the wrong thing to find out about later.
+    unmatched = int(joined[SLOPE_COLUMN].isna().sum())
+    print(f"  Addresses with terrain: {len(joined) - unmatched:,} of {len(joined):,}")
+    if unmatched:
+        print(
+            f"  {unmatched:,} address(es) had no terrain value. These carry no\n"
+            "  terrain signal and can never be elevated flat. If this is not a\n"
+            "  handful, the terrain file was built over a different extent."
+        )
+
+    return assign_elevated_flat(
+        joined,
+        min_topographic_position_m=factors[ELEVATED_FLAT_THRESHOLD_PARAMETER],
+    )
+
+
 def describe_landform(classified):
-    """Print the flat/hill split, which is the only judgement input to the model."""
+    """Print the landform split per authority, including the elevated flat share.
+
+    The last column is the one being tuned. Elevated flat is assigned from the
+    terrain alone, so the threshold in the factors asset decides how much of the
+    flat land gets the raised-terrace premium, and the only way to judge whether
+    the threshold is sensible is to see what share of flat land it actually
+    promotes in each authority.
+    """
     print(RULE)
     print("Landform classification")
-    print(f"{'Territorial authority':<24}{'Flat':>10}{'Hill':>10}{'Flat %':>10}")
+    print(
+        f"{'Territorial authority':<24}{'Hill':>9}{'Flat':>9}"
+        f"{'Elev flat':>11}{'Flat %':>9}{'Promoted %':>12}"
+    )
 
     grouped = classified.groupby("territorial_authority", sort=True)
     for ta_name, rows in grouped:
         counts = rows[LANDFORM_COLUMN].value_counts()
-        flat = int(counts.get("flat", 0))
-        hill = int(counts.get("hill", 0))
-        share = 100 * flat / (flat + hill) if flat + hill else 0.0
-        print(f"{ta_name:<24}{flat:>10,}{hill:>10,}{share:>9.1f}%")
+        hill = int(counts.get(HILL, 0))
+        flat = int(counts.get(FLAT, 0))
+        elevated = int(counts.get(ELEVATED_FLAT, 0))
+
+        total = hill + flat + elevated
+        flat_share = 100 * (flat + elevated) / total if total else 0.0
+        promoted = 100 * elevated / (flat + elevated) if flat + elevated else 0.0
+        print(
+            f"{ta_name:<24}{hill:>9,}{flat:>9,}{elevated:>11,}"
+            f"{flat_share:>8.1f}%{promoted:>11.1f}%"
+        )
+
+    print(
+        "\nFlat % is flat plus elevated flat as a share of all addresses.\n"
+        "Promoted % is elevated flat as a share of the flat land alone -- the\n"
+        "share the topographic position threshold is judged on."
+    )
+
+
+def describe_distinct_rates(valued, cohorts):
+    """Print how many distinct land rates the model actually produced.
+
+    This is the measurement Phase 2 exists to move. On landform class alone an
+    address's rate depends on nothing but its territorial authority and one of
+    three classes, so four authorities can produce at most twelve rates between
+    them however many addresses they hold -- and Phase 1 gave 136 suburbs 9
+    distinct medians. A map and a suburb ranking drawn off that many values carry
+    almost no information. The continuous terrain modifier is what breaks the
+    tie, and this count is the evidence that it did.
+    """
+    address_rates = valued["land_rate_nzd_per_m2"].round(RATE_DECIMALS).nunique()
+    cohort_rates = cohorts["median_land_rate_nzd_per_m2"].round(RATE_DECIMALS).nunique()
+
+    print(RULE)
+    print("Distinct modelled land rates, to the cent")
+    print(f"  Across {len(valued):>9,} addresses          : {address_rates:>9,}")
+    print(f"  Across {len(cohorts):>9,} suburb cohorts     : {cohort_rates:>9,}")
 
 
 def describe_calibration(valued, base_rates):
@@ -211,6 +377,17 @@ def parse_args():
         ),
     )
     parser.add_argument(
+        "--terrain",
+        type=Path,
+        default=None,
+        help=(
+            f"The terrain attributes from s1. Defaults to "
+            f"{WORK_DIR / TERRAIN_NAME}, or to {WORK_DIR / PILOT_TERRAIN_NAME} "
+            "under --pilot. If the file is not there the run falls back to "
+            "valuing on landform class alone."
+        ),
+    )
+    parser.add_argument(
         "--out",
         type=Path,
         default=None,
@@ -244,16 +421,20 @@ def resolve_outputs(args):
         args: The parsed command line.
 
     Returns:
-        The spine path, the valued address path and the cohort table path.
+        The spine path, the terrain path, the valued address path and the cohort
+        table path.
     """
     spine_path = args.spine or WORK_DIR / (
         PILOT_SPINE_NAME if args.pilot else SPINE_NAME
+    )
+    terrain_path = args.terrain or WORK_DIR / (
+        PILOT_TERRAIN_NAME if args.pilot else TERRAIN_NAME
     )
     out = args.out or WORK_DIR / (PILOT_OUT_NAME if args.pilot else OUT_NAME)
     cohorts_out = args.cohorts or WORK_DIR / (
         PILOT_COHORTS_NAME if args.pilot else COHORTS_NAME
     )
-    return spine_path, out, cohorts_out
+    return spine_path, terrain_path, out, cohorts_out
 
 
 def resolve_extent(study_areas, *, pilot):
@@ -339,7 +520,7 @@ def write_outputs(valued, cohorts, out, cohorts_out):
 
 def main():
     args = parse_args()
-    spine_path, out, cohorts_out = resolve_outputs(args)
+    spine_path, terrain_path, out, cohorts_out = resolve_outputs(args)
 
     study_areas = get_study_areas(constants.DEFAULT_CRS)
     bbox, clip_to, extent_name = resolve_extent(study_areas, pilot=args.pilot)
@@ -360,15 +541,22 @@ def main():
 
     print(f"Flatland polygons: {len(flatland):,}")
 
-    classified = classify_landform(spine, flatland)
-    describe_landform(classified)
-
     base_rates = load_base_rates()
     factors = load_factors()
+
+    classified = classify_landform(spine, flatland)
+
+    terrain = read_terrain(terrain_path)
+    if terrain is not None:
+        classified = attach_terrain(classified, terrain, factors)
+
+    describe_landform(classified)
+
     valued = estimate_land_value(classified, base_rates=base_rates, factors=factors)
     describe_calibration(valued, base_rates)
 
     cohorts = summarise_by_suburb(valued)
+    describe_distinct_rates(valued, cohorts)
     describe_suburbs(cohorts)
 
     write_outputs(valued, cohorts, out, cohorts_out)

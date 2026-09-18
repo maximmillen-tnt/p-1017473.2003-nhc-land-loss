@@ -1,13 +1,13 @@
 # Step 2 — Land value: implementation plan
 
-**Status:** Phases 0 and 1 complete. Phase 2 waits on the DEM, Phase 5 on the
-District Valuation Roll data that register task T-20 covers, and Phase 6 on the
-hazard module.
+**Status:** Phases 0, 1 and 2 complete. Phase 3 is the next one to build, Phase 5
+waits on the District Valuation Roll data that register task T-20 covers, and
+Phase 6 on the hazard module.
 
-The scripts in this folder are numbered from `s4`, not from `s1`. Terrain,
-accessibility and amenity are steps `s1` to `s3` of this same folder in later
-phases; land value is the only one of the four that Phase 1 models, so the gap
-is deliberate and the earlier numbers are reserved rather than missing.
+The scripts in this folder are numbered so that `s1` to `s3` are the three
+attributes attached before the valuation and `s4` is the valuation itself.
+Terrain is `s1`, built by Phase 2; `s2` and `s3` are reserved for accessibility
+and amenity, so the remaining gap is deliberate rather than missing.
 
 ## Phase 0 — The steps-folder convention (complete)
 
@@ -37,22 +37,48 @@ is deliberate and the earlier numbers are reserved rather than missing.
       the known market order and the shape of the rate distribution
       (`src/scripts/landloss/exposure/validations/check_land_value_totals.py`).
 
-## Phase 2 — DEM terrain
+## Phase 2 — DEM terrain (complete)
 
-- [ ] Derive continuous slope from the DEM, replacing the binary flat/hill cut
-      with a gradient every address carries in its own right.
-- [ ] Derive relative topographic position, so an address is placed against the
-      land around it rather than only against its own slope.
-- [ ] Assign the elevated flat class — flat land raised above the surrounding
-      floodplain — which Phase 1 declares in
-      `landloss.exposure.landform.LANDFORM_CLASSES` and prices in
-      `src/landloss/io/assets/land-value-factors.csv` but cannot assign without
-      the DEM.
-- [ ] Re-derive the landform factors once three classes exist, since the current
-      two are ratios taken against hill as the reference class.
-- [ ] Build on `ttpy.gis.raster` and `ttpy.gis.flatland` rather than a private
-      raster stack, and add `rioxarray`, `xarray` and `rasterio` as direct
-      dependencies.
+- [x] Derive continuous slope from the DEM, as a gradient every address carries
+      in its own right (`landloss.common.utils.terrain.slope_degrees`, Horn's
+      3x3 kernel). The binary flat/hill cut is kept rather than replaced: the
+      published market bands the landform factors come from are priced on the
+      class, so slope enters as a within-class modifier instead.
+- [x] Derive relative topographic position, so an address is placed against the
+      land around it rather than only against its own slope
+      (`landloss.common.utils.terrain.topographic_position`, over the
+      `topographic_position_window_m` neighbourhood in the factors asset).
+- [x] Assign the elevated flat class — flat land raised above the surrounding
+      floodplain — which Phase 1 declared in
+      `landloss.exposure.landform.LANDFORM_CLASSES` and priced but could not
+      assign (`landloss.exposure.landform.assign_elevated_flat`, above the
+      `elevated_flat_min_topographic_position_m` threshold).
+- [x] Sample both derivatives onto every address in the spine
+      (`s1_build_terrain_attributes.py`), over the spine's extent buffered by
+      half the topographic position window so that the addresses around the
+      outside of the extent are not NaN purely by construction.
+- [x] Spread value within a landform class by a continuous terrain modifier
+      (`landloss.exposure.land_value.terrain_modifier`), standardised and
+      rescaled within territorial authority and class so that the class keeps
+      all of the between-class signal and the modifier only redistributes
+      inside it.
+- [x] Map the two attributes so they can be checked against the coastline and
+      the contours before they are allowed to move anybody's land value
+      (`fig_terrain_attributes.py`).
+- [x] Re-derive the landform factors now three classes exist. Only
+      `landform_factor_elevated_flat` moved, from 3.10 to 2.06: the old number
+      was a premium flat and sea view market band, and the class is now assigned
+      from terrain alone. Hill stays the reference class at 1.00 and flat stays
+      the 1.72 ratio against it, both unchanged. The fitted version of all three
+      is Phase 5.
+- [x] Build on `ttpy.gis.raster` rather than a private raster stack
+      (`landloss.common.utils.terrain` wraps `get_rolling_aggregation`,
+      `save_raster` and `extract_point_values`), and add `rioxarray`, `xarray`
+      and `rasterio` as direct dependencies.
+- Dropped: building on `ttpy.gis.flatland`. The NLM flatland layer already
+  arrives through `landloss.io.readers.get_koordinates_layer_extent`, so there
+  is no second path to consolidate and the change would only move working
+  code.
 
 ## Phase 3 — Accessibility
 
@@ -75,6 +101,17 @@ is deliberate and the earlier numbers are reserved rather than missing.
 
 ## Phase 4 — Amenity: sea view and winter sun
 
+Phase 2 left this phase an explicit target to be judged against. The elevated
+flat factor was cut from 3.10 to 2.06 because the class is now assigned from
+terrain alone, and 3.10 came from the premium flat and sea view market band —
+Seatoun, Oriental Bay, the waterfront. The headroom between the two, roughly a
+50 percent premium on top of elevated flat, is what sea view, winter sun and
+accessibility are expected to earn by multiplying together. If the amenity
+multipliers cannot lift a genuine Seatoun or Oriental Bay address back into that
+band, either they are too weak or the 2.06 is too low, and the `basis` cell of
+`landform_factor_elevated_flat` in `src/landloss/io/assets/land-value-factors.csv`
+is where that argument is recorded.
+
 - [ ] Sea view by inverted viewshed: because visibility is reciprocal, run
       WhiteboxTools viewshed from a few hundred station points sampled on the
       sea over a 10 m DEM and read the visible-station count off the land,
@@ -92,6 +129,16 @@ is deliberate and the earlier numbers are reserved rather than missing.
       register task T-20 closes. Until then every factor in
       `src/landloss/io/assets/land-value-factors.csv` is engineering judgement
       and the within-authority distribution is unvalidated.
+- [ ] Fit `beta_slope` and `beta_tpi` in the same regression. Both are judgement
+      set on what a standard deviation of terrain ought to be worth — 10 percent
+      down for slope, 5 percent up for topographic position — and they are the
+      two numbers that decide how hard the terrain pushes inside a cohort.
+- [ ] Tune `elevated_flat_min_topographic_position_m` against the observed share
+      of elevated flat land rather than against the inundation reasoning it was
+      set from. The Wellington City pilot promotes about 10 percent of flat
+      addresses at 3.0 m, which is mid-band against the 5 to 20 percent the
+      threshold was aimed at, but the other three authorities have not been run
+      and the Hutt Valley floor is a very different distribution.
 
 ## Phase 6 — Hazard discounts
 
@@ -113,6 +160,16 @@ is deliberate and the earlier numbers are reserved rather than missing.
 - Narrow the published averages to residential addresses. They are residential
   averages applied to every address, because the LINZ address layer has no
   residential flag; this is the same gap step 1's plan carries.
+- Put a minimum address count on the suburb cohort table before any of it is
+  shown to anyone. Now that the terrain modifier gives nearly every cohort its
+  own median rate, the ranking `describe_suburbs()` prints is worth reading —
+  but it has no floor on cohort size, so a two-address elevated flat cohort
+  ranks alongside a two-thousand-address one. Rongotai elevated flat is the
+  pilot's example, at two addresses and third by median rate.
 - Revisit the clip multiples in the factors asset. They are judgement floors and
-  ceilings rather than researched figures, and with the shipped factors they
-  never bind, so nothing currently depends on them being right.
+  ceilings rather than researched figures. There are now two bands rather than
+  one — `rate_clip_min_multiple` and `rate_clip_max_multiple` on the value
+  itself, and `terrain_modifier_clip_min` and `terrain_modifier_clip_max` on the
+  within-cohort modifier — and the terrain modifier has widened the spread the
+  outer band has to hold, so how often either binds is worth checking on a full
+  run rather than assumed.

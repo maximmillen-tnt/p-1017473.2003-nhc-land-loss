@@ -12,6 +12,8 @@ from landloss.exposure.landform import (
     HILL,
     LANDFORM_CLASSES,
     LANDFORM_COLUMN,
+    TOPOGRAPHIC_POSITION_COLUMN,
+    assign_elevated_flat,
     classify_landform,
     get_flatland,
 )
@@ -144,6 +146,124 @@ def test_an_empty_address_frame_is_handled() -> None:
 
     assert len(result) == 0
     assert LANDFORM_COLUMN in result.columns
+
+
+# --- promoting to elevated flat -----------------------------------------------
+
+
+def make_classified(rows: list[tuple[str, float]]):
+    """Build a classified frame from (landform class, topographic position) rows."""
+    return gpd.GeoDataFrame(
+        {
+            "address_id": list(range(len(rows))),
+            LANDFORM_COLUMN: [row[0] for row in rows],
+            TOPOGRAPHIC_POSITION_COLUMN: [row[1] for row in rows],
+        },
+        geometry=[Point(index, index) for index in range(len(rows))],
+        crs=constants.DEFAULT_CRS,
+    )
+
+
+def test_flat_land_standing_above_its_surroundings_becomes_elevated_flat() -> None:
+    """A terrace is flat for shaking but sits above the ground that floods."""
+    addresses = make_classified([(FLAT, 6.0)])
+
+    result = assign_elevated_flat(addresses, min_topographic_position_m=3.0)
+
+    assert result[LANDFORM_COLUMN].iloc[0] == ELEVATED_FLAT
+
+
+def test_flat_land_sitting_low_in_the_valley_stays_flat() -> None:
+    """Most of the Hutt Valley floor is ordinary flat land and has to stay that way."""
+    addresses = make_classified([(FLAT, 0.4)])
+
+    result = assign_elevated_flat(addresses, min_topographic_position_m=3.0)
+
+    assert result[LANDFORM_COLUMN].iloc[0] == FLAT
+
+
+def test_a_hill_address_is_never_promoted_however_high_it_stands() -> None:
+    """A spur stands well above its valley, and being high up does not make it flat."""
+    addresses = make_classified([(HILL, 40.0), (HILL, 3.1)])
+
+    result = assign_elevated_flat(addresses, min_topographic_position_m=3.0)
+
+    assert list(result[LANDFORM_COLUMN]) == [HILL, HILL]
+
+
+def test_an_address_exactly_on_the_threshold_is_not_promoted() -> None:
+    """The comparison is strict, so the threshold means the same thing every run."""
+    addresses = make_classified([(FLAT, 3.0)])
+
+    result = assign_elevated_flat(addresses, min_topographic_position_m=3.0)
+
+    assert result[LANDFORM_COLUMN].iloc[0] == FLAT
+
+
+def test_an_address_the_dem_has_no_value_for_keeps_its_class() -> None:
+    """Outside the DEM the honest answer is the flatland join's, not a guess."""
+    addresses = make_classified([(FLAT, float("nan"))])
+
+    result = assign_elevated_flat(addresses, min_topographic_position_m=3.0)
+
+    assert result[LANDFORM_COLUMN].iloc[0] == FLAT
+
+
+def test_a_lower_threshold_promotes_more_addresses() -> None:
+    """The threshold is tuned against the observed share, so it has to bite."""
+    addresses = make_classified([(FLAT, 1.0), (FLAT, 4.0), (FLAT, 9.0)])
+
+    high = assign_elevated_flat(addresses, min_topographic_position_m=5.0)
+    low = assign_elevated_flat(addresses, min_topographic_position_m=2.0)
+
+    assert (high[LANDFORM_COLUMN] == ELEVATED_FLAT).sum() == 1
+    assert (low[LANDFORM_COLUMN] == ELEVATED_FLAT).sum() == 2
+
+
+def test_a_missing_topographic_position_column_is_named() -> None:
+    """Without it every address stays flat, and a missing class is noticed late."""
+    addresses = make_classified([(FLAT, 6.0)]).drop(
+        columns=[TOPOGRAPHIC_POSITION_COLUMN]
+    )
+
+    with pytest.raises(ValueError, match=TOPOGRAPHIC_POSITION_COLUMN):
+        assign_elevated_flat(addresses, min_topographic_position_m=3.0)
+
+
+def test_a_missing_landform_column_is_named() -> None:
+    """Promotion runs after the flatland join, and says so when it has not."""
+    addresses = make_classified([(FLAT, 6.0)]).drop(columns=[LANDFORM_COLUMN])
+
+    with pytest.raises(ValueError, match=LANDFORM_COLUMN):
+        assign_elevated_flat(addresses, min_topographic_position_m=3.0)
+
+
+def test_promotion_leaves_every_other_column_alone() -> None:
+    """The step answers one question, and an address must stay the same address."""
+    addresses = make_classified([(FLAT, 6.0), (HILL, 20.0)])
+
+    result = assign_elevated_flat(addresses, min_topographic_position_m=3.0)
+
+    assert list(result.columns) == list(addresses.columns)
+    assert list(result["address_id"]) == list(addresses["address_id"])
+
+
+def test_every_class_after_promotion_is_one_of_the_declared_values() -> None:
+    """Downstream the class is a key into the land value factors, so it is closed."""
+    addresses = make_classified([(FLAT, 6.0), (FLAT, 0.1), (HILL, 30.0)])
+
+    result = assign_elevated_flat(addresses, min_topographic_position_m=3.0)
+
+    assert set(result[LANDFORM_COLUMN]) <= set(LANDFORM_CLASSES)
+
+
+def test_promotion_does_not_modify_the_caller_s_frame() -> None:
+    """Promotion returns a copy, so the unpromoted classification stays available."""
+    addresses = make_classified([(FLAT, 6.0)])
+
+    assign_elevated_flat(addresses, min_topographic_position_m=3.0)
+
+    assert addresses[LANDFORM_COLUMN].iloc[0] == FLAT
 
 
 # --- loading ------------------------------------------------------------------

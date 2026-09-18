@@ -14,14 +14,18 @@ import pytest
 from shapely.geometry import Point
 
 from landloss.exposure.land_value import (
+    SLOPE_COLUMN,
+    TERRAIN_GROUP_COLUMNS,
+    TOPOGRAPHIC_POSITION_COLUMN,
     estimate_land_value,
     index_base_rates,
     load_base_rates,
     load_factors,
     solve_normalising_constant,
     summarise_by_suburb,
+    terrain_modifier,
 )
-from landloss.exposure.landform import FLAT, HILL
+from landloss.exposure.landform import ELEVATED_FLAT, FLAT, HILL
 
 # The published QV anchors for the four study area territorial authorities, with
 # an index onto the common valuation date. Real figures, so that a number that
@@ -159,6 +163,56 @@ def test_the_factors_load_as_a_plain_mapping_of_floats(tmp_path) -> None:
     loaded = load_factors(path)
 
     assert loaded == {"landform_factor_hill": 0.85, "rate_clip_max_multiple": 4.0}
+
+
+# --- the packaged assets ------------------------------------------------------
+#
+# The tests above describe the model against fixtures, on purpose, so that they
+# do not have to be edited every time a judgement number is retuned. That leaves
+# one thing nothing else covers: whether the asset the model reads by default
+# still carries the parameters the code asks it for. The names below are a
+# contract between a CSV a reviewer edits by hand and code that reads it by key,
+# and a row renamed on one side of that contract is not a failure anybody sees
+# until a run reaches the line that wanted it. So these three name no values at
+# all -- they only insist the packaged assets can still be valued against.
+
+
+def test_the_packaged_assets_value_every_landform_class_in_every_authority() -> None:
+    """The default path is the one every script takes, and no fixture exercises it."""
+    addresses = make_addresses(
+        [
+            (ta_name, "Somewhere", landform)
+            for _, ta_name, *_ in ANCHORS
+            for landform in (HILL, FLAT, ELEVATED_FLAT)
+        ]
+    )
+
+    valued = estimate_land_value(addresses)
+
+    assert not valued["land_value_nzd"].isna().any()
+    assert (valued["land_value_nzd"] > 0).all()
+
+
+def test_the_packaged_factors_carry_what_the_terrain_modifier_reads() -> None:
+    """The four coefficients are read only once a run has a DEM behind it."""
+    addresses = make_terrain_addresses(
+        [
+            ("Porirua City", "Titahi Bay", FLAT, 2.0, 1.0),
+            ("Porirua City", "Titahi Bay", FLAT, 12.0, -3.0),
+        ]
+    )
+
+    modifier = terrain_modifier(addresses, load_factors())
+
+    assert modifier.iloc[0] > modifier.iloc[1]
+
+
+def test_the_packaged_factors_carry_the_two_rows_the_step_scripts_read() -> None:
+    """The elevated flat promotion lives in a script, so nothing else guards these."""
+    factors = load_factors()
+
+    assert "elevated_flat_min_topographic_position_m" in factors
+    assert "topographic_position_window_m" in factors
 
 
 # --- indexing -----------------------------------------------------------------
@@ -323,6 +377,23 @@ def test_a_missing_column_is_named(base_rates, factors) -> None:
         estimate_land_value(addresses, base_rates=base_rates, factors=factors)
 
 
+def test_a_missing_factor_is_named_rather_than_raising_a_bare_key_error(
+    base_rates, factors
+) -> None:
+    """The factors are a hand-edited CSV, so a typo in one has to say which row."""
+    addresses = make_addresses([("Porirua City", "Titahi Bay", FLAT)])
+    without_elevated_flat = {
+        name: value
+        for name, value in factors.items()
+        if name != "landform_factor_elevated_flat"
+    }
+
+    with pytest.raises(ValueError, match="landform_factor_elevated_flat"):
+        estimate_land_value(
+            addresses, base_rates=base_rates, factors=without_elevated_flat
+        )
+
+
 def test_an_unknown_territorial_authority_is_rejected(base_rates, factors) -> None:
     """Dropping the address would quietly shrink the exposure the study reports."""
     addresses = make_addresses([("Kapiti Coast District", "Paraparaumu", FLAT)])
@@ -354,6 +425,286 @@ def test_the_input_is_not_modified(addresses, base_rates, factors) -> None:
     estimate_land_value(addresses, base_rates=base_rates, factors=factors)
 
     assert "land_value_nzd" not in addresses.columns
+
+
+# --- the terrain modifier -----------------------------------------------------
+
+
+def make_terrain_addresses(rows: list[tuple[str, str, str, float, float]]):
+    """Build an address frame from (TA, suburb, landform, slope, position) rows."""
+    return gpd.GeoDataFrame(
+        {
+            "address_id": list(range(len(rows))),
+            "territorial_authority": [row[0] for row in rows],
+            "suburb_locality": [row[1] for row in rows],
+            "landform_class": [row[2] for row in rows],
+            SLOPE_COLUMN: [row[3] for row in rows],
+            TOPOGRAPHIC_POSITION_COLUMN: [row[4] for row in rows],
+        },
+        geometry=[Point(index, index) for index in range(len(rows))],
+        crs="EPSG:2193",
+    )
+
+
+@pytest.fixture
+def terrain_factors(factors):
+    """The Phase 1 parameters plus the terrain coefficients and their clip band."""
+    return factors | {
+        "beta_slope": -0.10,
+        "beta_tpi": 0.05,
+        "terrain_modifier_clip_min": 0.70,
+        "terrain_modifier_clip_max": 1.40,
+    }
+
+
+@pytest.fixture
+def terrain_addresses():
+    """A population carrying every cohort shape the modifier has to survive.
+
+    Four territorial authorities; a cohort with a spread of terrain, a cohort
+    holding an address the DEM had no value for, a cohort whose addresses are
+    identical, and a cohort of one.
+    """
+    return make_terrain_addresses(
+        [
+            ("Wellington City", "Kelburn", HILL, 25.0, 12.0),
+            ("Wellington City", "Kelburn", HILL, 8.0, -4.0),
+            ("Wellington City", "Kelburn", HILL, 17.0, 3.0),
+            ("Wellington City", "Kilbirnie", FLAT, 2.0, 0.5),
+            ("Wellington City", "Kilbirnie", FLAT, float("nan"), float("nan")),
+            ("Lower Hutt City", "Petone", FLAT, 1.0, 0.0),
+            ("Lower Hutt City", "Petone", FLAT, 1.0, 0.0),
+            ("Lower Hutt City", "Wainuiomata", HILL, 30.0, 6.0),
+            ("Lower Hutt City", "Wainuiomata", HILL, 11.0, -2.0),
+            ("Porirua City", "Titahi Bay", FLAT, 3.0, 1.0),
+            ("Upper Hutt City", "Totara Park", ELEVATED_FLAT, 4.0, 8.0),
+            ("Upper Hutt City", "Totara Park", ELEVATED_FLAT, 6.0, 5.0),
+        ]
+    )
+
+
+def cohort_means(modifier: pd.Series, addresses: gpd.GeoDataFrame) -> pd.Series:
+    """Return the mean modifier within each territorial authority and class."""
+    keys = [addresses[column] for column in TERRAIN_GROUP_COLUMNS]
+    return modifier.groupby(keys, sort=False).mean()
+
+
+def test_the_modifier_averages_one_within_every_cohort(
+    terrain_addresses, terrain_factors
+) -> None:
+    """Anything else would double count slope, which the landform class already has."""
+    modifier = terrain_modifier(terrain_addresses, terrain_factors)
+
+    means = cohort_means(modifier, terrain_addresses)
+
+    assert means.tolist() == pytest.approx([1.0] * len(means))
+
+
+def test_a_cohort_of_one_gets_a_modifier_of_one_rather_than_nan(
+    terrain_addresses, terrain_factors
+) -> None:
+    """A small suburb has nothing to be steep relative to, and that is not an error."""
+    modifier = terrain_modifier(terrain_addresses, terrain_factors)
+
+    porirua = modifier[terrain_addresses["territorial_authority"] == "Porirua City"]
+
+    assert porirua.tolist() == pytest.approx([1.0])
+
+
+def test_a_cohort_with_no_spread_gets_a_modifier_of_one_rather_than_nan(
+    terrain_addresses, terrain_factors
+) -> None:
+    """Identical terrain divides by a zero standard deviation if nothing guards it."""
+    modifier = terrain_modifier(terrain_addresses, terrain_factors)
+
+    petone = modifier[terrain_addresses["suburb_locality"] == "Petone"]
+
+    assert petone.tolist() == pytest.approx([1.0, 1.0])
+
+
+def test_an_address_the_dem_has_no_value_for_gets_a_modifier_of_one(
+    terrain_addresses, terrain_factors
+) -> None:
+    """One NaN modifier is one NaN land value, and that hides in a quarter million."""
+    modifier = terrain_modifier(terrain_addresses, terrain_factors)
+
+    assert not modifier.isna().any()
+    assert modifier.iloc[4] == pytest.approx(1.0)
+
+
+def test_a_steeper_address_gets_a_smaller_modifier_than_a_gentler_one(
+    terrain_addresses, terrain_factors
+) -> None:
+    """A steep section is harder to build on, so beta_slope is negative."""
+    modifier = terrain_modifier(terrain_addresses, terrain_factors)
+
+    steep, gentle = modifier.iloc[0], modifier.iloc[1]
+
+    assert steep < gentle
+
+
+def test_an_address_standing_higher_gets_a_larger_modifier(terrain_factors) -> None:
+    """Standing above the land around you is worth a little; beta_tpi is positive."""
+    addresses = make_terrain_addresses(
+        [
+            ("Porirua City", "Titahi Bay", FLAT, 3.0, 4.0),
+            ("Porirua City", "Titahi Bay", FLAT, 3.0, -4.0),
+        ]
+    )
+
+    modifier = terrain_modifier(addresses, terrain_factors)
+
+    assert modifier.iloc[0] > modifier.iloc[1]
+
+
+def test_the_clip_band_bounds_how_far_terrain_can_move_value(terrain_factors) -> None:
+    """The clip is what stops one freak slope reading becoming a freak valuation."""
+    # Coefficients far larger than the adopted ones, so that the clip has to bind.
+    extreme = terrain_factors | {"beta_slope": -2.0, "beta_tpi": 0.0}
+    addresses = make_terrain_addresses(
+        [
+            ("Porirua City", "Titahi Bay", FLAT, 2.0, 0.0),
+            ("Porirua City", "Titahi Bay", FLAT, 40.0, 0.0),
+        ]
+    )
+
+    clipped = terrain_modifier(addresses, extreme)
+    unclipped = terrain_modifier(
+        addresses,
+        extreme | {"terrain_modifier_clip_min": 0.01, "terrain_modifier_clip_max": 100},
+    )
+
+    # Rescaling to a mean of one cannot change a ratio, so the widest spread the
+    # band allows survives it exactly.
+    band = extreme["terrain_modifier_clip_max"] / extreme["terrain_modifier_clip_min"]
+    assert clipped.max() / clipped.min() == pytest.approx(band)
+    assert unclipped.max() / unclipped.min() > band
+
+
+def test_a_missing_terrain_column_is_named(terrain_addresses, terrain_factors) -> None:
+    """Valuing on landform alone is a decision, not something to fall into."""
+    addresses = terrain_addresses.drop(columns=[SLOPE_COLUMN])
+
+    with pytest.raises(ValueError, match=SLOPE_COLUMN):
+        terrain_modifier(addresses, terrain_factors)
+
+
+def test_a_missing_terrain_parameter_is_named(
+    terrain_addresses, terrain_factors
+) -> None:
+    """A parameter absent from the asset would otherwise raise a bare KeyError."""
+    without_beta = {
+        name: value for name, value in terrain_factors.items() if name != "beta_slope"
+    }
+
+    with pytest.raises(ValueError, match="beta_slope"):
+        terrain_modifier(terrain_addresses, without_beta)
+
+
+def test_the_modifier_is_indexed_as_the_addresses_are(
+    terrain_addresses, terrain_factors
+) -> None:
+    """The caller multiplies it onto a column, and positional alignment is a trap."""
+    addresses = terrain_addresses.set_index(
+        pd.Index(range(100, 100 + len(terrain_addresses)))
+    )
+
+    modifier = terrain_modifier(addresses, terrain_factors)
+
+    assert list(modifier.index) == list(addresses.index)
+
+
+# --- valuing addresses with terrain -------------------------------------------
+
+
+def test_the_ta_mean_still_holds_with_terrain(
+    terrain_addresses, base_rates, terrain_factors
+) -> None:
+    """The whole design rests on this: terrain redistributes, it never adds value."""
+    valued = estimate_land_value(
+        terrain_addresses, base_rates=base_rates, factors=terrain_factors
+    )
+
+    means = valued.groupby("territorial_authority")["land_value_nzd"].mean()
+
+    for ta_name, modelled_mean in means.items():
+        assert modelled_mean == pytest.approx(indexed_average(base_rates, ta_name))
+
+
+def test_terrain_breaks_the_tie_between_addresses_of_the_same_class(
+    base_rates, terrain_factors
+) -> None:
+    """On landform alone a whole suburb shares one value, and that map says nothing."""
+    addresses = make_terrain_addresses(
+        [
+            ("Porirua City", "Titahi Bay", FLAT, 2.0, 1.0),
+            ("Porirua City", "Titahi Bay", FLAT, 9.0, 0.0),
+            ("Porirua City", "Titahi Bay", FLAT, 16.0, -1.0),
+        ]
+    )
+
+    with_terrain = estimate_land_value(
+        addresses, base_rates=base_rates, factors=terrain_factors
+    )
+    without_terrain = estimate_land_value(
+        addresses.drop(columns=[SLOPE_COLUMN, TOPOGRAPHIC_POSITION_COLUMN]),
+        base_rates=base_rates,
+        factors=terrain_factors,
+    )
+
+    assert without_terrain["land_value_nzd"].nunique() == 1
+    assert with_terrain["land_value_nzd"].nunique() == len(addresses)
+
+
+def test_a_steeper_address_is_worth_less_than_a_gentler_one_in_the_same_cohort(
+    terrain_addresses, base_rates, terrain_factors
+) -> None:
+    """Two Kelburn hill sections differ by their terrain and by nothing else."""
+    valued = estimate_land_value(
+        terrain_addresses, base_rates=base_rates, factors=terrain_factors
+    )
+
+    kelburn = valued[valued["suburb_locality"] == "Kelburn"]
+
+    assert kelburn["land_value_nzd"].iloc[0] < kelburn["land_value_nzd"].iloc[1]
+
+
+def test_without_the_terrain_columns_the_phase_one_answer_is_unchanged(
+    addresses, base_rates, factors, terrain_factors
+) -> None:
+    """An extent can be valued before its DEM is fetched; that path must not move."""
+    phase_one = estimate_land_value(addresses, base_rates=base_rates, factors=factors)
+    with_terrain_parameters = estimate_land_value(
+        addresses, base_rates=base_rates, factors=terrain_factors
+    )
+
+    assert with_terrain_parameters["land_value_nzd"].tolist() == pytest.approx(
+        phase_one["land_value_nzd"].tolist()
+    )
+
+
+def test_without_the_terrain_columns_a_class_shares_one_value(
+    addresses, base_rates, terrain_factors
+) -> None:
+    """The Phase 1 signature is one value per TA and class, and it has to survive."""
+    valued = estimate_land_value(
+        addresses, base_rates=base_rates, factors=terrain_factors
+    )
+
+    kelburn = valued[valued["suburb_locality"] == "Kelburn"]
+
+    assert kelburn["land_value_nzd"].nunique() == 1
+
+
+def test_no_address_is_left_without_a_value_when_terrain_is_used(
+    terrain_addresses, base_rates, terrain_factors
+) -> None:
+    """A single NaN land value survives every mean and median and is never seen."""
+    valued = estimate_land_value(
+        terrain_addresses, base_rates=base_rates, factors=terrain_factors
+    )
+
+    assert not valued["land_value_nzd"].isna().any()
 
 
 # --- the cohort table ---------------------------------------------------------

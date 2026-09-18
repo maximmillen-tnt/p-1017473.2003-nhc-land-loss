@@ -162,6 +162,18 @@ def classify_rates(valued, reference=None):
     return classes, False
 
 
+def legend_label(label):
+    """Escape a class label for matplotlib, which reads paired dollars as maths.
+
+    Two dollar signs in one string delimit mathtext, so "$683 to $823/m2" drew as
+    an italic "683to823/m2" with the dollars eaten and the range unreadable. A
+    single unpaired dollar happens to render, which is why this only appeared
+    once the quantile classes came into use. Escaping happens here rather than in
+    the label itself so that the same label still prints cleanly to the terminal.
+    """
+    return label.replace("$", r"\$")
+
+
 def plot_rates(valued, extent, study_areas, *, marker_size, reference=None, title=None):
     """Plot the addresses coloured by modelled land rate, over a basemap."""
     classes, discrete = classify_rates(valued, reference)
@@ -206,7 +218,7 @@ def plot_rates(valued, extent, study_areas, *, marker_size, reference=None, titl
             markersize=5,
             markerfacecolor=colour,
             markeredgecolor="none",
-            label=label,
+            label=legend_label(label),
         )
         for (label, subset), colour in zip(classes, colours, strict=True)
         if not subset.empty

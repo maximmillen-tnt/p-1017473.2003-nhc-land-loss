@@ -78,3 +78,26 @@ NLM_FLATLAND_LAYER_ID = 120641
 # instance. Carries the landform classes (``l2_geomorphology``) and the
 # liquefaction susceptibility the exposure attributes are built from.
 NLM_GEOMORPHOLOGY_LAYER_ID = 121398
+
+# The National Liquefaction Model core release this study reads hazard layers
+# from, under
+# ``T:\Auckland\Projects\1017473\WorkingMaterial\new_versioned_releases\core``.
+# The NLM turns releases over during the life of this study, so the version is
+# named once here and every path that reaches into that tree is built from it.
+NLM_VERSION = "v2026p0rc4"
+
+# The release the buffered land damage observations come from. It is deliberately
+# older than NLM_VERSION: the observations are survey data that does not change
+# when the model is re-run, and they were not carried forward into the newer
+# release. Keep the two separate rather than quietly pinning everything to one.
+NLM_OBS_VERSION = "v2025p0_rc4"
+
+# The cell size the study works at when deriving terrain attributes, in metres.
+# The LINZ LiDAR is 1 m, but the study area is 59 by 54 km: at 1 m that is about
+# 3.2 billion cells, which the amenity calculations in particular cannot carry.
+# At 10 m it is about 32 million, and nothing the land value model asks of the
+# terrain -- the gradient a section sits on, whether it stands above its
+# surroundings, whether it can see the sea -- is decided at finer than 10 m.
+# A slope feeding retaining wall exposure would need the native resolution and
+# should not reuse this value.
+DEM_RESOLUTION_M = 10

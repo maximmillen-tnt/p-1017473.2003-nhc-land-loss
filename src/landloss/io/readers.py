@@ -391,3 +391,92 @@ def get_nz_land_cover(
         domain=constants.LRIS_DOMAIN,
         use_cache=use_cache,
     )
+
+
+def dem_cache_path(
+    bbox: tuple[float, float, float, float], resolution: int, crs: int | str
+) -> Path:
+    """Return the file one fetched DEM extent is cached at.
+
+    Args:
+        bbox: The extent the DEM covers (minx, miny, maxx, maxy) in ``crs``.
+        resolution: The cell size in metres.
+        crs: The coordinate reference system the DEM is in.
+
+    Returns:
+        The path the DEM is cached at, inside the Koordinates cache directory so
+        that everything downloaded for this study sits under one root.
+    """
+    key = f"{bbox}|{resolution}|{crs}"
+    digest = hashlib.sha256(key.encode()).hexdigest()[:16]
+    cache_dir = Path(os.environ.get("KOOPCACHE_DIR", DEFAULT_CACHE_DIR)) / "dem"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    return cache_dir / f"dem_{resolution}m_{digest}.tif"
+
+
+def get_dem(
+    bbox: tuple[float, float, float, float],
+    resolution: int = constants.DEM_RESOLUTION_M,
+    crs: int | str = constants.DEFAULT_CRS,
+    *,
+    use_cache: bool = True,
+) -> Path:
+    """Fetch the LINZ elevation model for an extent and return the file it is in.
+
+    LINZ does not publish a DEM as a Koordinates layer -- only hillshades -- so
+    this is the one dataset in the study that does not come through
+    :func:`get_koordinates_layer_extent`. Elevation is served from LINZ's STAC
+    catalogue instead, which ``linz_stac_utils`` reads: LiDAR where it has been
+    flown, falling back to the 8 m contour-derived model where it has not. That
+    is the same route the National Liquefaction Model takes, so the two studies
+    stand on the same elevation data.
+
+    A path is returned rather than an array because the sampling helper this
+    study uses, ``ttpy.gis.raster.utils.extract_point_values``, reads from a
+    file, and because a fetched DEM is worth keeping: the pilot extent alone
+    takes over a minute to assemble from the source tiles.
+
+    Carries limitation L-12: the LiDAR is a merge of surveys flown in different
+    years across the study area -- Wellington in 2023, Hutt City in 2025, Porirua
+    unknown -- so a slope derived from it is not of uniform vintage, and a
+    difference across a survey boundary may be an artefact rather than a
+    landform.
+
+    Args:
+        bbox: The extent to fetch (minx, miny, maxx, maxy), in ``crs``.
+        resolution: The cell size in metres. The default is the study's working
+            resolution; see :data:`landloss.domain.constants.DEM_RESOLUTION_M`
+            for why it is not the native 1 m.
+        crs: The coordinate reference system to return the DEM in.
+        use_cache: Whether to reuse an already-fetched DEM for the same extent,
+            resolution and CRS. Pass False to re-fetch.
+
+    Returns:
+        The path to the DEM, as a GeoTIFF.
+    """
+    # Imported here rather than at module scope because assembling the STAC
+    # client is slow and every other reader in this module is a vector reader
+    # that never needs it.
+    from linz_stac_utils.elevation import load_elevation  # noqa: PLC0415
+
+    cache_path = dem_cache_path(bbox, resolution, crs)
+    if use_cache and cache_path.exists():
+        return cache_path
+
+    # load_elevation takes its bounding box in WGS84, whatever CRS it is asked to
+    # return, so the extent is converted rather than passed through.
+    minx, miny, maxx, maxy = bbox
+    wgs84_bounds = (
+        gpd.GeoSeries([box(minx, miny, maxx, maxy)], crs=crs)
+        .to_crs("EPSG:4326")
+        .total_bounds
+    )
+
+    load_elevation(
+        bbox=tuple(float(value) for value in wgs84_bounds),
+        resolution=resolution,
+        crs=crs,
+        output_path=cache_path,
+        overwrite=True,
+    )
+    return cache_path

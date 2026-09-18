@@ -32,9 +32,30 @@ live in the base rates asset alongside the averages, so the published figure and
 the adjustment applied to it are both visible in the output rather than one being
 silently folded into the other.
 
-Phase 1 only distinguishes hill from flat. The elevated flat factor is carried in
-the factors asset and read by this module, but nothing assigns that class yet --
-see :mod:`landloss.exposure.landform`.
+On top of the landform class sits a continuous terrain modifier, which is what
+stops every address in a class being worth exactly the same thing. Its shape is
+the other half of the design:
+
+.. code-block:: text
+
+    factor = landform_factor(class) * modifier
+    modifier = clip(exp(beta_slope * z_slope + beta_tpi * z_tpi))
+
+where the two terrain derivatives are standardised *within* each territorial
+authority and landform class, and the modifier is then rescaled so that its mean
+is exactly one inside each of those groups.
+
+Standardising and rescaling within the group is the whole trick. Steep land is
+already classed as hill, so a slope term that ran across the classes would be
+paid for twice -- once by the class and again by the slope. Held to a mean of one
+within the group, the class keeps all of the between-class signal and the
+modifier does nothing but redistribute value inside it: the steeper half of a
+suburb's hill addresses pays the gentler half, and the suburb's total is
+untouched. The per-TA normalising constant then works exactly as it did before.
+
+The modifier is optional. An address frame without the terrain columns is valued
+on its landform class alone, which is what the first pass over a new extent does
+before any DEM has been fetched.
 
 Two approximations are worth stating plainly, because they bound what any
 per-property figure from this module can be used for. The published averages are
@@ -44,6 +65,7 @@ than a measured parcel area, so the rate per square metre is an order-of-
 magnitude figure for comparing cohorts, not a valuation of any one property.
 """
 
+import math
 from collections.abc import Collection, Sequence
 from pathlib import Path
 
@@ -76,6 +98,42 @@ LANDFORM_FACTOR_PARAMETERS = {
 }
 RATE_CLIP_MIN_PARAMETER = "rate_clip_min_multiple"
 RATE_CLIP_MAX_PARAMETER = "rate_clip_max_multiple"
+
+# Everything :func:`estimate_land_value` reads out of the factors asset, checked
+# as a set before any of it is used. A parameter dropped or renamed in the asset
+# is then named in one message, rather than surfacing as a bare KeyError out of
+# the middle of a comprehension -- which is what a reviewer editing the CSV would
+# otherwise get, and it does not say which of the two files is wrong.
+VALUATION_PARAMETERS = (
+    *LANDFORM_FACTOR_PARAMETERS.values(),
+    RATE_CLIP_MIN_PARAMETER,
+    RATE_CLIP_MAX_PARAMETER,
+)
+
+# The terrain derivatives the continuous modifier reads, sampled onto the
+# addresses from the DEM by :mod:`landloss.common.utils.terrain`.
+SLOPE_COLUMN = "slope_deg"
+TOPOGRAPHIC_POSITION_COLUMN = "topographic_position_m"
+TERRAIN_COLUMNS = (SLOPE_COLUMN, TOPOGRAPHIC_POSITION_COLUMN)
+
+# The cohort the terrain signal is measured against. A 10 degree section is a
+# gentle one among Wellington hill addresses and a remarkably steep one among
+# Petone flat addresses, so "steep" only means anything relative to the group an
+# address is already in.
+TERRAIN_GROUP_COLUMNS = ("territorial_authority", "landform_class")
+
+# The terrain parameters read out of the factors asset. All four are judgement,
+# to be re-fitted against sale evidence; see the basis column of the asset.
+BETA_SLOPE_PARAMETER = "beta_slope"
+BETA_TOPOGRAPHIC_POSITION_PARAMETER = "beta_tpi"
+TERRAIN_CLIP_MIN_PARAMETER = "terrain_modifier_clip_min"
+TERRAIN_CLIP_MAX_PARAMETER = "terrain_modifier_clip_max"
+TERRAIN_PARAMETERS = (
+    BETA_SLOPE_PARAMETER,
+    BETA_TOPOGRAPHIC_POSITION_PARAMETER,
+    TERRAIN_CLIP_MIN_PARAMETER,
+    TERRAIN_CLIP_MAX_PARAMETER,
+)
 
 
 def load_base_rates(path: Path = BASE_RATES_PATH) -> pd.DataFrame:
@@ -270,6 +328,138 @@ def _check_known(values: pd.Series, known: Collection, what: str) -> None:
         raise ValueError(msg)
 
 
+def _check_present(
+    available: Collection[str], required: Sequence[str], what: str
+) -> None:
+    """Raise unless everything the model needs is there.
+
+    Args:
+        available: The names that are present.
+        required: The names that have to be present.
+        what: What the names are, used in the error message.
+
+    Raises:
+        ValueError: If any required name is absent, naming the ones that are.
+    """
+    missing = [name for name in required if name not in available]
+    if missing:
+        msg = (
+            f"Missing {what}: {', '.join(missing)}. "
+            f"The land value model needs all of: {', '.join(required)}."
+        )
+        raise ValueError(msg)
+
+
+def _standardise_within_groups(
+    values: pd.Series, groups: Sequence[pd.Series]
+) -> pd.Series:
+    """Express each value as standard deviations from its own group's mean.
+
+    Three cases come back as zero rather than as NaN, and all three are ordinary
+    rather than exceptional: a group with one member, a group whose values are
+    all identical, and an address the DEM had no value for. Zero is the right
+    answer for each -- it puts the address at the middle of its cohort, which is
+    exactly what "nothing is known to distinguish it" should mean. NaN would
+    instead poison the address's land value, and a single NaN land value is very
+    hard to notice in a quarter of a million rows.
+
+    Args:
+        values: The quantity to standardise.
+        groups: The keys splitting ``values`` into cohorts, indexed as ``values``
+            is.
+
+    Returns:
+        The standardised values, indexed as ``values`` is.
+    """
+    grouped = values.groupby(list(groups), sort=False, dropna=False)
+    centre = grouped.transform("mean")
+
+    # ddof=0, because these are whole cohorts rather than samples drawn from
+    # one, and because ddof=1 makes a one-address cohort divide by zero.
+    spread = grouped.transform("std", ddof=0)
+
+    # where() turns a zero or absent spread into NaN, so the division below has
+    # nothing to divide by and the fillna picks the row up.
+    return ((values - centre) / spread.where(spread > 0)).fillna(0.0)
+
+
+def terrain_modifier(
+    addresses: gpd.GeoDataFrame, factors: dict[str, float]
+) -> pd.Series:
+    """Spread value within a landform class according to the terrain.
+
+    The modifier multiplies the landform factor, and is built so that it can
+    only move value between the addresses of a cohort and never into or out of
+    it:
+
+    1. slope and topographic position are standardised within each
+       :data:`TERRAIN_GROUP_COLUMNS` group, so that "steep" means steep for this
+       territorial authority and this landform class rather than steep in
+       general;
+    2. the two are combined as ``exp(beta_slope * z_slope + beta_tpi * z_tpi)``,
+       which is a multiplicative effect on value and so cannot go negative;
+    3. the result is clipped, so that one freak address cannot be handed several
+       times its neighbour's value on the strength of a terrain derivative;
+    4. it is rescaled so that its mean within each group is exactly one.
+
+    Step 4 is what keeps the landform factors meaning what they say. Without it
+    a cohort of unusually steep addresses would be scaled down as a whole, which
+    is the between-class signal the landform class already carries, counted a
+    second time.
+
+    Args:
+        addresses: Address points carrying :data:`TERRAIN_COLUMNS` and
+            :data:`TERRAIN_GROUP_COLUMNS`.
+        factors: The model parameters, carrying :data:`TERRAIN_PARAMETERS`.
+
+    Returns:
+        The multiplier for each address, indexed as ``addresses`` is, with a
+        mean of exactly one within each group. Never NaN.
+
+    Raises:
+        ValueError: If a required column or parameter is absent, naming what is
+            missing.
+    """
+    _check_present(
+        addresses.columns,
+        (*TERRAIN_COLUMNS, *TERRAIN_GROUP_COLUMNS),
+        "address frame column(s)",
+    )
+    _check_present(factors, TERRAIN_PARAMETERS, "land value factor(s)")
+
+    if addresses.empty:
+        # A grouped transform over no rows has nothing to group by, and a pilot
+        # extent really can come back with no addresses in it.
+        return pd.Series(1.0, index=addresses.index, dtype=float)
+
+    groups = [addresses[column] for column in TERRAIN_GROUP_COLUMNS]
+    z_slope = _standardise_within_groups(addresses[SLOPE_COLUMN].astype(float), groups)
+    z_position = _standardise_within_groups(
+        addresses[TOPOGRAPHIC_POSITION_COLUMN].astype(float), groups
+    )
+
+    exponent = (
+        factors[BETA_SLOPE_PARAMETER] * z_slope
+        + factors[BETA_TOPOGRAPHIC_POSITION_PARAMETER] * z_position
+    )
+
+    # math.exp through map rather than numpy, so that this module keeps to the
+    # dependencies it already has; the cost is invisible next to the spatial
+    # work upstream.
+    modifier = exponent.map(math.exp).clip(
+        lower=factors[TERRAIN_CLIP_MIN_PARAMETER],
+        upper=factors[TERRAIN_CLIP_MAX_PARAMETER],
+    )
+
+    # Rescaled last, so the mean is exactly one whatever the clip did. The guard
+    # covers a clip band configured at or below zero, which would be a broken
+    # asset rather than unusual data, but not one worth a NaN.
+    group_mean = modifier.groupby(list(groups), sort=False, dropna=False).transform(
+        "mean"
+    )
+    return (modifier / group_mean.where(group_mean > 0)).fillna(1.0)
+
+
 def estimate_land_value(
     addresses: gpd.GeoDataFrame,
     base_rates: pd.DataFrame | None = None,
@@ -281,7 +471,8 @@ def estimate_land_value(
 
     1. the published average land value is indexed onto
        :data:`COMMON_VALUATION_DATE`;
-    2. each address is given the landform multiplier for its class;
+    2. each address is given the landform multiplier for its class, multiplied
+       by its terrain modifier if the frame carries :data:`TERRAIN_COLUMNS`;
     3. a normalising constant is solved so that the scaled multipliers average to
        the indexed published figure;
     4. the resulting values are clipped to the configured multiples of that
@@ -297,6 +488,10 @@ def estimate_land_value(
     Args:
         addresses: Address points carrying :data:`REQUIRED_ADDRESS_COLUMNS`, as
             produced by :func:`landloss.exposure.landform.classify_landform`.
+            Carrying :data:`TERRAIN_COLUMNS` as well turns on the continuous
+            terrain modifier described in :func:`terrain_modifier`; without them
+            an address is valued on its landform class alone. Either is a
+            supported answer, and both hold the TA mean.
         base_rates: The published anchors. Defaults to the packaged asset.
         factors: The model parameters. Defaults to the packaged asset.
 
@@ -306,27 +501,23 @@ def estimate_land_value(
         frame is left untouched.
 
     Raises:
-        ValueError: If a required column is absent, if an address carries a
-            territorial authority the base rates say nothing about, or if it
-            carries a landform class the factors say nothing about. None of the
-            three is silently dropped, because an address that vanishes between
-            the exposure model and the loss model is an expensive thing to
-            notice late.
+        ValueError: If a required column or a required factor is absent, if an
+            address carries a territorial authority the base rates say nothing
+            about, or if it carries a landform class the factors say nothing
+            about. None of the four is silently dropped, because an address that
+            vanishes between the exposure model and the loss model is an
+            expensive thing to notice late.
     """
-    missing = [
-        column for column in REQUIRED_ADDRESS_COLUMNS if column not in addresses.columns
-    ]
-    if missing:
-        msg = (
-            f"The address frame is missing the column(s) {', '.join(missing)}. "
-            f"Expected all of: {', '.join(REQUIRED_ADDRESS_COLUMNS)}."
-        )
-        raise ValueError(msg)
+    _check_present(
+        addresses.columns, REQUIRED_ADDRESS_COLUMNS, "address frame column(s)"
+    )
 
     if base_rates is None:
         base_rates = load_base_rates()
     if factors is None:
         factors = load_factors()
+
+    _check_present(factors, VALUATION_PARAMETERS, "land value factor(s)")
 
     rates = index_base_rates(base_rates).set_index("ta_name")
     factor_by_class = {
@@ -343,6 +534,14 @@ def estimate_land_value(
     _check_known(valued["landform_class"], factor_by_class, "landform class")
 
     factor = valued["landform_class"].map(factor_by_class).astype(float)
+
+    # The terrain columns are optional, and their absence is not an error: an
+    # extent can be valued on landform alone before any DEM has been fetched for
+    # it. Because the modifier averages one within every group, switching it on
+    # leaves each TA's total exactly where it was and only redistributes inside.
+    if all(column in valued.columns for column in TERRAIN_COLUMNS):
+        factor = factor * terrain_modifier(valued, factors)
+
     land_value = pd.Series(float("nan"), index=valued.index, dtype=float)
 
     clip_min = factors[RATE_CLIP_MIN_PARAMETER]
