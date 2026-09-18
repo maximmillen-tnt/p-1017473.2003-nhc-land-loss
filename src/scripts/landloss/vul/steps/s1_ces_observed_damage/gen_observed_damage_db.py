@@ -455,19 +455,7 @@ def describe(database):
 
 
 def main():
-    try:
-        loss_fp = ts.get_source_mat(LOSS_MAT_PATH)
-    except ValueError as err:
-        print(err)
-        print("\nCheck T: is mapped, and that gen_ces_loss_data.py has been run.")
-        return 1
-
-    for path in (OBS_DIR, LSN_DIR):
-        if not path.exists():
-            print(f"Cannot reach {path}")
-            print("\nThe National Liquefaction Model release lives on T:. Check the")
-            print("drive is mapped.")
-            return 1
+    loss_fp = ts.get_source_mat(LOSS_MAT_PATH)
 
     print(f"Observations : {constants.NLM_OBS_VERSION}")
     print(f"LSN grids    : {constants.NLM_VERSION}")

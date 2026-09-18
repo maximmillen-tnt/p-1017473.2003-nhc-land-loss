@@ -202,12 +202,7 @@ def plot_land_damage_v_lsn(database, title):
 
 
 def main():
-    try:
-        database = versioned_store.read_vul(fname=DB_NAME, sub_dirs=DB_SUB_DIRS)
-    except ValueError as err:
-        print(err)
-        print("\nRun the s1_ces_observed_damage step first.")
-        return 1
+    database = versioned_store.read_vul(fname=DB_NAME, sub_dirs=DB_SUB_DIRS)
 
     describe(database)
 
