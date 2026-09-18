@@ -25,6 +25,52 @@ your VS Code settings (your current directory should be the root of the repo):
 ./tasks/dev_sync.ps1
 ```
 
+## Environment variables
+
+Copy `.env.example` to `.env` and fill in the values you need; `.env` itself is
+gitignored, so this file is where every variable lives with a one-line
+explanation.
+
+| Variable | Purpose |
+| --- | --- |
+| `TNT_KOORDINATES_API_KEY` | API key for T+T's own layers on `ttgroup.koordinates.com`. |
+| `KOORDINATES_PUBLIC_API_KEY` | API key for public layers on `koordinates.com` (e.g. GWRC slope failure). |
+| `LINZ_API_KEY` | API key for LINZ layers on `data.linz.govt.nz`. |
+| `LRIS_API_KEY` | API key for LRIS layers on `lris.scinfo.org.nz` (e.g. LCDB land cover). |
+| `KOOPCACHE_DIR` | Where downloaded Koordinates layers and clipped extents are cached. Defaults to `.koopcache`. |
+| `TTDRIVE_SYNC_LOCAL_MODE` | `True`/`False`. Switches `tdrive_sync` (see below) into local-only working mode. Defaults to `False`. |
+| `TTDRIVE_SYNC_LOCAL_VERSION` | Required when `TTDRIVE_SYNC_LOCAL_MODE=True`. A private, disposable version name for local-only reads/writes. |
+| `TTDRIVE_SYNC_CACHE_DIR` | Where `tdrive_sync`'s local cache tiers are written. Defaults to `.tdrivecache`. |
+
+### `tdrive_sync` and local-only working mode
+
+This project's own versioned intermediate/output data (hazard, exposure, vul,
+loss) is saved and read through `src/tdrive_sync` (imported as `ts`), backed by
+the shared `T:` drive at the `BASE_DIR`/`DATA_VERSION` set in `tdrive_sync_config.py`
+at the repo root. That file is committed to git — `BASE_DIR` and `DATA_VERSION`
+are shared, team-wide settings, not something to change per developer.
+
+By default (`TTDRIVE_SYNC_LOCAL_MODE=False`), every save goes to `T:` (and its
+local cache mirror), and **raises `FileExistsError` if the file already exists**
+there — bump `DATA_VERSION` in `tdrive_sync_config.py` rather than overwrite
+shared data. The one exception is `DATA_VERSION = "SCRATCH"`, which lets saves
+overwrite freely; this is a project-wide setting in the committed config file,
+not something to reach for from an individual call.
+
+Setting `TTDRIVE_SYNC_LOCAL_MODE=True` (with `TTDRIVE_SYNC_LOCAL_VERSION` set to
+any name you like) switches saves and reads to a private, local-only area under
+`TTDRIVE_SYNC_CACHE_DIR` — `T:` is never written to in this mode, and saves
+always overwrite, since it is a disposable personal working area. Reads in this
+mode fall through three tiers, stopping at the first that has the file:
+
+1. The local `TTDRIVE_SYNC_LOCAL_VERSION` cache (no network involved).
+2. The local cache for the shared `DATA_VERSION` (also no network).
+3. `T:` itself, at `DATA_VERSION` — populating tier 2 so the next read for the
+   same file doesn't need the network either.
+
+With local mode off, reads instead resolve the local `DATA_VERSION` cache
+directly, refreshing it from `T:` first if it is missing or out of date.
+
 ## Other Development Tasks
 
 ### Adding a dependency (or regenerating the requirements files.)

@@ -112,6 +112,29 @@ Because the extent cache key includes the layer version, a new version of a laye
 upstream produces a new key rather than a stale hit. Pass `use_cache=False` to
 force a re-read.
 
+## Versioned data storage (tdrive_sync)
+
+`src/tdrive_sync/` (imported as `ts`) is a small, generic package for saving and
+reading this project's own intermediate and output data on the shared `T:` drive,
+under a project-wide `DATA_VERSION`. It knows nothing about landloss — it is
+configured by a committed `tdrive_sync_config.py` at the repo root (`BASE_DIR`,
+`DATA_VERSION`) and a set of `TTDRIVE_SYNC_*` environment variables that let a
+developer work entirely against a local, disposable cache instead of `T:`. See
+`README.md`'s "Environment variables" section for the full local-mode fallback
+chain, and the package's own docstrings for the mechanics (format dispatch,
+atomic copying, path resolution).
+
+`src/landloss/io/versioned_store.py` is the thin, landloss-specific layer on top:
+`save_hazard`/`read_hazard`, `save_exposure`/`read_exposure`, `save_vul`/
+`read_vul` and `save_loss`/`read_loss` each just prepend the module's name to
+`sub_dirs` before delegating to `ts.local_save`/`ts.local_read`, so the four
+modules share one `DATA_VERSION` without their files colliding.
+
+This is separate from the NLM's own *upstream* release directory
+(`NLM_VERSION`/`NLM_OBS_VERSION` in `landloss/domain/constants.py`), which this
+repo only reads from — `versioned_store` is for data this project derives and
+writes out itself.
+
 ## Causes of financial land loss
 
 These are the distinct causes the model has to represent. They are not

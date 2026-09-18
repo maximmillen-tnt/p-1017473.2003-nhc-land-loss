@@ -89,3 +89,10 @@ to a step's scripts must update that step's method file in the same change.
 
 Use the `adding-steps-scripts` skill whenever you add a step, change one, or
 wonder where a piece of methodology should be written down.
+
+## Environment variables
+
+`README.md`'s "Environment variables" section must document every variable in
+`.env.example`. Any change that adds or changes a `.env` variable must update
+that section in the same change — it is the one place a new developer can read
+what every variable does without hunting through source.

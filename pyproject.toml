@@ -27,6 +27,7 @@ dependencies = [
     "matplotlib-scalebar>=0.9",
     "numpy>=2.1",
     "pandas>=2.3",
+    "pyarrow>=19.0",
     "pyproj>=3.7",
     "python-dotenv>=1.0.0",
     "rasterio>=1.4",
@@ -80,6 +81,7 @@ version-file = "src/landloss/_version.py"
 
 [tool.hatch.build.targets.wheel]
 sources = [ "src" ]
+packages = [ "src/landloss", "src/tdrive_sync" ]
 
 [tool.uv]
 default-groups = ["dev", "test", "doc"]

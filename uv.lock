@@ -11,7 +11,7 @@ resolution-markers = [
 ]
 
 [options]
-exclude-newer = "2026-09-10T21:33:12.4956398Z"
+exclude-newer = "2026-09-11T00:52:45.3597415Z"
 exclude-newer-span = "P7D"
 
 [options.exclude-newer-package]
@@ -1630,6 +1630,7 @@ dependencies = [
     { name = "matplotlib-scalebar" },
     { name = "numpy" },
     { name = "pandas" },
+    { name = "pyarrow" },
     { name = "pyproj" },
     { name = "python-dotenv" },
     { name = "rasterio" },
@@ -1684,6 +1685,7 @@ requires-dist = [
     { name = "matplotlib-scalebar", specifier = ">=0.9" },
     { name = "numpy", specifier = ">=2.1" },
     { name = "pandas", specifier = ">=2.3" },
+    { name = "pyarrow", specifier = ">=19.0" },
     { name = "pyproj", specifier = ">=3.7" },
     { name = "python-dotenv", specifier = ">=1.0.0" },
     { name = "rasterio", specifier = ">=1.4" },

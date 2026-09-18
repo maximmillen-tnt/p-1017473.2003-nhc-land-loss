@@ -168,6 +168,7 @@ src/**/_version.py
 .idea/
 temp/
 .koopcache/
+.tdrivecache/
 
 # Generated report figures
 fig/
