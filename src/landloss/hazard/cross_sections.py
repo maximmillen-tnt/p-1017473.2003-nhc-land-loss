@@ -156,7 +156,7 @@ def find_crossings(section: CrossSection, waterways: gpd.GeoDataFrame) -> pd.Dat
     Args:
         section: The section to test.
         waterways: Watercourse centrelines in the same CRS, as returned by
-            :func:`landloss.hazard.waterways.get_waterways`.
+            :func:`landloss.hazard.liquefaction.waterways.get_waterways`.
 
     Returns:
         A DataFrame of ``distance_m``, ``name`` and ``wtype``, one row per

@@ -56,7 +56,10 @@ repos:
       - id: check-added-large-files
         args: [--maxkb=100000]
       - id: trailing-whitespace
-        exclude: (.*\.sh|.*\.d2|.*\.md|.*\.drawio|.*egg-info.*|)$
+        # No trailing | before the closing bracket: that leaves an empty
+        # alternative, which matches every path, and the hook then silently
+        # checks nothing at all.
+        exclude: (.*\.sh|.*\.d2|.*\.md|.*\.drawio|.*egg-info.*)$
       - id: check-merge-conflict
         args: [--assume-in-merge]
 

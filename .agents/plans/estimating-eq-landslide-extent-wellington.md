@@ -186,9 +186,9 @@ fitted parameters as a small packaged asset. Follow `gen_study_extent.py`
 exactly: `argparse`, validate before writing, commit the derived asset so nobody
 needs the 31k-polygon inventory day to day.
 
-**New run scripts:** `src/scripts/landloss/hazard/steps/` (01 terrain,
+**New run scripts:** `src/scripts/landloss/hazard/landslide/steps/` (01 terrain,
 02 demand, 03 displacement, 04 sources, 05 runout, 06 per-property) and
-`src/scripts/landloss/hazard/validations/` (below).
+`src/scripts/landloss/hazard/landslide/validations/` (below).
 
 **Reuse rather than rewrite:**
 
@@ -210,7 +210,7 @@ names with a one-line "why" docstring, no network — follow
 - Source and runout polygons are returned separately and never merged.
 - No landslide is generated inside the Zone 5 mask.
 
-**Validations** (`src/scripts/landloss/hazard/validations/` — checks on outputs,
+**Validations** (`src/scripts/landloss/hazard/landslide/validations/` — checks on outputs,
 not unit tests):
 
 - Landslide density against the **GWRC `SEVERITY` 1–5 zonation**: simulated

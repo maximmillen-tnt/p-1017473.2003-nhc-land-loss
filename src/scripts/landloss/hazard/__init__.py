@@ -1,1 +1,1 @@
-"""Scripts that build the hazard model."""
+"""Scripts that build the hazard model, by hazard."""

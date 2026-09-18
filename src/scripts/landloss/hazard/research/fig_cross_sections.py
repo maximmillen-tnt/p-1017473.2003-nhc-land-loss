@@ -38,16 +38,15 @@ from landloss.hazard.cross_sections import (
     sample_elevation,
     sections_to_geodataframe,
 )
-from landloss.hazard.waterways import get_waterways
+from landloss.hazard.liquefaction.waterways import get_waterways
 from landloss.io.area_of_interest import get_study_areas
+from scripts.landloss.paths import RESEARCH_DIR
 
 # River names carry macrons, which the default Windows console cannot encode.
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
-# Repo root, from src/scripts/landloss/hazard/research/ -- five levels up.
-REPO_ROOT = Path(__file__).resolve().parents[5]
-FIG_DIR = REPO_ROOT / "research" / "hazard" / "cross_sections" / "fig"
+FIG_DIR = RESEARCH_DIR / "hazard" / "cross_sections" / "fig"
 DPI = 200
 
 GROUND_COLOUR = "#8c6d46"

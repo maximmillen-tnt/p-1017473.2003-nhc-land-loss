@@ -35,6 +35,7 @@ import requests
 from landloss.domain import constants
 from landloss.exposure.addresses import get_addresses
 from landloss.io.area_of_interest import SMALL_WLG_PILOT, get_study_areas
+from scripts.landloss.paths import REPO_ROOT, TEMP_DIR
 
 # Wellington suburb names are macronised -- Ōwhiro Bay, Pāuatahanui -- which the
 # default cp1252 Windows console cannot encode, so printing one raises. Ask for
@@ -43,14 +44,10 @@ from landloss.io.area_of_interest import SMALL_WLG_PILOT, get_study_areas
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
-# Repo root, from src/scripts/landloss/exposure/steps/s1_address_spine/ -- six
-# levels up. Printed by every run, because a miscounted parents[N] silently
-# writes the spine somewhere nobody looks for it.
-REPO_ROOT = Path(__file__).resolve().parents[6]
 
 # temp/ is gitignored, which is what this output wants to be: a working layer
 # that is cheap to rebuild from the source and has no business in a diff.
-OUT_DIR = REPO_ROOT / "temp" / "exposure"
+OUT_DIR = TEMP_DIR / "exposure"
 OUT_NAME = "address-spine.geoparquet"
 PILOT_OUT_NAME = "address-spine-pilot.geoparquet"
 

@@ -22,6 +22,7 @@ from pathlib import Path
 import geopandas as gpd
 
 from landloss.domain import constants
+from landloss.io import ASSETS_DIR
 from landloss.io.readers import get_koordinates_layer_extent
 
 # Columns in the source layer.
@@ -29,7 +30,7 @@ CODE_COLUMN = "TA2025_V1_00"
 NAME_COLUMN = "TA2025_V1_00_NAME"
 LAND_AREA_COLUMN = "LAND_AREA_SQ_KM"
 
-ASSET_PATH = Path(__file__).resolve().parents[1] / "assets" / "study-areas.geoparquet"
+ASSET_PATH = ASSETS_DIR / "study-areas.geoparquet"
 
 
 def build_study_areas(

@@ -97,17 +97,18 @@ them. Today that is:
   $25k retaining wall cap, insured land, sub-caps
 - `land-damage-mechanisms.md` — how land damage actually happens in Wellington
 - `data-sources.md` — which dataset comes from where, and what is not obtainable
-- `code-structure.md` — the four modules (hazard, exposure, vul, loss), the
-  library/scripts split, and the causes of financial land loss
+- `code-structure.md` — the four modules (hazard, exposure, vul, loss), how
+  `exposure`, `hazard` and `vul` are split into submodules, the library/scripts
+  split, and the causes of financial land loss
 - plus notes on the Natural Hazards Portal, event parameters and retaining wall
   fragility
 
 Claude will not infer this from the code. A question asked without it gets an
 answer that ignores decisions the team has already made.
 
-**Every step folder carries its own plan and method.** A step under
-`src/scripts/landloss/<module>/steps/` lives in its own numbered folder with an
-implementation plan written in phases and a method file describing the
+**Every step folder carries its own plan and method.** A step under any
+`steps/` folder in `src/scripts/landloss/` lives in its own numbered folder
+with an implementation plan written in phases and a method file describing the
 methodology *as currently implemented*, each bullet pointing at the script,
 function or figure where the detail actually lives. Changing a step's scripts
 without updating its method file is the one thing the convention exists to

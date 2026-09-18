@@ -20,11 +20,9 @@ mpl.use("Agg")  # non-interactive: this script only writes PNGs
 import matplotlib.pyplot as plt
 import pandas as pd
 
-from scripts.landloss import paths
+from scripts.landloss.paths import NHI_ACT_LAND_CLAIMS_COHORT_CSV, RESEARCH_DIR
 
-# Repo root, from src/scripts/landloss/vul/research/ -- five levels up.
-REPO_ROOT = Path(__file__).resolve().parents[5]
-FIG_DIR = REPO_ROOT / "research" / "vul" / "claims_cohort" / "fig"
+FIG_DIR = RESEARCH_DIR / "vul" / "claims_cohort" / "fig"
 
 X_COLUMN = "Damaged land area (m2)"
 Y_COLUMN = "Indicative land repair cost ($)"
@@ -85,7 +83,7 @@ def main() -> int:
     parser.add_argument(
         "--csv",
         type=Path,
-        default=paths.NHI_ACT_LAND_CLAIMS_COHORT_CSV,
+        default=NHI_ACT_LAND_CLAIMS_COHORT_CSV,
         help="The claims cohort CSV from get_nhi_act_claims_data.py.",
     )
     parser.add_argument(

@@ -80,12 +80,36 @@ The live register of tasks, limitations and future improvements is
 folder rather than the repo. Edit the JSON and
 regenerate; see the `recording-project-context` skill.
 
+## Module structure
+
+`exposure`, `hazard` and `vul` are each split into submodules, in both
+`src/landloss/` and `src/scripts/landloss/`: `exposure` by insured asset type
+(`land`, `rw`, `culverts`), `hazard` by hazard (`liquefaction`, `landslide`,
+`shaking`), and `vul` by hazard and then asset type (`vul/liquefaction/land`).
+`loss` is flat.
+
+`steps/`, `validations/`, `report/` and `research/` are submodules of whichever
+level the work belongs to. Work specific to one asset or one hazard goes in that
+submodule; work shared across all of them — the address spine, the valley
+cross-sections, the NHC claims datasets — stays at the module level. None of them
+is created until there is something to put in it, and no submodule is created
+speculatively either.
+
+Repo-relative paths come from `src/scripts/landloss/paths.py` (`REPO_ROOT`,
+`REPORT_DIR`, `RESEARCH_DIR`, `TEMP_DIR`) and packaged data files from
+`landloss.io.ASSETS_DIR`. Scripts sit at several depths, so never resolve either
+with a `Path(__file__).resolve().parents[N]` count of your own.
+
+See `.agents/context/code-structure.md` for the reasoning behind both axes.
+
 ## Step scripts
 
-Every step under `src/scripts/landloss/<module>/steps/` lives in its own numbered
-folder carrying, alongside its scripts, an implementation plan written in phases
-and a method file describing the methodology as currently implemented. Any change
-to a step's scripts must update that step's method file in the same change.
+Every step lives in its own numbered folder under a `steps/` directory, carrying,
+alongside its scripts, an implementation plan written in phases and a method file
+describing the methodology as currently implemented. Any change to a step's
+scripts must update that step's method file in the same change. Step numbers run
+across the module, so a step keeps its number when it sits in a submodule's
+`steps/`.
 
 Use the `adding-steps-scripts` skill whenever you add a step, change one, or
 wonder where a piece of methodology should be written down.

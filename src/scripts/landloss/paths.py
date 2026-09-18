@@ -1,6 +1,21 @@
-"""Filesystem paths to assets shared across the landloss scripts."""
+"""Filesystem paths to assets and outputs shared across the landloss scripts."""
 
 from pathlib import Path
+
+# Repo root, from src/scripts/landloss/ -- three levels up. Resolved here once
+# rather than as a parents[N] count in every script, because the scripts sit at
+# several different depths under their module's submodules and a miscounted N
+# silently writes an output somewhere nobody looks for it.
+REPO_ROOT = Path(__file__).resolve().parents[3]
+
+# Report outputs. Any directory named fig is gitignored, so figures are
+# regenerated rather than committed and the script is the record of how each one
+# was made. Both mirror the module path of the script that writes them.
+REPORT_DIR = REPO_ROOT / "report"
+RESEARCH_DIR = REPO_ROOT / "research"
+
+# Working layers, rebuildable from the source data. temp/ is gitignored.
+TEMP_DIR = REPO_ROOT / "temp"
 
 ASSETS_DIR = Path(__file__).resolve().parent / "vul" / "assets"
 

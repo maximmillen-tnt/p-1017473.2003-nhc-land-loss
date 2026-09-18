@@ -1,6 +1,6 @@
 ---
 name: adding-steps-scripts
-description: How a step is laid out under src/scripts/landloss/<module>/steps/ — its own numbered folder holding the scripts, a phased implementation plan with progress checked off, and a method file describing what is actually implemented and pointing at where each piece lives. Use whenever adding a new step to any module, changing the scripts inside an existing step, or asked where a step's methodology or its planned work is written down.
+description: How a step is laid out under a steps/ folder in src/scripts/landloss — its own numbered folder holding the scripts, a phased implementation plan with progress checked off, and a method file describing what is actually implemented and pointing at where each piece lives. Use whenever adding a new step to any module, changing the scripts inside an existing step, or asked where a step's methodology or its planned work is written down.
 ---
 
 # Adding and changing step scripts
@@ -24,46 +24,82 @@ does today, never what it is meant to do.** Anything aspirational — a refineme
 not yet coded, a dataset not yet obtained, a simplification to be revisited —
 belongs in the implementation plan and nowhere else.
 
-## 1. The layout of a step folder
+## 1. Which `steps/` folder the step belongs in
 
-Each step lives in its own numbered subfolder under the module's `steps/`
-directory, named `s<n>_<topic>`:
+`steps/` is not only a module-level folder. `exposure`, `hazard` and `vul` are
+each split into submodules — by insured asset type, by hazard, and by both — and
+`steps/` exists at whichever level the step's work actually belongs to. Before
+creating a folder, decide which that is:
+
+| The step's work is specific to | Its `steps/` folder |
+| --- | --- |
+| One insured asset type | `exposure/<land\|rw\|culverts>/steps/` |
+| One hazard | `hazard/<liquefaction\|landslide\|shaking>/steps/` |
+| One hazard and one asset type | `vul/<hazard>/<asset>/steps/` |
+| Everything in the module alike | `<module>/steps/` |
+
+The last row is the exception, not the default. The address spine is there
+(`exposure/steps/s1_address_spine/`) because land, retaining walls and culverts
+all hang off the same properties; a step that only serves one of them does not
+belong at that level. See `.agents/context/code-structure.md` for the two axes
+and why they are split that way.
+
+## 2. The layout of a step folder
+
+Each step lives in its own numbered subfolder under the `steps/` directory,
+named `s<n>_<topic>`:
 
 ```text
-src/scripts/landloss/exposure/steps/
-    __init__.py
-    s1_parcels/
+src/scripts/landloss/exposure/
+    steps/
         __init__.py
-        s1_parcels_implementation_plan.md
-        s1_parcels_method.md
-        gen_insured_land.py
-        fig_insured_land_extent.py
-    s2_land_value/
-        __init__.py
-        s2_land_value_implementation_plan.md
-        s2_land_value_method.md
-        get_rating_values.py
-        gen_land_value_per_parcel.py
+        s1_address_spine/          # shared: every asset type hangs off it
+            ...
+    land/
+        steps/
+            __init__.py
+            s2_land_value/
+                __init__.py
+                s2_land_value_implementation_plan.md
+                s2_land_value_method.md
+                s1_build_terrain_attributes.py
+                s4_estimate_land_value.py
+                fig_land_value_map.py
 ```
 
-The number carries the run order, so a step folder is not renumbered once other
-steps or documents refer to it. The two markdown files are prefixed with the step
-folder's own name, which keeps them distinguishable when several are open at once
-and makes them findable by name across modules.
+Step numbers run across the whole module, not across one `steps/` folder, which
+is why `s2_land_value` is `s2` even though it is the only step under
+`exposure/land/`. The number carries the run order, so a step folder is not
+renumbered once other steps or documents refer to it — including when it moves
+into a submodule.
+
+The two markdown files are prefixed with the step folder's own name, which keeps
+them distinguishable when several are open at once and makes them findable by
+name across modules.
 
 Both markdown files are **tracked in git**. They are the step's documentation,
 not scratch notes, and their diffs are how a reviewer sees the methodology change
 alongside the code that changed it.
 
-Every new folder needs an `__init__.py` with a one-line module docstring, matching
-the existing `"""Steps that build the exposure model."""` in each `steps/`
-package. Scripts inside follow the naming prefixes in `AGENTS.md` — `fig_`,
-`table_`, `gen_`, `get_` — and the script pattern in
-`src/scripts/landloss/hazard/report/fig_waterway_map.py`: a module docstring
-carrying the literal run command and any required `.env` keys, `argparse` with
-`description=__doc__`, and `def main()` returning 0 or 1.
+Every new folder needs an `__init__.py` with a one-line module docstring naming
+the level it belongs to, matching the existing `"""Steps that build the land
+exposure."""` under `exposure/land/steps/`. With the submodules in place, that
+docstring is what a directory listing has to explain itself with, so
+`"""Steps."""` is not enough.
 
-## 2. The implementation plan
+Scripts inside follow the naming prefixes in `AGENTS.md` — `fig_`, `table_`,
+`gen_`, `get_` — and the script pattern in
+`src/scripts/landloss/hazard/liquefaction/report/fig_waterway_map.py`: a module
+docstring carrying the literal run command and any required `.env` keys,
+`argparse` with `description=__doc__`, and `def main()` returning 0 or 1.
+
+Paths out of the repo come from `src/scripts/landloss/paths.py` — `REPORT_DIR`,
+`RESEARCH_DIR`, `TEMP_DIR`, `REPO_ROOT`. Do not resolve the repo root with
+`Path(__file__).resolve().parents[N]` in a step script: steps sit at several
+different depths, and a miscounted `N` writes the output somewhere nobody looks
+for it rather than raising.
+
+## 3. The implementation plan
 
 `<step>_implementation_plan.md` is written in phases, with progress marked off in
 markdown checkboxes as each phase completes. It is the only place intent lives,
@@ -108,7 +144,7 @@ Copy this template:
   single figure per parcel does not distinguish.
 ```
 
-## 3. The method file
+## 4. The method file
 
 `<step>_method.md` is a bullet-point description of the methodology **as
 currently implemented**. Each bullet says what the step does and points at where
@@ -160,7 +196,7 @@ Note the fourth bullet naming a figure rather than describing it, and the last
 one stating a simplification flatly. Both are true of the code as it stands, and
 both are what the report needs.
 
-## 4. Any script change updates the method file
+## 5. Any script change updates the method file
 
 **A change to a step's scripts updates that step's method file in the same
 change.** Preventing drift between the two is the entire reason the convention
@@ -185,23 +221,30 @@ code; splitting them into a follow-up is how drift starts.
 Only the method file is constrained this way. The plan can be edited on its own
 whenever the intent changes, which is expected.
 
-## 5. Figures and where plotting lives
+## 6. Figures and where plotting lives
 
-Figures produced by a step go to `report/<module>/<topic>/fig/`, resolved from
-`Path(__file__).resolve().parents[N]` rather than a hardcoded path. Any directory
-named `fig` is gitignored, so figures are regenerated rather than committed and
-the script is the record of how each one was made. That is exactly why a method
-bullet may point at a figure: the figure itself is not in the repository, but the
-script that draws it always is.
+A figure produced by a step goes to a directory that mirrors the step's own
+module path, then names the topic — so `exposure/land/steps/s2_land_value/`
+writes to `report/exposure/land/land-value/fig/`. Build the path from
+`REPORT_DIR` (or `RESEARCH_DIR` for exploratory work) in
+`src/scripts/landloss/paths.py`, never from a `parents[N]` count or a hardcoded
+path.
+
+Any directory named `fig` is gitignored, so figures are regenerated rather than
+committed and the script is the record of how each one was made. That is exactly
+why a method bullet may point at a figure: the figure itself is not in the
+repository, but the script that draws it always is.
 
 Keep the plotting logic in the step's script. Only genuinely shared styling — the
 map panel helpers in `src/landloss/common/utils/plot.py` — belongs in the
 library. A figure script is `fig_`, never `plot_`.
 
-## 6. Checklist: adding a new step
+## 7. Checklist: adding a new step
 
-1. Create `src/scripts/landloss/<module>/steps/s<n>_<topic>/` with an
-   `__init__.py` carrying a one-line module docstring.
+1. Decide which `steps/` folder the step belongs in (section 1), then create
+   `s<n>_<topic>/` under it with an `__init__.py` carrying a one-line module
+   docstring. Number the step across the module, continuing from the highest
+   `s<n>` already in it, wherever in the module that step sits.
 2. Write `s<n>_<topic>_implementation_plan.md` first, in phases, with every box
    unticked. Writing the phases before the code is what makes the plan worth
    reading later.
@@ -216,7 +259,7 @@ library. A figure script is `fig_`, never `plot_`.
    documented nowhere.
 7. Run `uv run --frozen prek -a`.
 
-## 7. Checklist: changing an existing step
+## 8. Checklist: changing an existing step
 
 1. Make the script change.
 2. Re-read the step's method file top to bottom, not just the bullet you think is
@@ -229,7 +272,7 @@ library. A figure script is `fig_`, never `plot_`.
 6. Keep the code and the two markdown edits in one commit.
 7. Run `uv run --frozen prek -a`.
 
-## 8. Verify before reporting done
+## 9. Verify before reporting done
 
 - The step folder is numbered, holds an `__init__.py`, and both markdown files
   are prefixed with the folder name.
@@ -240,6 +283,9 @@ library. A figure script is `fig_`, never `plot_`.
 - The method file's last line is the `Potential future improvements:` line naming
   that step's implementation plan.
 - Everything aspirational is in the plan file and only there.
-- Figures are written under `report/<module>/<topic>/fig/`, and no plotting logic
-  moved into `src/landloss/`.
+- The step is in the `steps/` folder of the level its work actually belongs to,
+  not at module level by default.
+- Figures are written under a directory mirroring the step's module path, built
+  from `REPORT_DIR`/`RESEARCH_DIR` and not from a `parents[N]` count, and no
+  plotting logic moved into `src/landloss/`.
 - `uv run --frozen prek -a` passes.

@@ -22,8 +22,9 @@
   looked for; the comment in `filter_addresses` records why.
 - The spine is written to `temp/exposure/address-spine.geoparquet`, or to
   `address-spine-pilot.geoparquet` under `--pilot`, so a pilot run cannot
-  overwrite the full spine. `temp/` is gitignored, and the repository root the
-  path is resolved against is printed by every run.
+  overwrite the full spine. `temp/` is gitignored, and the directory comes from
+  `TEMP_DIR` in `scripts.landloss.paths` rather than from a `parents[N]` count in
+  the script; the repository root it resolves to is printed by every run.
 - The run prints each authority's address count beside the rating unit count
   from its published district revaluation, and the ratio between them, in
   `describe_counts()`. Those published counts are the `QV_RATING_UNITS` constant

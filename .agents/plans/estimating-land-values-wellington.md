@@ -7,11 +7,11 @@ apart or be found separately.
 
 The land value model is step `s2_land_value` of the exposure module. Its plan is:
 
-    src/scripts/landloss/exposure/steps/s2_land_value/s2_land_value_implementation_plan.md
+    src/scripts/landloss/exposure/land/steps/s2_land_value/s2_land_value_implementation_plan.md
 
 and the description of what is currently implemented is:
 
-    src/scripts/landloss/exposure/steps/s2_land_value/s2_land_value_method.md
+    src/scripts/landloss/exposure/land/steps/s2_land_value/s2_land_value_method.md
 
 In short: each address takes its territorial authority's published QV average
 residential land value, indexed to a common 1 September 2025 basis, scaled by a
