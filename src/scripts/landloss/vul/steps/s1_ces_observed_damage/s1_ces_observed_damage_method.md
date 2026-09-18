@@ -57,11 +57,15 @@
   cells. A property on a cell boundary intersects two, and the higher LSN is
   taken so the row is not duplicated. A property outside the grid keeps a null
   LSN, which the run reports as a match rate per event.
-- The database is written as `observed_damage_db.parquet` to the directory in
-  `OUT_DIR` in `gen_observed_damage_db.py`, a working material folder on `T:`. It
-  is derived and large, so it is regenerated rather than committed. Its columns
-  are listed in `OUTPUT_COLUMNS`, and the geometry is kept so the database can be
-  joined to further layers.
+- The database is written as `observed_damage_db.parquet` under the vul module's
+  `ces_observed_damage` area of the project's versioned data store, through
+  `landloss.io.versioned_store.save_vul` (see `OUT_NAME`/`OUT_SUB_DIRS` in
+  `gen_observed_damage_db.py`). It is derived and large, so it is regenerated
+  rather than committed, and it respects `DATA_VERSION` and local-only working
+  mode rather than a fixed `T:` path. `fig_land_damage_v_lsn.py` reads it back
+  the same way, through `versioned_store.read_vul`. Its columns are listed in
+  `OUTPUT_COLUMNS`, and the geometry is kept so the database can be joined to
+  further layers.
 - Settled land damage against LSN is plotted by
   `src/scripts/landloss/vul/report/fig_land_damage_v_lsn.py` as a six panel
   figure — one panel holding every property and five splitting them by observed

@@ -9,9 +9,11 @@ observed on the property rather than by the model.
     uv run --frozen python src/scripts/landloss/vul/report/fig_land_damage_v_lsn.py
 
 Reads the database built by
-``src/scripts/landloss/vul/steps/s1_ces_observed_damage/gen_observed_damage_db.py``,
-which lives on T:. Pass --event to draw a single event instead of all four
-figures.
+``src/scripts/landloss/vul/steps/s1_ces_observed_damage/gen_observed_damage_db.py``
+through ``landloss.io.versioned_store.read_vul`` (T: by default, or a local
+cache/working copy depending on configuration). Pass --database to read from
+an explicit path instead, or --event to draw a single event instead of all
+four figures.
 
 The layout follows ``fig_bdr_v_lsn.py`` in the National Liquefaction Model loss
 repository, so a panel from this study can be read against one from that one.
@@ -30,15 +32,16 @@ import numpy as np
 from matplotlib.lines import Line2D
 from matplotlib.patches import Patch
 
+from landloss.io import versioned_store
+
 # Repo root, from src/scripts/landloss/vul/report/ -- five levels up.
 REPO_ROOT = Path(__file__).resolve().parents[5]
 FIG_DIR = REPO_ROOT / "report" / "vul" / "liq" / "fig"
 
-DB_FP = (
-    Path(r"T:\Auckland\Projects\1017473\1017473.2003\WorkingMaterial\vul")
-    / "ces_observed_damage"
-    / "observed_damage_db.parquet"
-)
+# Written by ../steps/s1_ces_observed_damage/gen_observed_damage_db.py through
+# landloss.io.versioned_store.save_vul, not a hardcoded T: path.
+DB_SUB_DIRS = ["ces_observed_damage"]
+DB_NAME = "observed_damage_db.parquet"
 
 DPI = 200
 FIGSIZE = (12, 8)
@@ -206,8 +209,11 @@ def main():
     parser.add_argument(
         "--database",
         type=Path,
-        default=DB_FP,
-        help="The observed damage database from the s1_ces_observed_damage step.",
+        default=None,
+        help=(
+            "The observed damage database from the s1_ces_observed_damage "
+            "step. Without it, read from the vul versioned data store."
+        ),
     )
     parser.add_argument(
         "--event",
@@ -222,12 +228,19 @@ def main():
     )
     args = parser.parse_args()
 
-    if not args.database.exists():
-        print(f"Cannot reach {args.database}")
-        print("\nRun the s1_ces_observed_damage step first; its output lives on T:.")
-        return 1
+    if args.database is not None:
+        if not args.database.exists():
+            print(f"Cannot reach {args.database}")
+            return 1
+        database = gpd.read_parquet(args.database)
+    else:
+        try:
+            database = versioned_store.read_vul(fname=DB_NAME, sub_dirs=DB_SUB_DIRS)
+        except ValueError as err:
+            print(err)
+            print("\nRun the s1_ces_observed_damage step first.")
+            return 1
 
-    database = gpd.read_parquet(args.database)
     describe(database)
 
     if args.event:

@@ -60,9 +60,10 @@ the LSN grid.
 - [ ] Confirm the observation and LSN match rates are plausible. A near-zero
       rate means a CRS or column name assumption is wrong rather than that the
       data is sparse.
-- [ ] Confirm the output directory. `OUT_DIR` in `gen_observed_damage_db.py` is
-      a guess at the working material layout, made without being able to list
-      `T:`.
+- [x] Confirm the output location. The database now writes through
+      `landloss.io.versioned_store.save_vul` (`OUT_SUB_DIRS`/`OUT_NAME` in
+      `gen_observed_damage_db.py`), so it follows the project's versioned data
+      store layout rather than a guessed `T:` path.
 - [ ] Compare a panel against the National Liquefaction Model's equivalent
       figure. The point clouds should be recognisably the same shape; they will
       not be identical, because this database is not restricted to properties

@@ -17,6 +17,9 @@ Run ``gen_ces_loss_data.py`` in ``../../static_data_gen`` first; this step reads
 the GeoPackage that script writes rather than the source CSV.
 
 Everything it reads lives on T:, so it only runs where that drive is mapped.
+Its output is written through ``landloss.io.versioned_store.save_vul``, so it
+respects ``DATA_VERSION`` and local-only working mode rather than a fixed T:
+path.
 """
 
 import argparse
@@ -28,6 +31,7 @@ import pandas as pd
 from shapely import is_empty, is_missing
 
 from landloss.domain import constants
+from landloss.io import versioned_store
 
 # The loss data NHC supplied, geocoded by ../../static_data_gen/gen_ces_loss_data.py.
 LOSS_DIR = Path(
@@ -46,11 +50,11 @@ OBS_DIR = (
 )
 LSN_DIR = NLM_CORE_DIR / constants.NLM_VERSION / "scenario" / "historic"
 
-# Where the database is written. Derived data, and large, so it lives with the
-# project's working material rather than in the repository.
-OUT_DIR = Path(
-    r"T:\Auckland\Projects\1017473\1017473.2003\WorkingMaterial\vul\ces_observed_damage"
-)
+# Where the database is written: this project's own versioned data store
+# (see landloss.io.versioned_store), not a hardcoded T: path. Derived data,
+# and large, so it lives with the project's working material rather than in
+# the repository.
+OUT_SUB_DIRS = ["ces_observed_damage"]
 OUT_NAME = "observed_damage_db.parquet"
 
 # The NHC loss columns, Title Case in the source, mapped to snake_case. Taken
@@ -472,12 +476,6 @@ def main():
         default=LSN_DIR,
         help="Directory holding the per-event LSN grid parquets.",
     )
-    parser.add_argument(
-        "--out",
-        type=Path,
-        default=OUT_DIR / OUT_NAME,
-        help="Where to write the database.",
-    )
     args = parser.parse_args()
 
     for path in (args.losses, args.obs_dir, args.lsn_dir):
@@ -496,11 +494,10 @@ def main():
     )
     describe(database)
 
-    args.out.parent.mkdir(parents=True, exist_ok=True)
-    database.to_parquet(args.out, index=False)
+    versioned_store.save_vul(database, fname=OUT_NAME, sub_dirs=OUT_SUB_DIRS)
 
     print(RULE)
-    print(f"Wrote {args.out}")
+    print(f"Wrote {OUT_NAME} to the vul versioned data store ({OUT_SUB_DIRS[0]})")
     return 0
 
 
