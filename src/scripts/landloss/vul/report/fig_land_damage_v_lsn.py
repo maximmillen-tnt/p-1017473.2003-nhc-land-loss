@@ -11,22 +11,19 @@ observed on the property rather than by the model.
 Reads the database built by
 ``src/scripts/landloss/vul/steps/s1_ces_observed_damage/gen_observed_damage_db.py``
 through ``landloss.io.versioned_store.read_vul`` (T: by default, or a local
-cache/working copy depending on configuration). Pass --database to read from
-an explicit path instead, or --event to draw a single event instead of all
-four figures.
+cache/working copy depending on configuration), and draws all four figures
+(the combined panel and one per event).
 
 The layout follows ``fig_bdr_v_lsn.py`` in the National Liquefaction Model loss
 repository, so a panel from this study can be read against one from that one.
 """
 
-import argparse
 from pathlib import Path
 
 import matplotlib as mpl
 
 mpl.use("Agg")  # non-interactive: this script only writes PNGs
 
-import geopandas as gpd
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.lines import Line2D
@@ -205,50 +202,18 @@ def plot_land_damage_v_lsn(database, title):
 
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "--database",
-        type=Path,
-        default=None,
-        help=(
-            "The observed damage database from the s1_ces_observed_damage "
-            "step. Without it, read from the vul versioned data store."
-        ),
-    )
-    parser.add_argument(
-        "--event",
-        choices=sorted(EVENT_LABELS),
-        help="Draw only this event. Without it, every event and the combined figure.",
-    )
-    parser.add_argument(
-        "--out-dir",
-        type=Path,
-        default=FIG_DIR,
-        help="Where to write the figures.",
-    )
-    args = parser.parse_args()
-
-    if args.database is not None:
-        if not args.database.exists():
-            print(f"Cannot reach {args.database}")
-            return 1
-        database = gpd.read_parquet(args.database)
-    else:
-        try:
-            database = versioned_store.read_vul(fname=DB_NAME, sub_dirs=DB_SUB_DIRS)
-        except ValueError as err:
-            print(err)
-            print("\nRun the s1_ces_observed_damage step first.")
-            return 1
+    try:
+        database = versioned_store.read_vul(fname=DB_NAME, sub_dirs=DB_SUB_DIRS)
+    except ValueError as err:
+        print(err)
+        print("\nRun the s1_ces_observed_damage step first.")
+        return 1
 
     describe(database)
 
-    if args.event:
-        figures = {args.event: EVENT_LABELS[args.event]}
-    else:
-        figures = {"all": "All events", **EVENT_LABELS}
+    figures = {"all": "All events", **EVENT_LABELS}
 
-    args.out_dir.mkdir(parents=True, exist_ok=True)
+    FIG_DIR.mkdir(parents=True, exist_ok=True)
     print(RULE)
     for event, label in figures.items():
         subset = (
@@ -261,7 +226,7 @@ def main():
             continue
 
         fig = plot_land_damage_v_lsn(subset, label)
-        out = args.out_dir / f"land-damage-v-lsn-{event}.png"
+        out = FIG_DIR / f"land-damage-v-lsn-{event}.png"
         fig.savefig(out, dpi=DPI, bbox_inches="tight")
         plt.close(fig)
         print(f"Wrote {out}")

@@ -96,3 +96,13 @@ wonder where a piece of methodology should be written down.
 `.env.example`. Any change that adds or changes a `.env` variable must update
 that section in the same change — it is the one place a new developer can read
 what every variable does without hunting through source.
+
+
+## Script configuration
+
+Scripts under `src/scripts/` must not use `argparse` (or any other CLI-argument
+parser) to make paths or other settings configurable. Hardcode the paths
+directly in the script instead, using `tdrive_sync`/`versioned_store` to
+resolve anything that lives on T: or in the versioned data store. A script's
+behaviour should be determined entirely by reading its source, not by
+undocumented flags a caller might pass.
