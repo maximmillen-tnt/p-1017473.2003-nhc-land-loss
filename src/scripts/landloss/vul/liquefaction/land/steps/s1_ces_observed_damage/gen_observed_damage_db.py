@@ -1,17 +1,26 @@
 r"""Build the Canterbury observed land damage database.
 
-Joins NHC's Canterbury earthquake sequence loss records to two National
-Liquefaction Model layers -- the mapped land damage observations, and the
-modelled LSN grid -- giving one row per insured property per event carrying the
-land damage settled, the damage category surveyed on the ground, and the LSN the
-model puts at that location.
+Joins NHC's Canterbury earthquake sequence loss records to the National
+Liquefaction Model's mapped land damage observations, giving one row per insured
+property per event carrying the land damage settled and the land damage state,
+1 to 6, surveyed on the ground.
 
     uv run --frozen python src/scripts/landloss/vul/liquefaction/land/steps/s1_ces_observed_damage/gen_observed_damage_db.py
 
+Requires ``TNT_KOORDINATES_API_KEY`` in ``.env`` for the flatland layer the mask
+is cut from.
+
+The properties are masked to
+``landloss.exposure.land.landform.CHCH_FLAT_ONLY`` -- the flat land inside the
+Christchurch extent, as the National Liquefaction Model draws it -- so what is
+in the database is decided by an extent that is written down rather than by how
+far some other model's grid happened to reach. The Canterbury sequence is a flat
+land liquefaction dataset (limitation L-09), and the mask is what makes that
+explicit instead of incidental.
+
 This is the only New Zealand dataset holding both settled land claims and mapped
 land damage, so it is what the Wellington land damage relationships are
-calibrated against. The figure it feeds is drawn by
-``src/scripts/landloss/vul/liquefaction/land/report/fig_land_damage_v_lsn.py``.
+calibrated against.
 
 Run ``gen_ces_loss_data.py`` in ``../../static_data_gen`` first; this step reads
 the GeoPackage that script writes rather than the source CSV.
@@ -25,28 +34,27 @@ there is nothing to point elsewhere at, so this just runs.
 from pathlib import Path
 
 import geopandas as gpd
-import numpy as np
 import pandas as pd
 from shapely import is_empty, is_missing
 
 import tdrive_sync as ts
 from landloss.domain import constants
+from landloss.exposure.land.landform import CHCH_FLAT_ONLY
 from landloss.io import versioned_store
 
 # The loss data NHC supplied, geocoded by ../../static_data_gen/gen_ces_loss_data.py,
 # fetched from T:'s SourceMaterial via tdrive_sync.get_source_mat (see main()).
 LOSS_MAT_PATH = "CHC-loss-data-from-NHC/ces_loss_data_with_geometry.gpkg"
 
-# The National Liquefaction Model's versioned core releases. The observations and
-# the LSN grids come from different releases on purpose -- see the comments on
-# NLM_OBS_VERSION in landloss.domain.constants.
+# The National Liquefaction Model's versioned core releases. The observations
+# come from NLM_OBS_VERSION rather than the current release -- see the comments
+# on it in landloss.domain.constants.
 NLM_CORE_DIR = Path(
     r"T:\Auckland\Projects\1017473\WorkingMaterial\new_versioned_releases\core"
 )
 OBS_DIR = (
     NLM_CORE_DIR / constants.NLM_OBS_VERSION / "fragility" / "event_obs_buffered_no_map"
 )
-LSN_DIR = NLM_CORE_DIR / constants.NLM_VERSION / "scenario" / "historic"
 
 # Where the database is written: this project's own versioned data store
 # (see landloss.io.versioned_store), not a hardcoded T: path. Derived data,
@@ -89,63 +97,73 @@ MONEY_COLUMNS = (
     "best_building_loss_estimate_for_claim",
 )
 
-# The five standardised land damage categories, worst last. The rank is what
-# decides the category where a property falls inside more than one observation
-# polygon; "Unknown" ranks below everything so a known category always wins.
-UNKNOWN = "Unknown"
-NONE_OBSERVED = "None Observed"
-MINOR = "Minor"
-MODERATE = "Moderate"
-MAJOR_PLUS = "Major +"
-
-DAMAGE_RANKS = {
-    UNKNOWN: -1,
-    NONE_OBSERVED: 0,
-    MINOR: 1,
-    MODERATE: 2,
-    MAJOR_PLUS: 3,
+# The six land damage states, worst last. The number is the state as the
+# observation layers code it in ``dissolve_col``, so it is carried through as the
+# state rather than folded into coarser bands: the band can always be recovered
+# from the state, but the state cannot be recovered from the band.
+DAMAGE_STATES = {
+    1: "None observed",
+    2: "Minor",
+    3: "Moderate",
+    4: "Major",
+    5: "Severe",
+    6: "Very severe",
 }
+
+# A polygon the mapping team could not grade. It is deliberately not a state:
+# "surveyed, could not tell" and "never surveyed" are different answers, and
+# collapsing the first into a null would make them indistinguishable. It sorts
+# below every state so a graded observation always wins where the two overlap.
+UNKNOWN = "Unknown"
+UNKNOWN_RANK = -1
 
 # The observation layers were mapped by several teams over six years and their
 # ``dissolve_col`` vocabularies never converged: numeric severity codes for one
 # event, damage descriptions for another, liquefaction classes for the third.
-# Ported from OBS_HAZ_MAP in the National Liquefaction Model loss repository,
-# including its "Unkown" typo key, which is a real value in the source.
+# Derived from OBS_HAZ_MAP in the National Liquefaction Model loss repository,
+# including its "Unkown" typo key, which is a real value in the source, but
+# resolved onto the six states rather than onto that map's five bands.
 #
-# One deliberate difference: that map sends a raw "Minor" to "None Observed"
-# while sending the numeric code "2" to "Minor", so the same damage is reported
-# differently depending on which event mapped it. Here "Minor" stays Minor.
+# Two judgements sit in here. "Lateral Spreading" names a mechanism rather than a
+# grade, and is read as state 5: it is the damage that wrote Canterbury
+# properties off, so it belongs above a graded "Major" without displacing an
+# explicit "Very Severe". "Liquefaction" and "Liquefaction Ejecta" likewise name
+# what was seen rather than how bad it was, and are read as state 3.
+#
+# One deliberate difference from the National Liquefaction Model's map: that map
+# sends a raw "Minor" to its "None Observed" band while sending the numeric code
+# "2" to "Minor", so the same damage is reported differently depending on which
+# event mapped it. Here "Minor" is state 2 either way.
 OBS_HAZ_MAP = {
-    "1": NONE_OBSERVED,
-    "2": MINOR,
-    "3": MODERATE,
-    "4": MAJOR_PLUS,
-    "5": MAJOR_PLUS,
-    "6": MAJOR_PLUS,
-    NONE_OBSERVED: NONE_OBSERVED,
-    MINOR: MINOR,
-    MODERATE: MODERATE,
-    "Major": MAJOR_PLUS,
-    "Severe": MAJOR_PLUS,
-    "Very Severe": MAJOR_PLUS,
-    "noliq_cov": NONE_OBSERVED,
-    "No Visible Damage Observed": NONE_OBSERVED,
-    "Liquefaction Ejecta": MODERATE,
-    "Observed Water": NONE_OBSERVED,
-    "Liquefaction": MODERATE,
-    "No Liquefaction": NONE_OBSERVED,
-    "RoadWorks": NONE_OBSERVED,
-    "Lateral Spreading": MAJOR_PLUS,
-    "Unknown": UNKNOWN,
-    "Unkown": UNKNOWN,
-    "borderline": UNKNOWN,
+    "1": 1,
+    "2": 2,
+    "3": 3,
+    "4": 4,
+    "5": 5,
+    "6": 6,
+    "None Observed": 1,
+    "Minor": 2,
+    "Moderate": 3,
+    "Major": 4,
+    "Severe": 5,
+    "Very Severe": 6,
+    "noliq_cov": 1,
+    "No Visible Damage Observed": 1,
+    "Observed Water": 1,
+    "No Liquefaction": 1,
+    "RoadWorks": 1,
+    "Liquefaction Ejecta": 3,
+    "Liquefaction": 3,
+    "Lateral Spreading": 5,
+    "Unknown": UNKNOWN_RANK,
+    "Unkown": UNKNOWN_RANK,
+    "borderline": UNKNOWN_RANK,
 }
 
 # Columns the layers are expected to carry, checked before any join so a renamed
 # source fails with a readable message rather than deep inside geopandas.
 OBS_CATEGORY_COLUMN = "dissolve_col"
 OBS_LIQ_COLUMN = "liq_cats"
-LSN_COLUMN = "p50"
 
 # The February 2016 observations hold classes beyond liquefaction presence, which
 # the National Liquefaction Model excludes. Kept out for the same reason here:
@@ -159,31 +177,24 @@ EVENTS = {
     "darfield": {
         "loss_name": "Christchurch 30km W, 10km, 7.1",
         "obs": "CESSept_buffered.parquet",
-        "lsn": "darfield_2010__earthquake_lsn_pl50.parquet",
         "label": "Darfield, September 2010",
     },
     "chch_feb_2011": {
         "loss_name": "Christchurch 10km SE, 5km, 6.3",
         "obs": "CESFeb_buffered.parquet",
-        "lsn": "christchurch__feb_2011__earthquake_lsn_pl50.parquet",
         "label": "Christchurch, February 2011",
     },
     "chch_feb_2016": {
         "loss_name": "Christchurch 15km E, 15km, 5.7",
         "obs": "CHCH16_buffered.parquet",
-        "lsn": "christchurch__feb_2016__earthquake_lsn_pl50.parquet",
         "label": "Christchurch, February 2016",
     },
 }
 
-# The LSN layer is a grid of node points at 50 m spacing. Buffering each node to
-# a 50 m square recovers the cell it stands for, which a radial search would not.
-LSN_CELL_HALF_WIDTH_M = 50
-
 OUTPUT_COLUMNS = [
     "qpid",
     "simple_event_name",
-    "lsn_p50",
+    "observed_land_damage_state",
     "observed_land_damage_category",
     "land_assessment",
     "land_paid",
@@ -307,8 +318,8 @@ def get_observed_damage(path):
         path: The buffered observation parquet for the event.
 
     Returns:
-        The observation polygons carrying a single
-        ``observed_land_damage_category`` column, in NZTM.
+        The observation polygons carrying a single ``damage_rank`` column -- a
+        state from :data:`DAMAGE_STATES`, or :data:`UNKNOWN_RANK` -- in NZTM.
     """
     observations = gpd.read_parquet(path)
     require_columns(observations, [OBS_CATEGORY_COLUMN], str(path))
@@ -320,87 +331,96 @@ def get_observed_damage(path):
             observations[OBS_LIQ_COLUMN].isin(CHCH16_LIQ_CLASSES)
         ]
 
-    categories = observations[OBS_CATEGORY_COLUMN].astype("string").map(OBS_HAZ_MAP)
+    ranks = observations[OBS_CATEGORY_COLUMN].astype("string").map(OBS_HAZ_MAP)
     unmapped = sorted(
-        set(observations.loc[categories.isna(), OBS_CATEGORY_COLUMN].dropna().unique())
+        set(observations.loc[ranks.isna(), OBS_CATEGORY_COLUMN].dropna().unique())
     )
     if unmapped:
         # Not fatal: an unrecognised class is better reported and left out than
-        # silently folded into one of the five categories.
+        # silently given a state it was never graded at.
         print(f"  {len(unmapped)} unmapped observation classes: {', '.join(unmapped)}")
 
-    observations = observations.assign(observed_land_damage_category=categories)
-    observations = observations.loc[categories.notna()]
-    return observations[["observed_land_damage_category", "geometry"]].to_crs(
-        constants.DEFAULT_CRS
-    )
+    observations = observations.assign(damage_rank=ranks)
+    observations = observations.loc[ranks.notna()]
+    return observations[["damage_rank", "geometry"]].to_crs(constants.DEFAULT_CRS)
 
 
 def assign_observed_damage(properties, observations):
-    """Attach the observed damage category to each property.
+    """Attach the observed land damage state to each property.
 
-    Where a property falls inside several observation polygons the worst category
-    wins. The alternative -- keeping whichever match happens to come last, which
-    is what the National Liquefaction Model's build does -- reports a property
-    inside both a "None Observed" and a "Lateral Spreading" polygon as undamaged
-    about half the time.
+    Where a property falls inside several observation polygons the worst state
+    wins, which on a numeric scale is simply the highest. The alternative --
+    keeping whichever match happens to come last, which is what the National
+    Liquefaction Model's build does -- reports a property inside both a state 1
+    and a lateral spreading polygon as undamaged about half the time.
 
     Args:
         properties: One row per property-event, points in NZTM.
-        observations: Observation polygons carrying the category.
+        observations: Observation polygons carrying ``damage_rank``.
 
     Returns:
-        A copy of ``properties`` with ``observed_land_damage_category`` added.
+        A copy of ``properties`` with ``observed_land_damage_state`` and
+        ``observed_land_damage_category`` added. A property no polygon covered
+        is null in both; one covered only by ungraded polygons has a null state
+        and a category of :data:`UNKNOWN`.
     """
     matches = gpd.sjoin(
         properties[["geometry"]], observations, how="left", predicate="intersects"
     )
-    ranks = matches["observed_land_damage_category"].map(DAMAGE_RANKS)
-    worst = ranks.groupby(level=0).max()
+    worst = matches["damage_rank"].groupby(level=0).max().reindex(properties.index)
 
-    rank_categories = {rank: category for category, rank in DAMAGE_RANKS.items()}
-    categories = worst.map(rank_categories).reindex(properties.index)
-    return properties.assign(observed_land_damage_category=categories)
+    # Int64 rather than float, so a state reads as 3 and not 3.0 everywhere
+    # downstream, and so a property with no observation stays null rather than
+    # becoming NaN in an otherwise integer column.
+    states = worst.where(worst != UNKNOWN_RANK).astype("Int64")
+    categories = states.map(DAMAGE_STATES).astype("string")
+    return properties.assign(
+        observed_land_damage_state=states,
+        observed_land_damage_category=categories.mask(worst == UNKNOWN_RANK, UNKNOWN),
+    )
 
 
-def assign_lsn(properties, lsn_path):
-    """Attach the modelled median LSN to each property.
+def mask_to_flat_land(properties):
+    """Cut the properties back to the flat land inside the Christchurch extent.
+
+    The mask is :data:`landloss.exposure.land.landform.CHCH_FLAT_ONLY`, the
+    National Liquefaction Model flatland layer clipped to the Christchurch
+    rectangle. It is what decides the reach of this database: the extent is
+    named and written down rather than inherited from whatever other layer the
+    step happens to join to.
+
+    Two things follow from the mask that are worth being explicit about. The
+    Canterbury sequence is a flat land liquefaction dataset -- limitation L-09 --
+    and clipping to flat land says so rather than leaving it as an assertion.
+    And the flatland layer is a national-scale generalisation, limitation L-16,
+    so a property on a small terrace inside a flat suburb may be kept or dropped
+    on a boundary the layer draws coarsely.
 
     Args:
         properties: One row per property-event, points in NZTM.
-        lsn_path: The event's LSN grid parquet.
 
     Returns:
-        A copy of ``properties`` with ``lsn_p50`` added, NaN outside the grid.
+        The rows falling on flat land, with their columns intact.
     """
-    lsn = gpd.read_parquet(lsn_path)
-    require_columns(lsn, [LSN_COLUMN], str(lsn_path))
-    lsn = lsn[[LSN_COLUMN, "geometry"]].to_crs(constants.DEFAULT_CRS)
-
-    cells = lsn.buffer(LSN_CELL_HALF_WIDTH_M, cap_style="square").to_frame("geometry")
-    matches = gpd.sjoin(
-        properties[["geometry"]], cells, how="left", predicate="intersects"
-    )
-
-    # A point on a cell boundary intersects both neighbours, so take the higher
-    # of the two rather than letting the row be duplicated.
-    values = matches["index_right"].map(lsn[LSN_COLUMN])
-    highest = values.groupby(level=0).max().reindex(properties.index)
-    return properties.assign(lsn_p50=highest.astype("float64"))
+    flat = CHCH_FLAT_ONLY.clip(properties)
+    dropped = len(properties) - len(flat)
+    share = len(flat) / len(properties) if len(properties) else 0.0
+    print(f"  dropped {dropped:,} off {CHCH_FLAT_ONLY.name}, keeping {share:.0%}")
+    return flat
 
 
-def build_observed_damage_db(loss_fp, obs_dir, lsn_dir):
-    """Join the loss records to the observations and the LSN grid, event by event.
+def build_observed_damage_db(loss_fp, obs_dir):
+    """Join the loss records to the observations, event by event.
 
     Args:
         loss_fp: The geocoded loss GeoPackage.
         obs_dir: Directory holding the buffered observation parquets.
-        lsn_dir: Directory holding the per-event LSN grid parquets.
 
     Returns:
         One row per property-event, carrying :data:`OUTPUT_COLUMNS`.
     """
     properties = get_losses(loss_fp)
+    properties = mask_to_flat_land(properties)
 
     joined = []
     for name, event in EVENTS.items():
@@ -416,10 +436,6 @@ def build_observed_damage_db(loss_fp, obs_dir, lsn_dir):
         share = matched / len(subset)
         print(f"  {matched:,} matched an observation polygon ({share:.0%})")
 
-        subset = assign_lsn(subset, lsn_dir / event["lsn"])
-        within = int(subset["lsn_p50"].notna().sum())
-        print(f"  {within:,} fell inside the LSN grid ({within / len(subset):.0%})")
-
         joined.append(subset)
 
     database = pd.concat(joined, ignore_index=True)
@@ -432,24 +448,25 @@ def describe(database):
     print(RULE)
     print(f"{len(database):,} property-event rows")
 
-    print("\nObserved land damage category:")
-    counts = database["observed_land_damage_category"].value_counts(dropna=False)
-    for category in DAMAGE_RANKS:
-        print(f"  {category:<18} {counts.get(category, 0):>9,}")
-    unmatched = int(database["observed_land_damage_category"].isna().sum())
-    print(f"  {'No observation':<18} {unmatched:>9,}")
+    print("\nObserved land damage state:")
+    counts = database["observed_land_damage_state"].value_counts(dropna=False)
+    for state, label in DAMAGE_STATES.items():
+        print(f"  {state}  {label:<15} {counts.get(state, 0):>9,}")
+
+    categories = database["observed_land_damage_category"]
+    print(f"  -  {UNKNOWN:<15} {int((categories == UNKNOWN).sum()):>9,}")
+    print(f"  -  {'No observation':<15} {int(categories.isna().sum()):>9,}")
 
     print("\nBy event:")
-    print(f"  {'Event':<28} {'Rows':>9} {'Median LSN':>11} {'Land $ sum':>16}")
+    print(f"  {'Event':<28} {'Rows':>9} {'Observed':>9} {'Land $ sum':>16}")
     for name, event in EVENTS.items():
         subset = database.loc[database["simple_event_name"] == name]
         if subset.empty:
             continue
-        median_lsn = subset["lsn_p50"].median()
-        median_lsn = 0.0 if np.isnan(median_lsn) else median_lsn
+        observed = int(subset["observed_land_damage_category"].notna().sum())
         print(
             f"  {event['label']:<28} {len(subset):>9,}"
-            f" {median_lsn:>11.1f}"
+            f" {observed:>9,}"
             f" {subset['land_assessment'].sum():>16,.0f}"
         )
 
@@ -458,12 +475,10 @@ def main():
     loss_fp = ts.get_source_mat(LOSS_MAT_PATH)
 
     print(f"Observations : {constants.NLM_OBS_VERSION}")
-    print(f"LSN grids    : {constants.NLM_VERSION}")
+    print(f"Mask         : {CHCH_FLAT_ONLY.name}")
     print(RULE)
 
-    database = build_observed_damage_db(
-        loss_fp=loss_fp, obs_dir=OBS_DIR, lsn_dir=LSN_DIR
-    )
+    database = build_observed_damage_db(loss_fp=loss_fp, obs_dir=OBS_DIR)
     describe(database)
 
     versioned_store.save_vul(database, fname=OUT_NAME, sub_dirs=OUT_SUB_DIRS)

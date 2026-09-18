@@ -50,6 +50,32 @@ At the time of writing the populated ones are `exposure/land`,
 `hazard/liquefaction`, `hazard/landslide` and `vul/liquefaction/land`; the rest
 appear as the work reaches them.
 
+### Each hazard carries a `status.md`
+
+Every hazard submodule under `src/scripts/landloss/hazard/` holds a `status.md`
+beside its scripts: a summary of the current approach for that hazard and what
+will be done next. `hazard/shaking/status.md` is the worked example the others
+follow.
+
+Sections run `## Approach`, `## Where it is now`, `## Next`, then
+`## Validation` and `## Open decisions`. The approach comes first because the
+state on its own means nothing without it. Keep it brief — a bullet states the
+decision and at most the one clause explaining why; the argument for a choice
+belongs in the step's method or plan file, not here.
+
+This is a different document from the plan and method files that every step
+folder carries. Those are per-step and narrow — the method file states only what
+is implemented, and the implementation plan holds everything aspirational. A
+`status.md` sits one level up, at the hazard, and is allowed to hold both: it is
+the orientation page for someone asking "where has the shaking work got to, and
+what is next?". It points at the step files for detail rather than restating
+them.
+
+Because it carries intent alongside state, a `status.md` has to be explicit
+about what does not exist. Where nothing is implemented, it says so and labels
+the approach as intended, rather than describing a method as though the code were
+already there.
+
 ### Where cross-cutting work sits
 
 `steps/`, `validations/`, `report/` and `research/` are submodules of whichever
@@ -144,7 +170,7 @@ each other:
 | `hazard/liquefaction/report/fig_waterway_map.py` | `report/hazard/liquefaction/fig/` |
 | `hazard/landslide/validations/fig_landslide_vulnerability_model_gwrc.py` | `report/hazard/landslide/fig/` |
 | `exposure/land/steps/s2_land_value/fig_land_value_map.py` | `report/exposure/land/land-value/fig/` |
-| `vul/liquefaction/land/report/fig_land_damage_v_lsn.py` | `report/vul/liquefaction/land/fig/` |
+| `vul/liquefaction/land/report/fig_land_damage_maps.py` | `report/vul/liquefaction/land/fig/` |
 | `hazard/research/fig_cross_sections.py` | `research/hazard/cross_sections/fig/` |
 
 Report figures go under `report/`, exploratory ones under `research/`, and CSV

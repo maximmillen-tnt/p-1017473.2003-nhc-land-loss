@@ -31,10 +31,13 @@ either without the other is a sensible thing to want: a first pass over a new
 extent can skip the DEM entirely.
 """
 
+from dataclasses import dataclass
+
 import geopandas as gpd
 from shapely.geometry.base import BaseGeometry
 
 from landloss.domain import constants
+from landloss.io.area_of_interest import CHRISTCHURCH, AreaOfInterest
 from landloss.io.readers import get_koordinates_layer_extent
 
 # The landform classes the exposure model recognises. ``classify_landform``
@@ -231,3 +234,124 @@ def get_flatland(
         flatland = flatland.clip(clip_to)
 
     return flatland
+
+
+@dataclass(frozen=True)
+class LandformArea:
+    """A rectangular extent cut down to the flat, or the sloping, land inside it.
+
+    An :class:`landloss.io.area_of_interest.AreaOfInterest` is a rectangle and
+    flat land is not, so an extent that means "the flat part of this city" cannot
+    be written as four numbers. This pairs a rectangle with one of the classes
+    :func:`classify_landform` assigns, which lets such an extent be named once and
+    passed around like any other.
+
+    Unlike a plain rectangle, resolving one reads the National Liquefaction Model
+    flatland layer, so the first call needs network access and a Koordinates key.
+    Limitation L-16 -- the layer is a national-scale generalisation, not a
+    site-specific slope assessment -- applies to everything masked with one of
+    these, exactly as it does to :func:`get_flatland`.
+
+    Attributes:
+        name: A human readable name, used in outputs and file names.
+        area: The rectangle the landform is taken from within.
+        landform: :data:`FLAT` or :data:`HILL`. :data:`ELEVATED_FLAT` is refused:
+            it is promoted from a DEM by :func:`assign_elevated_flat` rather than
+            read off the flatland layer, so there is no area to resolve it to.
+    """
+
+    name: str
+    area: AreaOfInterest
+    landform: str
+
+    def __post_init__(self) -> None:
+        """Reject a landform class that no layer can answer for.
+
+        Raises:
+            ValueError: If ``landform`` is not :data:`FLAT` or :data:`HILL`.
+        """
+        if self.landform not in (FLAT, HILL):
+            msg = (
+                f"{self.landform!r} cannot be resolved to an area. A LandformArea "
+                f"is {FLAT!r} or {HILL!r}; {ELEVATED_FLAT!r} is promoted from a "
+                "DEM by assign_elevated_flat and has no layer of its own to read."
+            )
+            raise ValueError(msg)
+
+    def geometry(
+        self,
+        crs: int | str = constants.DEFAULT_CRS,
+        *,
+        use_cache: bool = True,
+    ) -> BaseGeometry:
+        """Return the flat, or the sloping, land inside the rectangle.
+
+        Args:
+            crs: The coordinate reference system to return the geometry in.
+            use_cache: Whether to read and write the clipped extent cache.
+
+        Returns:
+            A single geometry covering the part of :attr:`area` that is of this
+            landform class. Empty if the rectangle holds none of it.
+        """
+        rectangle = self.area.polygon(crs)
+        flatland = get_flatland(
+            bbox=self.area.bbox(crs),
+            crs=crs,
+            clip_to=rectangle,
+            use_cache=use_cache,
+        )
+
+        # Intersected with the rectangle here rather than left to ``clip_to``.
+        # The bounding box of a reprojected rectangle is larger than the
+        # rectangle itself -- a WGS84 box is not axis-aligned in NZTM -- so
+        # reading by bbox alone reaches past the extent's own edges.
+        flat = flatland.geometry.union_all().intersection(rectangle)
+        if self.landform == FLAT:
+            return flat
+
+        # Sloping land is whatever the flatland layer does not cover, which is
+        # how :func:`classify_landform` reads it too: HILL is the absence of a
+        # match, not a class the layer carries.
+        return rectangle.difference(flat)
+
+    def to_geoseries(
+        self,
+        crs: int | str = constants.DEFAULT_CRS,
+        *,
+        use_cache: bool = True,
+    ) -> gpd.GeoSeries:
+        """Return the extent as a single-element GeoSeries, matching AreaOfInterest."""
+        return gpd.GeoSeries([self.geometry(crs, use_cache=use_cache)], crs=crs)
+
+    def clip(
+        self, frame: gpd.GeoDataFrame, *, use_cache: bool = True
+    ) -> gpd.GeoDataFrame:
+        """Cut a frame back to this extent, dropping whatever falls outside it.
+
+        The mask is resolved in the frame's own CRS, so the caller does not have
+        to reproject to use it.
+
+        Args:
+            frame: The layer to mask. Any geometry type; points keep whichever
+                rows fall inside, and polygons are cut at the boundary.
+            use_cache: Whether to read and write the clipped extent cache.
+
+        Returns:
+            The rows of ``frame`` inside this extent, with their columns intact.
+        """
+        return frame.clip(self.to_geoseries(frame.crs, use_cache=use_cache))
+
+
+# The Canterbury earthquake sequence is dominated by flat land liquefaction --
+# limitation L-09 in the project register -- so the two halves of the
+# Christchurch extent are named apart rather than used together. Evidence drawn
+# from CHCH_FLAT_ONLY speaks to the liquefaction land damage relationships;
+# CHCH_SLOPE_ONLY is what shows how little of the sequence bears on the
+# landslide ones.
+CHCH_FLAT_ONLY = LandformArea(
+    name="Christchurch flat land", area=CHRISTCHURCH, landform=FLAT
+)
+CHCH_SLOPE_ONLY = LandformArea(
+    name="Christchurch sloping land", area=CHRISTCHURCH, landform=HILL
+)

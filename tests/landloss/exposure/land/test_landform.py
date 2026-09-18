@@ -7,16 +7,20 @@ from shapely.geometry import Point, Polygon
 from landloss.domain import constants
 from landloss.exposure.land import landform as landform_module
 from landloss.exposure.land.landform import (
+    CHCH_FLAT_ONLY,
+    CHCH_SLOPE_ONLY,
     ELEVATED_FLAT,
     FLAT,
     HILL,
     LANDFORM_CLASSES,
     LANDFORM_COLUMN,
     TOPOGRAPHIC_POSITION_COLUMN,
+    LandformArea,
     assign_elevated_flat,
     classify_landform,
     get_flatland,
 )
+from landloss.io.area_of_interest import CHRISTCHURCH, AreaOfInterest
 
 
 def make_addresses(points: list[tuple[float, float]]):
@@ -308,3 +312,95 @@ def test_clip_to_removes_what_falls_outside_the_boundary(fake_layer) -> None:
     result = get_flatland(clip_to=boundary)
 
     assert list(result["nlm_id"]) == [0]
+
+
+# --- landform areas -----------------------------------------------------------
+
+# A small rectangle somewhere in the Wellington region, used so a LandformArea
+# can be exercised without downloading a national layer.
+TEST_AREA = AreaOfInterest(
+    name="Test area", west=174.77, south=-41.32, east=174.80, north=-41.31
+)
+
+
+@pytest.fixture
+def half_flat(monkeypatch: pytest.MonkeyPatch):
+    """Serve flat land covering the western half of whatever extent is asked for."""
+
+    def fake_get_flatland(bbox=None, crs=constants.DEFAULT_CRS, clip_to=None, **_):
+        minx, miny, maxx, maxy = bbox
+        middle = (minx + maxx) / 2
+        western = Polygon([(minx, miny), (middle, miny), (middle, maxy), (minx, maxy)])
+        polygons = gpd.GeoDataFrame(geometry=[western], crs=crs)
+        return polygons if clip_to is None else polygons.clip(clip_to)
+
+    monkeypatch.setattr(landform_module, "get_flatland", fake_get_flatland)
+
+
+def test_flat_land_is_what_the_layer_covers(half_flat) -> None:
+    """A flat LandformArea resolves to the flatland polygons, not the rectangle."""
+    area = LandformArea(name="Flat test", area=TEST_AREA, landform=FLAT)
+
+    covered = area.geometry().area / TEST_AREA.polygon().area
+
+    assert covered == pytest.approx(0.5, abs=0.01)
+
+
+def test_sloping_land_is_the_rest_of_the_rectangle(half_flat) -> None:
+    """HILL is the absence of a flatland match, so it is the rectangle's remainder."""
+    flat = LandformArea(name="Flat test", area=TEST_AREA, landform=FLAT)
+    sloping = LandformArea(name="Slope test", area=TEST_AREA, landform=HILL)
+
+    together = flat.geometry().union(sloping.geometry()).area
+
+    assert together == pytest.approx(TEST_AREA.polygon().area, rel=1e-9)
+
+
+def test_the_flat_and_sloping_halves_do_not_overlap(half_flat) -> None:
+    """No property may be counted as both, or the two masks would double count."""
+    flat = LandformArea(name="Flat test", area=TEST_AREA, landform=FLAT)
+    sloping = LandformArea(name="Slope test", area=TEST_AREA, landform=HILL)
+
+    overlap = flat.geometry().intersection(sloping.geometry())
+
+    assert overlap.area == pytest.approx(0.0, abs=1e-6)
+
+
+def test_the_geoseries_carries_the_requested_crs(half_flat) -> None:
+    """Matching AreaOfInterest, so either kind of extent can be passed to a reader."""
+    area = LandformArea(name="Flat test", area=TEST_AREA, landform=FLAT)
+
+    series = area.to_geoseries(constants.DEFAULT_CRS)
+
+    assert series.crs.to_string() == constants.DEFAULT_CRS
+    assert len(series) == 1
+
+
+def test_clip_keeps_only_what_falls_inside(half_flat) -> None:
+    """Masking a frame is the point of these extents; the rest is bookkeeping."""
+    minx, miny, maxx, maxy = TEST_AREA.bbox()
+    inside = ((minx + maxx) / 2 - 100, (miny + maxy) / 2)
+    outside = ((minx + maxx) / 2 + 100, (miny + maxy) / 2)
+    points = gpd.GeoDataFrame(
+        {"label": ["inside", "outside"]},
+        geometry=[Point(*inside), Point(*outside)],
+        crs=constants.DEFAULT_CRS,
+    )
+
+    area = LandformArea(name="Flat test", area=TEST_AREA, landform=FLAT)
+
+    assert list(area.clip(points)["label"]) == ["inside"]
+
+
+def test_elevated_flat_cannot_be_resolved_to_an_area() -> None:
+    """It is promoted from a DEM, so no layer can be read to draw it."""
+    with pytest.raises(ValueError, match=ELEVATED_FLAT):
+        LandformArea(name="Bad", area=TEST_AREA, landform=ELEVATED_FLAT)
+
+
+def test_the_christchurch_halves_split_the_same_rectangle() -> None:
+    """The two named extents are the same area cut two ways, not two areas."""
+    assert CHCH_FLAT_ONLY.area is CHRISTCHURCH
+    assert CHCH_SLOPE_ONLY.area is CHRISTCHURCH
+    assert CHCH_FLAT_ONLY.landform == FLAT
+    assert CHCH_SLOPE_ONLY.landform == HILL

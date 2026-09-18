@@ -80,6 +80,7 @@ conversation plus the repo's own skills.
 ### Skills to Know About
 - [ ] `recording-project-context` — turns a meeting transcript, email or note into durable project context: tasks, limitations and improvements in the register workbook, refinements to the objectives and scope, and standalone notes on recurring topics. Use it whenever you hand Claude a transcript
 - [ ] `seismic-landslide-hazard-wellington` — the method reference for earthquake-induced landslide work in the Wellington region: Newmark analysis, displacement methods by source mechanism, topographic amplification, and which GWRC datasets to pull rather than rebuild
+- [ ] `maintaining-status-files` — each hazard module's `status.md`: the Approach / Where it is now / Next sections, keeping it current as the work moves, and how the weekly progress update to NHC is assembled from these files rather than written from scratch
 - [ ] `adding-steps-scripts` — the convention every step script folder follows: its own numbered folder, an implementation plan in phases, and a method file describing what is actually implemented. Use it whenever you add or change a step under `steps/`
 - [ ] `/clear` — start a fresh context when you switch tasks. The only built-in command showing up in the stats
 

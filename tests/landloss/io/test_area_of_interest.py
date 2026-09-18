@@ -1,9 +1,11 @@
 """Tests for the named study extents."""
 
 import pytest
+from shapely.geometry import Point
 
 from landloss.domain import constants
 from landloss.io.area_of_interest import (
+    CHRISTCHURCH,
     SMALL_WLG_PILOT,
     WGS84,
     AreaOfInterest,
@@ -171,3 +173,34 @@ def test_the_pilot_sits_inside_wellington_city() -> None:
     wellington = get_study_area("Wellington City").geometry.iloc[0]
 
     assert wellington.intersects(SMALL_WLG_PILOT.polygon())
+
+
+# --- Christchurch -------------------------------------------------------------
+
+# The corners the Christchurch extent was defined from, as (longitude, latitude).
+CHCH_NORTH_WEST = (172.22727348821033, -43.28668860936209)
+CHCH_SOUTH_EAST = (172.92244713169507, -43.669039807974436)
+
+
+def test_the_christchurch_bbox_round_trips_the_defined_corners() -> None:
+    """The extent in WGS84 is exactly what it was defined from."""
+    minx, miny, maxx, maxy = CHRISTCHURCH.bbox(WGS84)
+
+    assert minx == pytest.approx(CHCH_NORTH_WEST[0])
+    assert maxy == pytest.approx(CHCH_NORTH_WEST[1])
+    assert maxx == pytest.approx(CHCH_SOUTH_EAST[0])
+    assert miny == pytest.approx(CHCH_SOUTH_EAST[1])
+
+
+def test_christchurch_city_is_inside_the_extent() -> None:
+    """The extent exists to hold the Canterbury earthquake sequence evidence."""
+    cathedral_square = Point(172.6376, -43.5309)
+
+    assert CHRISTCHURCH.to_geoseries(WGS84).iloc[0].contains(cathedral_square)
+
+
+def test_the_christchurch_extent_is_a_city_and_its_plains() -> None:
+    """Roughly 56 by 42 km: the city plus the flat land around it, not the region."""
+    area_km2 = CHRISTCHURCH.polygon().area / 1e6
+
+    assert 2_000 < area_km2 < 3_000

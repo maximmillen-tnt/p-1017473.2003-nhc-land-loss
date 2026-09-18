@@ -95,6 +95,20 @@ cross-sections, the NHC claims datasets — stays at the module level. None of t
 is created until there is something to put in it, and no submodule is created
 speculatively either.
 
+Every hazard submodule under `src/scripts/landloss/hazard/` carries a brief
+`status.md`: sections `## Approach`, `## Where it is now`, `## Next`, then
+`## Validation` and `## Open decisions`. It is the module-level orientation page,
+distinct from the per-step plan and method files, and it points at those for
+detail rather than restating them. Where nothing is implemented yet it says so
+plainly and labels the approach as intended. `hazard/shaking/status.md` is the
+example.
+
+These files are updated as the work moves and the weekly progress update to NHC
+is assembled from them, so a stale one puts a wrong statement in front of the
+client. Any change to a hazard module's scripts updates that hazard's
+`status.md` in the same change. Use the `maintaining-status-files` skill whenever
+you write or update one, or are asked for a progress update.
+
 Repo-relative paths come from `src/scripts/landloss/paths.py` (`REPO_ROOT`,
 `REPORT_DIR`, `RESEARCH_DIR`, `TEMP_DIR`) and packaged data files from
 `landloss.io.ASSETS_DIR`. Scripts sit at several depths, so never resolve either

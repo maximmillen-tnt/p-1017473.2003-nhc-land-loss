@@ -147,10 +147,15 @@ is where that argument is recorded.
 
 ## Potential future improvements
 
-- Take land area from a measured parcel rather than the per-authority
-  `median_lot_size_m2` in the base rates asset. The parcel join is Phase 2 of
-  step 1's plan, `s1_address_spine_implementation_plan.md`, and this step
-  consumes it when it lands.
+- Take land area from a measured polygon rather than the per-authority
+  `median_lot_size_m2` in the base rates asset. The agreed target for the
+  exposure land model is one row per `claim_id` carrying a rate per square metre
+  and the *insured land* polygon — the 8 m line from the dwelling — rather than
+  the full parcel, because that is the extent NHC settles on and the extent the
+  landslide hazard and vulnerability modules intersect against. The join that
+  supplies it is Phase 2 of step 1's plan,
+  `s1_address_spine_implementation_plan.md`, and this step consumes it when it
+  lands. Closes most of register task T-25.
 - Have a valuer sign off the `index_to_2025_09` factors, or replace them with a
   valuer's own basis. They are read off the published QV House Price Index for
   the greater Wellington region, with the September figure interpolated between

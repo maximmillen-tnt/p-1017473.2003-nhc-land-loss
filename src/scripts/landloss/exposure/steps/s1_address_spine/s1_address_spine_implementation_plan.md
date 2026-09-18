@@ -27,6 +27,10 @@ code that the LINZ address layer does not carry.
       step assumes today.
 - [ ] Decide how an address that matches no parcel, or several, is handled, and
       print the count of each so the join is auditable in the run output.
+- [ ] Derive the insured land polygon from the parcel — the 8 m line from the
+      dwelling — and carry it beside the parcel area. This, not the full parcel,
+      is the extent NHC settles on and the extent the landslide hazard and
+      vulnerability modules intersect against.
 - [ ] Feed the measured area back into step 2, replacing the assumed lot size in
       the rate per square metre.
 
