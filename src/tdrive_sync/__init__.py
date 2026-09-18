@@ -9,6 +9,11 @@
    ``TTDRIVE_SYNC_LOCAL_VERSION`` (from the environment), used only when
    ``TTDRIVE_SYNC_LOCAL_MODE=True``.
 
+It also offers ``get_source_mat``, a read-only, unversioned counterpart for
+fetching a file from the project's ``SOURCE_MATERIAL_DIR`` (data supplied by
+someone else, e.g. NHC) and caching it locally -- there is no corresponding
+save, and local-only working mode does not apply to it.
+
 See the project's README for the full behaviour of each environment
 variable, and ``tdrive_sync_config.py`` for the project-wide settings.
 """
@@ -18,7 +23,7 @@ from typing import Any
 
 from tdrive_sync import _config, _copy, _formats, _paths
 from tdrive_sync._config import SCRATCH_VERSION, TdriveSyncConfigError
-from tdrive_sync._paths import get_base_path, get_local_path, get_path
+from tdrive_sync._paths import get_base_path, get_local_path, get_path, get_source_mat
 
 __all__ = [
     "SCRATCH_VERSION",
@@ -26,6 +31,7 @@ __all__ = [
     "get_base_path",
     "get_local_path",
     "get_path",
+    "get_source_mat",
     "local_read",
     "local_save",
 ]

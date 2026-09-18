@@ -114,13 +114,18 @@ def test_get_path_raises_when_the_file_exists_nowhere(configured: Path) -> None:
 
 @pytest.fixture
 def scratch_configured(
-    project_dir: Path, base_dir: Path, cache_dir: Path, monkeypatch: pytest.MonkeyPatch
+    project_dir: Path,
+    base_dir: Path,
+    source_material_dir: Path,
+    cache_dir: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> Path:
     """As configured, but with DATA_VERSION set to the SCRATCH sentinel."""
     (project_dir / _config.CONFIG_FILENAME).write_text(
         "from pathlib import Path\n\n"
         f'BASE_DIR = Path(r"{base_dir}")\n'
         f'DATA_VERSION = "{_config.SCRATCH_VERSION}"\n'
+        f'SOURCE_MATERIAL_DIR = Path(r"{source_material_dir}")\n'
     )
     monkeypatch.chdir(project_dir / "src" / "scripts")
     monkeypatch.setenv("TTDRIVE_SYNC_CACHE_DIR", str(cache_dir))

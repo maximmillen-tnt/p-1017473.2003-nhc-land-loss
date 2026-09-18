@@ -29,13 +29,21 @@ def base_dir(tmp_path: Path) -> Path:
 
 
 @pytest.fixture
+def source_material_dir(tmp_path: Path) -> Path:
+    """A stand-in for T:'s SourceMaterial folder, under tmp_path."""
+    path = tmp_path / "t_drive" / "source_material"
+    path.mkdir(parents=True)
+    return path
+
+
+@pytest.fixture
 def cache_dir(tmp_path: Path) -> Path:
     """Where the local cache tiers are written during a test."""
     return tmp_path / "cache"
 
 
 @pytest.fixture
-def project_dir(tmp_path: Path, base_dir: Path) -> Path:
+def project_dir(tmp_path: Path, base_dir: Path, source_material_dir: Path) -> Path:
     """A fake project root with a real tdrive_sync_config.py at its top."""
     root = tmp_path / "project"
     (root / "src" / "scripts").mkdir(parents=True)
@@ -43,6 +51,7 @@ def project_dir(tmp_path: Path, base_dir: Path) -> Path:
         "from pathlib import Path\n\n"
         f'BASE_DIR = Path(r"{base_dir}")\n'
         'DATA_VERSION = "v1"\n'
+        f'SOURCE_MATERIAL_DIR = Path(r"{source_material_dir}")\n'
     )
     return root
 

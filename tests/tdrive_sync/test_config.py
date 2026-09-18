@@ -31,13 +31,14 @@ def test_find_config_file_raises_when_none_exists(tmp_path: Path) -> None:
 
 
 def test_load_config_reads_base_dir_and_data_version(
-    configured: Path, base_dir: Path
+    configured: Path, base_dir: Path, source_material_dir: Path
 ) -> None:
     """A valid config file loads with the expected values."""
     config = _config.load_config()
 
     assert config.base_dir == base_dir
     assert config.data_version == "v1"
+    assert config.source_material_dir == source_material_dir
 
 
 def test_load_config_raises_when_no_config_file_exists(
@@ -88,6 +89,35 @@ def test_load_config_raises_for_an_empty_data_version(
     )
 
     with pytest.raises(_config.TdriveSyncConfigError, match="DATA_VERSION"):
+        _config.load_config()
+
+
+def test_load_config_raises_for_a_missing_source_material_dir(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A config file missing SOURCE_MATERIAL_DIR is rejected rather than defaulted."""
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / _config.CONFIG_FILENAME).write_text(
+        "from pathlib import Path\nBASE_DIR = Path('base')\nDATA_VERSION = \"v1\"\n"
+    )
+
+    with pytest.raises(_config.TdriveSyncConfigError, match="SOURCE_MATERIAL_DIR"):
+        _config.load_config()
+
+
+def test_load_config_raises_for_a_non_path_source_material_dir(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A wrong-typed SOURCE_MATERIAL_DIR is rejected rather than used as-is."""
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / _config.CONFIG_FILENAME).write_text(
+        "from pathlib import Path\n"
+        "BASE_DIR = Path('base')\n"
+        'DATA_VERSION = "v1"\n'
+        'SOURCE_MATERIAL_DIR = "not-a-path"\n'
+    )
+
+    with pytest.raises(_config.TdriveSyncConfigError, match="SOURCE_MATERIAL_DIR"):
         _config.load_config()
 
 

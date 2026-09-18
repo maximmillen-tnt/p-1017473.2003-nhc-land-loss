@@ -35,6 +35,7 @@ class TdriveSyncConfig:
 
     base_dir: Path
     data_version: str
+    source_material_dir: Path
 
 
 @dataclass(frozen=True)
@@ -69,7 +70,8 @@ def find_config_file(start_dir: Path) -> Path:
     msg = (
         f"Could not find {CONFIG_FILENAME} in {start_dir} or any parent "
         f"directory. Create one at the project root defining BASE_DIR (a "
-        f"pathlib.Path) and DATA_VERSION (a str)."
+        f"pathlib.Path), DATA_VERSION (a str) and SOURCE_MATERIAL_DIR (a "
+        f"pathlib.Path)."
     )
     raise TdriveSyncConfigError(msg)
 
@@ -100,13 +102,14 @@ def load_config() -> TdriveSyncConfig:
 
     Raises:
         TdriveSyncConfigError: If the file cannot be found, or does not
-            define valid BASE_DIR/DATA_VERSION attributes.
+            define valid BASE_DIR/DATA_VERSION/SOURCE_MATERIAL_DIR attributes.
     """
     path = find_config_file(Path.cwd())
     module = _load_config_module(path)
 
     base_dir = getattr(module, "BASE_DIR", None)
     data_version = getattr(module, "DATA_VERSION", None)
+    source_material_dir = getattr(module, "SOURCE_MATERIAL_DIR", None)
 
     if not isinstance(base_dir, Path):
         msg = f"BASE_DIR in {path} must be a pathlib.Path, got {base_dir!r}."
@@ -114,8 +117,18 @@ def load_config() -> TdriveSyncConfig:
     if not isinstance(data_version, str) or not data_version:
         msg = f"DATA_VERSION in {path} must be a non-empty str, got {data_version!r}."
         raise TdriveSyncConfigError(msg)
+    if not isinstance(source_material_dir, Path):
+        msg = (
+            f"SOURCE_MATERIAL_DIR in {path} must be a pathlib.Path, got "
+            f"{source_material_dir!r}."
+        )
+        raise TdriveSyncConfigError(msg)
 
-    return TdriveSyncConfig(base_dir=base_dir, data_version=data_version)
+    return TdriveSyncConfig(
+        base_dir=base_dir,
+        data_version=data_version,
+        source_material_dir=source_material_dir,
+    )
 
 
 def _parse_bool(value: str, *, var_name: str) -> bool:

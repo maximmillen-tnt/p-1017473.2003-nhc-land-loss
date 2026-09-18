@@ -118,11 +118,16 @@ force a re-read.
 reading this project's own intermediate and output data on the shared `T:` drive,
 under a project-wide `DATA_VERSION`. It knows nothing about landloss — it is
 configured by a committed `tdrive_sync_config.py` at the repo root (`BASE_DIR`,
-`DATA_VERSION`) and a set of `TTDRIVE_SYNC_*` environment variables that let a
-developer work entirely against a local, disposable cache instead of `T:`. See
-`README.md`'s "Environment variables" section for the full local-mode fallback
-chain, and the package's own docstrings for the mechanics (format dispatch,
-atomic copying, path resolution).
+`DATA_VERSION`, `SOURCE_MATERIAL_DIR`) and a set of `TTDRIVE_SYNC_*` environment
+variables that let a developer work entirely against a local, disposable cache
+instead of `T:`. See `README.md`'s "Environment variables" section for the full
+local-mode fallback chain, and the package's own docstrings for the mechanics
+(format dispatch, atomic copying, path resolution).
+
+`ts.get_source_mat("relative/path.csv")` is the read-only counterpart for data
+someone else supplied (NHC, another team) rather than data this project
+generates: it fetches from `SOURCE_MATERIAL_DIR` on `T:` and caches locally,
+with no `DATA_VERSION`, no save side, and no local-only working mode fallback.
 
 `src/landloss/io/versioned_store.py` is the thin, landloss-specific layer on top:
 `save_hazard`/`read_hazard`, `save_exposure`/`read_exposure`, `save_vul`/

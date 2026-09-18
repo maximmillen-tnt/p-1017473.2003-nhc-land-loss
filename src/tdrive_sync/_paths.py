@@ -85,17 +85,18 @@ def local_version_cache_path(
     )
 
 
-def get_path(
-    *, fname: str, sub_dirs: list[str] | None = None, copy_to_local: bool = True
+def _resolve_cached_path(
+    *, base_path: Path, local_path: Path, copy_to_local: bool
 ) -> Path:
-    """Resolve the path to read a file from, refreshing the local cache if needed.
+    """Resolve a path against a local cache mirror, refreshing it if needed.
 
-    Ignores local-only working mode -- this is the "normal", DATA_VERSION-only
-    resolution, ported from the National Liquefaction Model's ``get_path``.
+    Shared by ``get_path`` (the DATA_VERSION store) and ``get_source_mat``
+    (SourceMaterial) -- both cache a T: file locally the same way, just under
+    a different base/local pair.
 
     Args:
-        fname: The file's name.
-        sub_dirs: Subdirectories under the configured DATA_VERSION.
+        base_path: The T: path.
+        local_path: Its local cache mirror.
         copy_to_local: Whether to refresh the local cache from T: when it is
             missing or stale.
 
@@ -106,9 +107,6 @@ def get_path(
     Raises:
         ValueError: If the file exists at neither location.
     """
-    local_path = get_local_path(fname=fname, sub_dirs=sub_dirs)
-    base_path = get_base_path(fname=fname, sub_dirs=sub_dirs)
-
     if copy_to_local and base_path.exists() and not local_path.exists():
         _copy.copy_to(src_path=base_path, dst_path=local_path)
 
@@ -132,3 +130,77 @@ def get_path(
         _copy.copy_to(src_path=base_path, dst_path=local_path)
 
     return local_path
+
+
+def get_path(
+    *, fname: str, sub_dirs: list[str] | None = None, copy_to_local: bool = True
+) -> Path:
+    """Resolve the path to read a file from, refreshing the local cache if needed.
+
+    Ignores local-only working mode -- this is the "normal", DATA_VERSION-only
+    resolution, ported from the National Liquefaction Model's ``get_path``.
+
+    Args:
+        fname: The file's name.
+        sub_dirs: Subdirectories under the configured DATA_VERSION.
+        copy_to_local: Whether to refresh the local cache from T: when it is
+            missing or stale.
+
+    Returns:
+        The resolved path: the local cache copy if it exists (and, if
+        ``copy_to_local``, is now up to date), otherwise the T: path.
+
+    Raises:
+        ValueError: If the file exists at neither location.
+    """
+    local_path = get_local_path(fname=fname, sub_dirs=sub_dirs)
+    base_path = get_base_path(fname=fname, sub_dirs=sub_dirs)
+    return _resolve_cached_path(
+        base_path=base_path, local_path=local_path, copy_to_local=copy_to_local
+    )
+
+
+def _source_mat_base_path(relative_path: str | Path) -> Path:
+    """Return the T: path for a file under the configured SOURCE_MATERIAL_DIR."""
+    config = _config.load_config()
+    return config.source_material_dir / relative_path
+
+
+def _source_mat_local_path(relative_path: str | Path) -> Path:
+    """Return the local cache mirror of _source_mat_base_path."""
+    config = _config.load_config()
+    settings = _config.load_local_mode_settings()
+    return (
+        settings.cache_dir
+        / _relative_base_dir(config.source_material_dir)
+        / relative_path
+    )
+
+
+def get_source_mat(relative_path: str | Path, *, copy_to_local: bool = True) -> Path:
+    """Resolve the path to a file under the configured SOURCE_MATERIAL_DIR.
+
+    SourceMaterial holds data supplied by someone else -- NHC, another team --
+    rather than anything this project generates, so unlike ``get_path`` there
+    is no DATA_VERSION and no save side: this only ever fetches from T: and
+    caches locally, ignoring local-only working mode (there is no local,
+    disposable stand-in for someone else's source data).
+
+    Args:
+        relative_path: The file's path, relative to SOURCE_MATERIAL_DIR (e.g.
+            ``"CHC-loss-data-from-NHC/loss.csv"``).
+        copy_to_local: Whether to refresh the local cache from T: when it is
+            missing or stale.
+
+    Returns:
+        The resolved path: the local cache copy if it exists (and, if
+        ``copy_to_local``, is now up to date), otherwise the T: path.
+
+    Raises:
+        ValueError: If the file exists at neither location.
+    """
+    base_path = _source_mat_base_path(relative_path)
+    local_path = _source_mat_local_path(relative_path)
+    return _resolve_cached_path(
+        base_path=base_path, local_path=local_path, copy_to_local=copy_to_local
+    )
