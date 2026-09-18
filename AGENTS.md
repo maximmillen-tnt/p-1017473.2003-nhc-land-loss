@@ -106,3 +106,18 @@ directly in the script instead, using `tdrive_sync`/`versioned_store` to
 resolve anything that lives on T: or in the versioned data store. A script's
 behaviour should be determined entirely by reading its source, not by
 undocumented flags a caller might pass.
+
+Do not guard against missing files or an unmapped T: drive with manual
+`try`/`except`/`path.exists()` checks that print a friendly message and
+`return 1`. Let the natural exception (`FileNotFoundError`, `ValueError`,
+etc.) propagate — its traceback already says what went wrong.
+
+`main()` should not return a status code, and the `if __name__ == "__main__":`
+block should just be:
+
+```python
+if __name__ == "__main__":
+    main()
+```
+
+Do not add a `status = main(); if status: raise SystemExit(status)` dance.

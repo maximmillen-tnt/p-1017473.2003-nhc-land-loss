@@ -226,13 +226,6 @@ def main():
         plt.close(fig)
         print(f"Wrote {out}")
 
-    return 0
-
 
 if __name__ == "__main__":
-    # Only raise on failure. Falling off the end already exits 0, so the shell
-    # contract is unchanged, but running this under an IPython or PyCharm console
-    # no longer ends in a "SystemExit: 0" traceback that reads like a crash.
-    status = main()
-    if status:
-        raise SystemExit(status)
+    main()
