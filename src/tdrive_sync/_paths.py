@@ -10,6 +10,26 @@ from pathlib import Path
 from tdrive_sync import _config, _copy
 
 
+def _cache_root(settings: _config.LocalModeSettings) -> Path:
+    """Anchor a relative TTDRIVE_SYNC_CACHE_DIR to the project root.
+
+    A relative cache dir must not be resolved against the current working
+    directory: scripts and IDE run configurations start from many different
+    directories, and a bare ".tdrivecache" would then scatter a separate copy
+    under each one instead of sharing the one cache. An absolute
+    TTDRIVE_SYNC_CACHE_DIR is used exactly as given.
+
+    Args:
+        settings: The loaded TTDRIVE_SYNC_* environment settings.
+
+    Returns:
+        The cache directory, absolute.
+    """
+    if settings.cache_dir.is_absolute():
+        return settings.cache_dir
+    return _config.find_config_file(Path.cwd()).parent / settings.cache_dir
+
+
 def _relative_base_dir(base_dir: Path) -> Path:
     """Strip the drive/UNC anchor so the local cache mirrors base_dir's layout."""
     parts = base_dir.parts
@@ -43,7 +63,7 @@ def get_local_path(*, fname: str, sub_dirs: list[str] | None = None) -> Path:
     config = _config.load_config()
     settings = _config.load_local_mode_settings()
     return (
-        settings.cache_dir
+        _cache_root(settings)
         / _relative_base_dir(config.base_dir)
         / config.data_version
         / Path(*(sub_dirs or []))
@@ -77,7 +97,7 @@ def local_version_cache_path(
         raise ValueError(msg)
 
     return (
-        settings.cache_dir
+        _cache_root(settings)
         / _relative_base_dir(config.base_dir)
         / settings.local_version
         / Path(*sub_dirs)
@@ -171,7 +191,7 @@ def _source_mat_local_path(relative_path: str | Path) -> Path:
     config = _config.load_config()
     settings = _config.load_local_mode_settings()
     return (
-        settings.cache_dir
+        _cache_root(settings)
         / _relative_base_dir(config.source_material_dir)
         / relative_path
     )

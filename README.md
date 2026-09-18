@@ -37,10 +37,10 @@ explanation.
 | `KOORDINATES_PUBLIC_API_KEY` | API key for public layers on `koordinates.com` (e.g. GWRC slope failure). |
 | `LINZ_API_KEY` | API key for LINZ layers on `data.linz.govt.nz`. |
 | `LRIS_API_KEY` | API key for LRIS layers on `lris.scinfo.org.nz` (e.g. LCDB land cover). |
-| `KOOPCACHE_DIR` | Where downloaded Koordinates layers and clipped extents are cached. Defaults to `.koopcache`. |
+| `KOOPCACHE_DIR` | Where downloaded Koordinates layers and clipped extents are cached. Defaults to `.koopcache` at the repo root. A relative value here is used as given (resolved against the current working directory), so only set it to a relative path deliberately. |
 | `TTDRIVE_SYNC_LOCAL_MODE` | `True`/`False`. Switches `tdrive_sync` (see below) into local-only working mode. Defaults to `False`. |
 | `TTDRIVE_SYNC_LOCAL_VERSION` | Required when `TTDRIVE_SYNC_LOCAL_MODE=True`. A private, disposable version name for local-only reads/writes. |
-| `TTDRIVE_SYNC_CACHE_DIR` | Where `tdrive_sync`'s local cache tiers are written. Defaults to `.tdrivecache`. |
+| `TTDRIVE_SYNC_CACHE_DIR` | Where `tdrive_sync`'s local cache tiers are written. Defaults to `.tdrivecache` next to `tdrive_sync_config.py`. A relative value here is used as given (resolved against the current working directory), so only set it to a relative path deliberately. |
 
 ### `tdrive_sync` and local-only working mode
 

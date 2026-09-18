@@ -26,10 +26,15 @@ from shapely import box, make_valid
 from ttpy.gis.koop import KoordinatesConnection, get_latest_layer
 
 from landloss.domain import constants
+from landloss.io import REPO_ROOT
 
 dotenv.load_dotenv()
 
-DEFAULT_CACHE_DIR = Path(".koopcache")
+# Anchored to the repo root, not the current working directory -- a bare
+# relative ".koopcache" would land wherever a script happened to be run from
+# (e.g. an IDE run configuration's working directory) instead of one shared
+# cache.
+DEFAULT_CACHE_DIR = REPO_ROOT / ".koopcache"
 
 
 def resolve_api_key(domain: str) -> str:

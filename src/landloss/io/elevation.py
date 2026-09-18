@@ -34,6 +34,7 @@ import requests
 from pyproj import Transformer
 
 from landloss.domain import constants
+from landloss.io import REPO_ROOT
 
 ELEVATION_CATALOG_URL = (
     "https://nz-elevation.s3-ap-southeast-2.amazonaws.com/catalog.json"
@@ -44,7 +45,9 @@ ELEVATION_CATALOG_URL = (
 # and rooftops into a terrain section.
 DEM_PATH_MARKER = "/dem_1m/"
 
-DEFAULT_CACHE_DIR = Path(".koopcache")
+# Anchored to the repo root, not the current working directory -- see the
+# matching comment in readers.py.
+DEFAULT_CACHE_DIR = REPO_ROOT / ".koopcache"
 CACHE_SUBDIR = "nz-elevation"
 
 # Enough threads to hide the latency of many small S3 reads without being
