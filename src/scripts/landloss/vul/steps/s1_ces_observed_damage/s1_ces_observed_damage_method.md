@@ -16,7 +16,10 @@
   model is re-run.
 - The loss records are read from the GeoPackage written by
   `../../static_data_gen/gen_ces_loss_data.py`, not from NHC's source CSV, so
-  that script runs first.
+  that script runs first. The GeoPackage is fetched from T:'s SourceMaterial
+  through `tdrive_sync.get_source_mat` (`LOSS_MAT_PATH` in
+  `gen_observed_damage_db.py`), which caches it locally rather than reading
+  T: on every run.
 - Column names are stripped of the stray whitespace the source carries and
   renamed to snake_case through `COLUMN_MAPPINGS` in
   `gen_observed_damage_db.py`, which is taken from the National Liquefaction

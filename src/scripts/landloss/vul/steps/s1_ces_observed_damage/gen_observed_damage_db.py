@@ -16,13 +16,12 @@ calibrated against. The figure it feeds is drawn by
 Run ``gen_ces_loss_data.py`` in ``../../static_data_gen`` first; this step reads
 the GeoPackage that script writes rather than the source CSV.
 
-Everything it reads lives on T:, so it only runs where that drive is mapped.
-Its output is written through ``landloss.io.versioned_store.save_vul``, so it
-respects ``DATA_VERSION`` and local-only working mode rather than a fixed T:
-path.
+The loss GeoPackage is fetched from T:'s SourceMaterial via
+``tdrive_sync.get_source_mat``, which caches it locally. The National
+Liquefaction Model release paths and the output are not CLI-configurable --
+there is nothing to point elsewhere at, so this just runs.
 """
 
-import argparse
 from pathlib import Path
 
 import geopandas as gpd
@@ -30,14 +29,13 @@ import numpy as np
 import pandas as pd
 from shapely import is_empty, is_missing
 
+import tdrive_sync as ts
 from landloss.domain import constants
 from landloss.io import versioned_store
 
-# The loss data NHC supplied, geocoded by ../../static_data_gen/gen_ces_loss_data.py.
-LOSS_DIR = Path(
-    r"T:\Auckland\Projects\1017473\1017473.2003\SourceMaterial\CHC-loss-data-from-NHC"
-)
-LOSS_FP = LOSS_DIR / "ces_loss_data_with_geometry.gpkg"
+# The loss data NHC supplied, geocoded by ../../static_data_gen/gen_ces_loss_data.py,
+# fetched from T:'s SourceMaterial via tdrive_sync.get_source_mat (see main()).
+LOSS_MAT_PATH = "CHC-loss-data-from-NHC/ces_loss_data_with_geometry.gpkg"
 
 # The National Liquefaction Model's versioned core releases. The observations and
 # the LSN grids come from different releases on purpose -- see the comments on
@@ -391,7 +389,7 @@ def assign_lsn(properties, lsn_path):
     return properties.assign(lsn_p50=highest.astype("float64"))
 
 
-def build_observed_damage_db(loss_fp=LOSS_FP, obs_dir=OBS_DIR, lsn_dir=LSN_DIR):
+def build_observed_damage_db(loss_fp, obs_dir, lsn_dir):
     """Join the loss records to the observations and the LSN grid, event by event.
 
     Args:
@@ -457,32 +455,18 @@ def describe(database):
 
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "--losses",
-        type=Path,
-        default=LOSS_FP,
-        help="The geocoded loss GeoPackage from gen_ces_loss_data.py.",
-    )
-    parser.add_argument(
-        "--obs-dir",
-        type=Path,
-        default=OBS_DIR,
-        help="Directory holding the buffered land damage observation parquets.",
-    )
-    parser.add_argument(
-        "--lsn-dir",
-        type=Path,
-        default=LSN_DIR,
-        help="Directory holding the per-event LSN grid parquets.",
-    )
-    args = parser.parse_args()
+    try:
+        loss_fp = ts.get_source_mat(LOSS_MAT_PATH)
+    except ValueError as err:
+        print(err)
+        print("\nCheck T: is mapped, and that gen_ces_loss_data.py has been run.")
+        return 1
 
-    for path in (args.losses, args.obs_dir, args.lsn_dir):
+    for path in (OBS_DIR, LSN_DIR):
         if not path.exists():
             print(f"Cannot reach {path}")
-            print("\nEverything this step reads lives on T:. Check the drive is")
-            print("mapped, and that gen_ces_loss_data.py has been run.")
+            print("\nThe National Liquefaction Model release lives on T:. Check the")
+            print("drive is mapped.")
             return 1
 
     print(f"Observations : {constants.NLM_OBS_VERSION}")
@@ -490,7 +474,7 @@ def main():
     print(RULE)
 
     database = build_observed_damage_db(
-        loss_fp=args.losses, obs_dir=args.obs_dir, lsn_dir=args.lsn_dir
+        loss_fp=loss_fp, obs_dir=OBS_DIR, lsn_dir=LSN_DIR
     )
     describe(database)
 
