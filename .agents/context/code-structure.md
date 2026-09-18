@@ -50,12 +50,14 @@ At the time of writing the populated ones are `exposure/land`,
 `hazard/liquefaction`, `hazard/landslide` and `vul/liquefaction/land`; the rest
 appear as the work reaches them.
 
-### Each hazard carries a `status.md`
+### Each submodule carries a `status.md`
 
-Every hazard submodule under `src/scripts/landloss/hazard/` holds a `status.md`
-beside its scripts: a summary of the current approach for that hazard and what
-will be done next. `hazard/shaking/status.md` is the worked example the others
-follow.
+Every submodule of `exposure`, `hazard` and `vul` holds a `status.md` beside its
+scripts, at its own level — `exposure/<asset>/`, `hazard/<hazard>/`,
+`vul/<hazard>/<asset>/`. It summarises the current approach for that piece of
+work and what will be done next. `hazard/shaking/status.md` is the worked
+example the others follow. `loss` is flat, so it would take a single
+`loss/status.md`.
 
 Sections run `## Approach`, `## Where it is now`, `## Next`, then
 `## Validation` and `## Open decisions`. The approach comes first because the

@@ -1,0 +1,85 @@
+# Landslide vulnerability, land: status
+
+**Status:** Not started. Approach drafted, not agreed with the project team.
+
+**Updated:** 2026-09-18
+
+## Approach
+
+Intended, not implemented.
+
+- Read the hazard module's source and runout polygons **separately** and produce
+  an outcome per cause, because loss of support and runout are settled
+  differently.
+- Work per claim against the **insured land polygon**, the 8 m line from the
+  dwelling, since that is the extent NHC settles on. `claim_id` currently
+  carries the same value as `address_id` and is held as its own column so the
+  two can decouple later.
+- Cost the repair from the T+T landslip remediation schedule prepared for EQC
+  (`EQCcostestimatesRev10.xlsx`, Rev10, 4 December 2023) rather than from a
+  damage ratio alone. The schedule is held in `vul` rather than `loss` so that
+  the repair scheme stays beside the landslide geometry that sizes it.
+- Size the works from geometry: wall face area from crown length × scarp height
+  within the insured polygon, spoil and backfill volume from the slip volume the
+  hazard module already derives by `V = αA^γ`, and reinstatement from the runout
+  area.
+- Select the repair scheme as the **cheapest of those feasible** for the
+  retained height and slope, so the scheme is a checkable output rather than an
+  input assumption.
+- Interpolate between the schedule's "easy" and "difficult" columns on a
+  composite index of slope, access distance, distance to a town centre and
+  neighbouring buildings — the schedule defines its two ends in those terms.
+- Apply the schedule's per-job items — survey, geotechnical investigation,
+  consents, inspections — **once per landslide** and apportion them across the
+  claims it crosses. Charged per claim they would dominate every small slip.
+- Settle each claim at the lower of repair cost and insured land value, so land
+  that costs more to repair than it is worth is written off rather than repaired.
+
+## Where it is now
+
+Nothing is implemented. This file is the only thing in the folder. The rate
+schedule has not been brought into the repository; it is still a workbook held
+outside it, alongside the Toka Tū Ake EQC Costing Tool v10.42 that applies a
+different set of square-metre rates to the same work.
+
+## Next
+
+1. Flatten Rev10 into a packaged CSV asset under `src/landloss/io/assets/` with
+   a reader, cleaning the text-valued cells and the inverted notified resource
+   consent row.
+2. Confirm the rate basis — Rev10, or the square-metre retaining wall rates in
+   the companion costing tool, which do not agree with it.
+3. Hold escalation from the December 2023 base and a regional factor off the
+   Auckland base as named constants.
+4. Build the quantity take-off per claim, once the hazard module emits source
+   and runout polygons.
+5. Add the scheme feasibility table and the cheapest-feasible selection.
+6. Add the repair-against-value settlement test, reading the land value rate
+   from the exposure module.
+
+## Validation
+
+- Modelled repair cost against the settled NHC land claims held in
+  `vul/assets/`. `vul/research/fig_settled_land_claims.py` already plots
+  settlement against cost to repair for that cohort, which is the comparison to
+  make. A script under `validations/`.
+- The selected repair scheme mapped across the study area, as the check that the
+  feasibility rules behave rather than collapsing onto one scheme.
+
+## Open decisions
+
+- **L-15** — land whose settlement is driven by cost of repair rather than land
+  value does not fit the value-based cost model. The repair costing above is
+  what closes it; it is not closed yet.
+- **L-11** — the claim-level identifier. `claim_id` is held apart from
+  `address_id` in anticipation of decoupling, but currently carries the same
+  value.
+- **T-17**, **T-18** — NHC land damage claim costs, needed to validate modelled
+  repair costs against settled ones.
+- Holding the cost model in `vul` departs from the module split in
+  `.agents/context/code-structure.md`, which puts money in `loss`. This was
+  agreed deliberately so the repair scheme stays with the geometry that sizes
+  it, and `code-structure.md` needs updating to match.
+
+Step-level detail lives in each step's implementation plan and method file under
+`steps/`.

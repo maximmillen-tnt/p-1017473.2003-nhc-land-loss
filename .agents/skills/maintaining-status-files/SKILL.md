@@ -1,14 +1,26 @@
 ---
 name: maintaining-status-files
-description: How each hazard module's status.md is written and kept current — the Approach / Where it is now / Next sections, the brevity rule, editing in place so the git diff carries the week's progress, and how the files are read together to draft the weekly progress update. Use when creating or updating a status.md, after finishing a piece of work in a hazard module, or when asked for a weekly or progress update.
+description: How each submodule's status.md is written and kept current across exposure, hazard and vul — the Approach / Where it is now / Next sections, the brevity rule, editing in place so the git diff carries the week's progress, and how the files are read together to draft the weekly progress update. Use when creating or updating a status.md, after finishing a piece of work in any of those submodules, or when asked for a weekly or progress update.
 ---
 
 # Maintaining status files
 
-Every hazard submodule under `src/scripts/landloss/hazard/` carries a
-`status.md` beside its scripts. It is the one-page answer to "where has this
-hazard got to, and what is next?", and it has two audiences: whoever picks the
-work up, and whoever writes the weekly progress update to the client.
+Every submodule of `exposure`, `hazard` and `vul` under
+`src/scripts/landloss/` carries a `status.md` beside its scripts. It is the
+one-page answer to "where has this piece of work got to, and what is next?", and
+it has two audiences: whoever picks the work up, and whoever writes the weekly
+progress update to the client.
+
+The file sits at the level the submodule sits at, so there is one per row below
+rather than one per module:
+
+| Module | Where the file goes | Example |
+| --- | --- | --- |
+| `exposure` | `exposure/<asset>/status.md` | `exposure/land/status.md` |
+| `hazard` | `hazard/<hazard>/status.md` | `hazard/shaking/status.md` |
+| `vul` | `vul/<hazard>/<asset>/status.md` | `vul/landslide/land/status.md` |
+
+`loss` is flat, so it takes a single `loss/status.md` if and when it needs one.
 
 The second audience is what makes these files different from the rest of the
 project's documentation. They are not written once and left. They are updated as
@@ -22,7 +34,7 @@ shape.
 ## 1. The sections, in this order
 
 ```markdown
-# <Hazard> hazard: status
+# <what this submodule covers>: status
 
 **Status:** <one clause — Not started / Approach agreed, porting in progress / …>
 
@@ -75,9 +87,15 @@ being scannable, which is the only property it has to have.
 
 ## 3. Keep it current, and edit in place
 
-**Any change to a hazard module's scripts updates that hazard's `status.md` in
+**Any change to a submodule's scripts updates that submodule's `status.md` in
 the same change,** for the same reason a step's method file is updated with its
 scripts: a description believed to be current is worse than no description.
+
+A change can reach two files. Work in `hazard/landslide/` that alters what the
+vulnerability model receives updates `vul/landslide/land/status.md` too, because
+that file's `Approach` describes what it reads. Follow the dependency in one
+direction only — hazard, then exposure, then vul — and point at the upstream
+method rather than restating it downstream.
 
 In practice, when work lands:
 
@@ -103,23 +121,26 @@ invisible.
 
 The weekly update is assembled from the status files, not written from scratch.
 
-1. Read the `status.md` of each hazard module, plus `Updated` on each, so a file
-   nobody has touched is visible as exactly that rather than silently reported
-   as "no change".
-2. For each hazard, diff the file over the period —
-   `git log -p --since="<date>" -- src/scripts/landloss/hazard/*/status.md` —
-   and take the movement from `Next` into `Where it is now` as the week's
+1. Find every file with
+   `git ls-files "src/scripts/landloss/**/status.md"` and read each one's
+   `Updated`, so a file nobody has touched is visible as exactly that rather
+   than silently reported as "no change".
+2. Diff them over the period with
+   `git log -p --since="<date>" -- "src/scripts/landloss/**/status.md"`, and
+   take the movement from `Next` into `Where it is now` as the period's
    progress. That transition is the unit of progress; a rewritten `Approach`
    bullet is a change of plan and is worth reporting as one.
-3. Write one short paragraph per hazard: what moved, what is next, and anything
-   blocked. Name the blocker by its register ID where there is one.
+3. Write one short paragraph per submodule that moved, grouped by module so the
+   update reads in pipeline order — hazard, exposure, vul, loss. Say what moved,
+   what is next, and anything blocked, naming the blocker by its register ID
+   where there is one.
 4. Carry the `Open decisions` entries up into the update. A decision the team is
    waiting on is the most useful thing in a progress report, because it is the
    only part the client can act on.
 
-Report what the files say. If a hazard did not move, the update says it did not
-move — do not reach into the repo to find something that sounds like progress,
-and do not describe an `Approach` bullet as though it were built.
+Report what the files say. If a submodule did not move, the update says it did
+not move — do not reach into the repo to find something that sounds like
+progress, and do not describe an `Approach` bullet as though it were built.
 
 ## 5. Honesty about what does not exist
 
@@ -135,21 +156,25 @@ built is labelled as intent.**
 
 No "will" in `Where it is now`; no past tense in `Next`.
 
-## 6. Creating one for a hazard that has none
+## 6. Creating one for a submodule that has none
 
-At the time of writing only `hazard/shaking/status.md` exists.
-`hazard/liquefaction/` and `hazard/landslide/` still need theirs.
+`git ls-files "src/scripts/landloss/**/status.md"`, checked against the
+submodule list in section 1, shows which are missing.
 
 1. Copy the section skeleton above.
 2. Fill `Where it is now` from what is actually in the folder — for
-   `liquefaction` that is `report/fig_waterway_map.py` and
-   `report/table_waterways.py`; for `landslide`,
-   `validations/fig_landslide_vulnerability_model_gwrc.py`.
+   `hazard/liquefaction` that is `report/fig_waterway_map.py` and
+   `report/table_waterways.py`; for `exposure/land`, the `s2_land_value` step
+   and the land value validation; for `vul/liquefaction/land`, the
+   `s1_ces_observed_damage` step and the land damage figures. Where a step
+   already has a method file, summarise from it and point at it rather than
+   re-deriving from the scripts.
 3. **Do not invent `Approach` or `Next`.** Those are the project lead's to set.
-   Draft what is supportable from `.agents/context/` and the plans under
-   `.agents/plans/`, and ask about anything you would otherwise be guessing at.
-   A plausible-looking next step that nobody agreed to is the one failure mode
-   these files cannot tolerate, because it ends up in a client update.
+   Draft what is supportable from `.agents/context/`, the plans under
+   `.agents/plans/` and any existing step method files, and ask about anything
+   you would otherwise be guessing at. A plausible-looking next step that nobody
+   agreed to is the one failure mode these files cannot tolerate, because it
+   ends up in a client update.
 
 ## 7. Verify before reporting done
 
