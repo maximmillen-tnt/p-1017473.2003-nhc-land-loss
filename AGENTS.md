@@ -108,7 +108,15 @@ These files are updated as the work moves and the weekly progress update to NHC
 is assembled from them, so a stale one puts a wrong statement in front of the
 client. Any change to a submodule's scripts updates that submodule's `status.md`
 in the same change. Use the `maintaining-status-files` skill whenever you write
-or update one, or are asked for a progress update.
+or update one.
+
+## Weekly updates
+
+The weekly progress update to NHC is generated from those status files into
+`release_updates/update_week_of_<monday>.typ`, from the Typst template beside it,
+and the project lead edits and finalises it. It is never written from scratch and
+never sent. Use the `writing-weekly-updates` skill whenever you are asked for the
+weekly update, a weekly summary or a progress update.
 
 Repo-relative paths come from `src/scripts/landloss/paths.py` (`REPO_ROOT`,
 `REPORT_DIR`, `RESEARCH_DIR`, `TEMP_DIR`) and packaged data files from

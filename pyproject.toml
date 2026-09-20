@@ -184,6 +184,9 @@ flake8-import-conventions.banned-from = ["ruru"]
 ".agents/skills/**/*.py" = [
   "INP",     # Standalone skill scripts, not an importable package
 ]
+"release_updates/**/*.py" = [
+  "INP",     # Standalone tooling beside the weekly update, not a package
+]
 "src/landloss/io/**" = [
   "A005",    # Only ever imported as landloss.io, so it shadows nothing
 ]

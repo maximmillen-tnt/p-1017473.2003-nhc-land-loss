@@ -184,6 +184,14 @@ committed, and the script that produces one is the record of how it was made. A
 `tab/` directory is not ignored, because a CSV table is small, readable in a diff
 and often the thing handed to someone who does not run Python.
 
+### Weekly updates
+
+`release_updates/` holds `weekly_update_template.typ` and one
+`update_week_of_<monday>.typ` per week, generated from the `status.md` files and
+then edited by hand. The `.typ` is the deliverable and is tracked;
+`release_updates/*.pdf` is gitignored, because a compiled PDF is regenerated from
+the source the same way a figure is.
+
 ### Areas of interest
 
 An extent is defined once, in WGS84, and converted to whatever CRS a caller needs
