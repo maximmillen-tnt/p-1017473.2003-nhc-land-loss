@@ -2,21 +2,30 @@
 
     uv run --frozen python release_updates/fill_update.py content.json out.typ
 
-The content JSON maps each handlebar name to its value:
+The content JSON maps each handlebar name to its value. ``"date"`` maps to a
+string, substituted inline. Every other handlebar maps to a list, whose entries
+may be:
 
-- ``"date"`` maps to a string, substituted inline.
-- every other handlebar maps either to a list of item strings, rendered as a
-  Typst numbered list, or to a list of ``[label, [items...]]`` pairs, rendered
-  as bold asset groups (which is what the vulnerability cells need).
+- a plain string, rendered as a numbered-list item (``+ text``);
+- ``[mark, text]``, where mark is ``x`` done, ``~`` partly done, ``>`` next or
+  ``" "`` planned, rendered as a marked plan item;
+- ``[label, [entries...]]``, rendered as a bold group heading over its own
+  entries -- the vulnerability cells and the prototype / beyond-prototype split
+  both need this.
 
-Two things this exists to get right, both of which are easy to get wrong by
+A two-element entry is a group when its second element is a list, and a marked
+item when it is a string.
+
+Three things this exists to get right, all of which are easy to get wrong by
 hand and silently wrong in the output:
 
 - **Indentation is taken from the template line the handlebar sits on**, not
   hardcoded. A fixed indent turns the second and subsequent items of a
   column-zero handlebar into a nested sub-list.
-- **Every handlebar must be accounted for.** An unknown key, an unused key, or
-  a handlebar left in the output is a hard failure rather than a file that
+- **A marked item is a Typst block with a hanging indent**, so a wrapped item
+  lines up under its own text rather than under the next item's marker.
+- **Every handlebar must be accounted for.** An unknown key, an unused key, or a
+  handlebar left in the output is a hard failure rather than a file that
   compiles with a hole in it.
 """
 
@@ -28,20 +37,43 @@ from pathlib import Path
 HANDLEBAR = re.compile(r"^(?P<indent>[ \t]*)\{\{(?P<name>\w+)\}\}[ \t]*$")
 INLINE = re.compile(r"\{\{(?P<name>\w+)\}\}")
 
+# Progress mark -> the Typst helper defined in the template.
+MARKS = {"x": "done", "~": "part", ">": "next", " ": "todo"}
+
+# Kinds of rendered line. A marked item is a Typst block, so it stacks on its
+# own; an enum item is a list line. The kind is kept only to separate groups.
+ENUM, MARK = "enum", "mark"
+
+
+def marked(mark: str, text: str) -> str:
+    """Render one marked plan item."""
+    if mark not in MARKS:
+        msg = f"unknown mark {mark!r}; expected one of {sorted(MARKS)}"
+        raise SystemExit(msg)
+    return f"#{MARKS[mark]}[{text}]"
+
+
+def as_line(entry: object) -> tuple[str, str]:
+    """Render one non-group entry as a (kind, text) pair."""
+    if isinstance(entry, str):
+        return (ENUM, f"+ {entry}")
+    mark, text = entry
+    return (MARK, marked(mark, text))
+
 
 def render(value: list, indent: str) -> str:
     """Render one handlebar's value as indented Typst markup."""
-    lines = []
+    lines: list[tuple[str, str]] = []
     for entry in value:
-        if isinstance(entry, str):
-            lines.append(f"+ {entry}")
-            continue
-        label, items = entry
-        if lines:
-            lines.append("")
-        lines.append(f"*{label}*")
-        lines.extend(f"+ {item}" for item in items)
-    return "\n".join(indent + line if line else "" for line in lines).lstrip()
+        if not isinstance(entry, str) and isinstance(entry[1], list):
+            head, items = entry
+            lines.append((MARK, f"#grp[{head}]"))
+            lines.extend(as_line(item) for item in items)
+        else:
+            lines.append(as_line(entry))
+
+    out = [text for _, text in lines]
+    return "\n".join(indent + line if line else "" for line in out).lstrip()
 
 
 def fill(template: str, content: dict) -> str:

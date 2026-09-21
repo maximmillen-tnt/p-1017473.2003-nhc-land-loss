@@ -1,13 +1,14 @@
 # Landslide hazard: status
 
-**Status:** Two candidate routes, neither chosen.
+**Status:** ESNZ model in hand; three candidate routes, none chosen.
 
 **Updated:** 2026-09-18
 
 ## Approach
 
 Intended, not implemented, and the route is not yet chosen — see
-`## Open decisions`.
+`## Open decisions`. No progress marks until it is: there is no single plan
+to mark against while two remain on the table.
 
 **The starting point.** ESNZ's probabilistic landslide model is in hand: a 25 m
 grid carrying failure probability at discrete shaking levels. Three gaps in it
@@ -21,8 +22,14 @@ matter for this study.
 - **No runout.** Loss of support and runout are settled differently, so a model
   without runout cannot answer the policy question.
 
-**The two routes**, either of which closes those gaps.
+**The three routes.** The first keeps the ESNZ model as the primary model; the
+others replace or extend it.
 
+- **Validate or recalibrate the ESNZ model** and keep it as the primary model.
+  The cheapest route: check it against observed failures and the Greater
+  Wellington zonation, and recalibrate the rate where it disagrees, rather than
+  changing its structure. It leaves the three gaps above unclosed, so it only
+  stands if they matter less than the calibration does.
 - **Build a new model and compare it against ESNZ.** Drafted in full in
   `.agents/plans/estimating-eq-landslide-extent-wellington.md` — explicit source
   and runout polygons, Newmark displacement, an absolute rate calibrated against

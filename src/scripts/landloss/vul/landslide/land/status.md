@@ -6,33 +6,35 @@
 
 ## Approach
 
+Marks: `[x]` done, `[~]` partly done, `[>]` next, `[ ]` planned.
+
 Intended, not implemented.
 
-- Read the hazard module's source and runout polygons **separately** and produce
+- [ ] Read the hazard module's source and runout polygons **separately** and produce
   an outcome per cause, because loss of support and runout are settled
   differently.
-- Work per claim against the **insured land polygon**, the 8 m line from the
+- [ ] Work per claim against the **insured land polygon**, the 8 m line from the
   dwelling, since that is the extent NHC settles on. `claim_id` currently
   carries the same value as `address_id` and is held as its own column so the
   two can decouple later.
-- Cost the repair from the T+T landslip remediation schedule prepared for EQC
+- [>] Cost the repair from the T+T landslip remediation schedule prepared for EQC
   (`EQCcostestimatesRev10.xlsx`, Rev10, 4 December 2023) rather than from a
   damage ratio alone. The schedule is held in `vul` rather than `loss` so that
   the repair scheme stays beside the landslide geometry that sizes it.
-- Size the works from geometry: wall face area from crown length × scarp height
+- [ ] Size the works from geometry: wall face area from crown length × scarp height
   within the insured polygon, spoil and backfill volume from the slip volume the
   hazard module already derives by `V = αA^γ`, and reinstatement from the runout
   area.
-- Select the repair scheme as the **cheapest of those feasible** for the
+- [ ] Select the repair scheme as the **cheapest of those feasible** for the
   retained height and slope, so the scheme is a checkable output rather than an
   input assumption.
-- Interpolate between the schedule's "easy" and "difficult" columns on a
+- [ ] Interpolate between the schedule's "easy" and "difficult" columns on a
   composite index of slope, access distance, distance to a town centre and
   neighbouring buildings — the schedule defines its two ends in those terms.
-- Apply the schedule's per-job items — survey, geotechnical investigation,
+- [ ] Apply the schedule's per-job items — survey, geotechnical investigation,
   consents, inspections — **once per landslide** and apportion them across the
   claims it crosses. Charged per claim they would dominate every small slip.
-- Settle each claim at the lower of repair cost and insured land value, so land
+- [ ] Settle each claim at the lower of repair cost and insured land value, so land
   that costs more to repair than it is worth is written off rather than repaired.
 
 ## Where it is now

@@ -29,7 +29,7 @@ insured assets behave alike and mixing them in one namespace hides that.
 
 | Module | Split by | Submodules |
 | --- | --- | --- |
-| `exposure` | Insured asset type | `land`, `rw` (retaining walls), `culverts` |
+| `exposure` | Insured asset type | `land`, `rw` (retaining walls), `culverts_bridges` |
 | `hazard` | Hazard | `liquefaction`, `landslide`, `shaking` |
 | `vul` | Hazard, then asset type | `<hazard>/<asset>`, e.g. `liquefaction/land` |
 | `loss` | Not split | — |
@@ -87,7 +87,7 @@ module level, because filing it under one asset or one hazard would be a lie
 about what reads it:
 
 - `exposure/steps/s1_address_spine/` — the property spine. Land, retaining walls
-  and culverts all hang off the same addresses.
+  culverts and bridges all hang off the same addresses.
 - `hazard/research/fig_cross_sections.py` — valley cross-sections, read by the
   liquefaction and the landslide work alike.
 - `vul/static_data_gen/`, `vul/assets/` and `vul/research/` — the NHC claims

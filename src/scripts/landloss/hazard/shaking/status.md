@@ -7,24 +7,26 @@ Model; not yet ported into this repository.
 
 ## Approach
 
+Marks: `[x]` done, `[~]` partly done, `[>]` next, `[ ]` planned.
+
 Intended, not implemented.
 
-- Port `gen_pga_layer` from the National Liquefaction Model repository
-  (`p-1017473-nlm-loss-modelling`) rather than rewriting it, so both studies
-  compute their demand the same way.
-- Take the site class from the **Foster et al. (2019) V<sub>s</sub>30 model**
+- [>] Port the National Liquefaction Model (NLM) code for the TS1170.5 PGA
+  demands — `gen_pga_layer` from `p-1017473-nlm-loss-modelling` — rather than
+  rewriting it, so both studies compute their demand the same way.
+- [ ] Take the site class from the **Foster et al. (2019) V<sub>s</sub>30 model**
   instead of a single assumed class. This resolves **T-15** by mapping the
   class per point rather than assigning one per landform.
-- Generate **PGA** and **Sa(T₁)** across the study extent on a **100 m grid**,
+- [ ] Generate **PGA** and **Sa(T₁)** across the study extent on a **100 m grid**,
   both at the **2500-year return period**.
-- Derive **PGV** from the same TS1170.5 spectrum rather than generating it
+- [ ] Derive **PGV** from the same TS1170.5 spectrum rather than generating it
   independently, as **PGV (mm/s) ≈ 750 · Sa(1.0 s) [g]**. Several of the
   retaining wall fragility curves in
   `.agents/context/retaining-wall-fragility.md` are velocity-based.
-- Hold **NSHM (2022) scenario demands, run through a GMPE in OpenQuake**, as
-  the alternative to TS1170.5. It would produce the same PGA and PGV layers
-  from the same V<sub>s</sub>30 input, so the two routes are interchangeable
-  downstream (**T-26**).
+**Parked.** NSHM (2022) scenario demands run through a GMPE in OpenQuake were
+held as the alternative to TS1170.5. That route is parked: the demand comes from
+TS1170.5. It would produce the same PGA and PGV layers from the same
+V<sub>s</sub>30 input, so it stays reinstatable if the decision is revisited.
 
 ## Where it is now
 
@@ -39,8 +41,8 @@ the outstanding work, not writing it.
 ## Next
 
 1. Obtain the Foster et al. (2019) V<sub>s</sub>30 layer over the study area.
-2. Port `gen_pga_layer` into a step under `steps/`, and confirm it reproduces
-   the NLM's own output before modifying it.
+2. Port the NLM code for the TS1170.5 PGA demands into a step under `steps/`,
+   and confirm it reproduces the NLM's own output before modifying it.
 3. Generate the 100 m grid of PGA and Sa(T₁) over the study area, taking the
    site class from the Foster layer rather than a single assumed class.
 4. Add the Sa(1.0 s) → PGV conversion and write the PGV layer.
@@ -54,9 +56,9 @@ the outstanding work, not writing it.
 ## Open decisions
 
 - **T-15** — the site class decision above. Adopting Foster closes it.
-- **T-26** — whether the demand comes from TS1170.5 or from NSHM (2022)
-  scenarios through OpenQuake. TS1170.5 is the route being built; the
-  scenario route has not been ruled out.
+- **T-26** is no longer open: the demand comes from TS1170.5 and the NSHM
+  scenario route is parked. The register entry still reads as undecided and
+  needs updating.
 
 Step-level detail lives in each step's implementation plan and method file under
 `steps/`.

@@ -33,13 +33,14 @@ creating a folder, decide which that is:
 
 | The step's work is specific to | Its `steps/` folder |
 | --- | --- |
-| One insured asset type | `exposure/<land\|rw\|culverts>/steps/` |
+| One insured asset type | `exposure/<land\|rw\|culverts_bridges>/steps/` |
 | One hazard | `hazard/<liquefaction\|landslide\|shaking>/steps/` |
 | One hazard and one asset type | `vul/<hazard>/<asset>/steps/` |
 | Everything in the module alike | `<module>/steps/` |
 
 The last row is the exception, not the default. The address spine is there
-(`exposure/steps/s1_address_spine/`) because land, retaining walls and culverts
+(`exposure/steps/s1_address_spine/`) because land, retaining walls, culverts
+and bridges
 all hang off the same properties; a step that only serves one of them does not
 belong at that level. See `.agents/context/code-structure.md` for the two axes
 and why they are split that way.

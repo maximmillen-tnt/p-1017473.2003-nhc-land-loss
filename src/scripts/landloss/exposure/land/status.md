@@ -7,23 +7,25 @@ applied to is not built yet.
 
 ## Approach
 
+Marks: `[x]` done, `[~]` partly done, `[>]` next, `[ ]` planned.
+
 The module ends at one layer, `insured-land`, carrying one row per `claim_id`
 with a rate per square metre and the insured land polygon. Everything below
 exists to produce that layer.
 
-- Take the insured extent as an **8 m buffer of the building outlines, combined
+- [ ] Take the insured extent as an **8 m buffer of the building outlines, combined
   with the driveway**, rather than the whole parcel. That is the land NHC
   settles on, so it is the extent the hazard modules intersect against.
-- **Generate driveways** as the shortest path from each building outline to the
+- [>] **Generate driveways** as the shortest path from each building outline to the
   roadway, since no driveway dataset exists for the study area. This resolves
   **I-10**, which proposed mapping them by remote sensing.
-- Attribute the extent against the **property boundaries**, which supply the
+- [ ] Attribute the extent against the **property boundaries**, which supply the
   identifier and the property each piece of insured land belongs to.
-- Apply the modelled **rate per square metre** to the insured extent, with a
+- [~] Apply the modelled **rate per square metre** to the insured extent, with a
   **premium on land within 2 m of a building** — the land immediately supporting
   the dwelling is worth more than the rest of the section, and it is also the
   land whose loss matters most.
-- Key on `claim_id`. It currently carries the same value as `address_id` and is
+- [~] Key on `claim_id`. It currently carries the same value as `address_id` and is
   held as its own column so the two can decouple (**L-11**).
 
 Land value per square metre is a step in its own right and is already built; see
@@ -34,7 +36,8 @@ Land value per square metre is a step in its own right and is already built; see
 The rate per square metre exists; the geometry it should be applied to does not.
 
 - `../steps/s1_address_spine/` builds the address spine that this and every other
-  asset hangs off. It sits at module level because retaining walls and culverts
+  asset hangs off. It sits at module level because retaining walls, culverts
+  and bridges
   read it too.
 - `steps/s2_land_value/` values every address — landform class, DEM slope and
   topographic position, and the indexed rating valuations — and writes

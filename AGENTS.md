@@ -84,7 +84,8 @@ regenerate; see the `recording-project-context` skill.
 
 `exposure`, `hazard` and `vul` are each split into submodules, in both
 `src/landloss/` and `src/scripts/landloss/`: `exposure` by insured asset type
-(`land`, `rw`, `culverts`), `hazard` by hazard (`liquefaction`, `landslide`,
+(`land`, `rw`, `culverts_bridges`), `hazard` by hazard (`liquefaction`,
+`landslide`,
 `shaking`), and `vul` by hazard and then asset type (`vul/liquefaction/land`).
 `loss` is flat.
 

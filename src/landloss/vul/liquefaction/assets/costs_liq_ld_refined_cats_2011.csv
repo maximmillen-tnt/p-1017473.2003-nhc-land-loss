@@ -1,0 +1,7 @@
+LD_refined_cats,source_band,cost_15th_percentile_nzd,cost_50th_percentile_nzd,cost_85th_percentile_nzd
+1,none or 1,0,200,1000
+2,2 or 2.5,200,500,2000
+3,3 or 3.5,500,1500,4000
+4,4,1000,2500,6000
+5,5 or 6,1500,4000,8000
+6,5 or 6,1500,4000,8000

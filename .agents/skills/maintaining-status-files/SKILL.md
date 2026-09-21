@@ -42,9 +42,9 @@ shape.
 
 ## Approach
 
-Intended, not implemented.   ← drop this line once some of it is built
+Marks: `[x]` done, `[~]` partly done, `[>]` next, `[ ]` planned.
 
-- <the decision, and at most one clause of why>
+- [~] <the decision, and at most one clause of why>
 
 ## Where it is now
 
@@ -65,6 +65,32 @@ Intended, not implemented.   ← drop this line once some of it is built
 Step-level detail lives in each step's implementation plan and method file under
 `steps/`.
 ```
+
+### The progress marks
+
+Every `Approach` bullet carries a mark, and the legend line sits under the
+heading so a reader does not have to guess. The marks are the **only** record of
+per-item progress: the weekly update renders them directly, so nothing infers
+"done" by reading `Where it is now` against `Approach`. That inference is what
+produced two overstatements in front of the client.
+
+Each bullet **starts with the task**, as an instruction with a leading verb, and
+carries any justification after it. The weekly update renders that opening task
+and drops the rest, so a bullet that opens with a noun phrase renders as a topic
+rather than as work.
+
+`[x]` means the thing exists and runs, not that it was started — the same bar
+`adding-steps-scripts` sets for ticking a plan box. Something under way is
+`[~]`, not `[x]`. `[>]` marks what is being done next, and should agree with
+`Next`.
+
+Where the approach is an undecided fork rather than a plan, leave it unmarked
+and say why. `hazard/landslide/status.md` does this: you cannot mark progress
+against a route nobody has chosen, and an unmarkable plan blocked on a decision
+is exactly what the client should see.
+
+Where a module has a prototype boundary, split `Approach` under a **Prototype**
+and a **Beyond prototype** heading. Only do this where the boundary is real.
 
 **`Approach` comes before `Where it is now`.** The current state means nothing
 to a reader who does not yet know what is being attempted, so the method leads
@@ -153,6 +179,16 @@ built is labelled as intent.**
   actually runs; `Approach` continues to describe the method as a whole.
 - `Where it is now` never describes planned work. "Nothing is implemented. This
   file is the only thing in the folder." is a complete and correct answer.
+- `Where it is now` describes **the state of the work, not the state of this
+  repository.** Much of this project's work happens in the National Liquefaction
+  Model work, so more has been done than the repo shows. Never survey the folder
+  and conclude "nothing does X yet" — if the lead says something is under way,
+  it is under way, and naming which parts are in this repository is an extra
+  detail rather than the boundary of what exists.
+- Write only what the lead supplied, plus what is directly traceable to a source
+  such as the register. Do not reverse-engineer a `Validation` section from a
+  module's docstring or infer extra `Open decisions` from the code. A section
+  with no content yet says "Not yet defined." and stops there.
 
 No "will" in `Where it is now`; no past tense in `Next`.
 
@@ -162,7 +198,9 @@ No "will" in `Where it is now`; no past tense in `Next`.
 submodule list in section 1, shows which are missing.
 
 1. Copy the section skeleton above.
-2. Fill `Where it is now` from what is actually in the folder — for
+2. Fill `Where it is now` from what the lead tells you, not from a survey of
+   the folder — work in the NLM repo counts and the folder cannot show it. Where
+   you do describe this repository, for
    `hazard/liquefaction` that is `report/fig_waterway_map.py` and
    `report/table_waterways.py`; for `exposure/land`, the `s2_land_value` step
    and the land value validation; for `vul/liquefaction/land`, the

@@ -8,6 +8,7 @@ population into flat and sloping ground, and
 address in the spine.
 
 The address spine those both read is one level up, in
-:mod:`landloss.exposure.addresses`, because retaining walls and culverts hang
+:mod:`landloss.exposure.addresses`, because retaining walls, culverts and
+bridges hang
 off the same properties.
 """

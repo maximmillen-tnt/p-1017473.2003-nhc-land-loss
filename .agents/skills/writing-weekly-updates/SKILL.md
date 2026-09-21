@@ -43,10 +43,22 @@ lead's edits. Report that it exists and ask.
 | 2 | Hazard | Liquefaction, Landslide, Shaking |
 | 3 | Exposure | Land, Retaining walls, Culverts |
 | 4 | Vulnerability | Liquefaction, Landslide, Shaking |
-| 5 | Loss | one column |
+| 5 | Loss | a label column and one content column |
 
-Each table has a `Current status` row and a `What's next` row, labelled by a
-full-width band so three columns stay readable. Every cell is a numbered list.
+Each table has a **`Plan and progress`** row and a `What's next` row.
+
+`Plan and progress` renders that submodule's `Approach` bullets **with their
+marks**: ✓ done, a filled half-circle and italics for partly done, ▸ for next,
+and a grey dot for planned. A legend sits beside the date. This is the point of
+the section — the plan is stable week to week, so the marks moving *are* the
+progress, and the diff between two updates is exactly what changed.
+
+**Never decide a mark yourself.** Take it from the status file's `Approach`
+bullet. If a bullet has no mark, render it as planned and say so; do not infer
+"done" from `Where it is now`.
+
+`What's next` stays a numbered list: marks carry no order, and `Next` holds
+decisions that are not plan items, like choosing the river layer.
 In section 4 the assets are grouped **inside** each hazard cell — `*Land*` on
 its own line, then its list, then a blank line before the next asset.
 
@@ -73,9 +85,19 @@ full width, so it takes a short sentence, but still only three items.
   the status file.
 - No item carries a second clause, a semicolon joining two statements, or a
   trailing "…, which closes T-15" justification. Split it or cut it.
-- Cut script names, file paths and academic citations. Keep register IDs — `T-15`
-  is a decision NHC can act on, `Bray & Macedo (2019)` is noise. A named dataset
-  the client would recognise, like the Foster Vs30 model, is worth keeping.
+- **Never cite a register ID.** `T-15`, `L-08`, `I-08` mean nothing to a reader
+  who cannot open the register, and most readers of this document cannot. Say
+  the thing instead: not "closing T-25" but "revalue on measured area"; not
+  "(T-01, T-06)" but "confirmation with NHC outstanding". The same goes for
+  internal dataset and column names — `claim_id` is not client-facing.
+- Cut script names, file paths and academic citations. A named dataset the
+  client would recognise, like the Foster Vs30 model, is worth keeping.
+- **Every plan item is a task**, phrased as an instruction with a leading verb:
+  "Get land damage probabilities for 2500y using TS1170.5", not "Land damage
+  probabilities, 2500-yr". A noun phrase reads as a topic; a task reads as work.
+- **Define an acronym once, then use it.** "Buffer rivers to obtain lateral
+  spreading (LS) zones", then "Modify LD probabilities inside LS zones". Define
+  it at its first appearance in reading order — down a column, then across.
 - Where the status file says the work has not begun, one item: "Not started."
 - The finished update fits on **one page**. If it does not, the items are too
   long; shorten them rather than changing the template.
@@ -104,8 +126,10 @@ file, and the files are independent, so `pipeline()` fits.
 
    `fill_update.py` takes each handlebar's indentation from the template line it
    sits on, and hard-fails on an unknown key, an unused key or a handlebar left
-   in the output. A vul cell's value is a list of `[label, [items]]` pairs, which
-   renders the bold asset groups. Re-check for new status files at this point —
+   in the output. A content entry is a plain string (a numbered-list item),
+   `[mark, text]` where mark is `x`/`~`/`>`/`" "` (a marked plan item), or
+   `[label, [entries]]` (a bold group — the asset groups in vul, and the
+   prototype / beyond-prototype split). Re-check for new status files at this point —
    one can land after the readers have run.
 5. **Verify** — compile it, and run two checks in parallel: one agent tracing
    every item back to a sentence in a status file, and one on brevity and
