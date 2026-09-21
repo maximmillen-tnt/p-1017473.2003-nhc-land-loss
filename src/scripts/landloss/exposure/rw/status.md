@@ -10,10 +10,19 @@ in this repository.
 Intended, not implemented.
 
 - Classify every wall on three axes: **six wall classes**, **three size
-  subclasses** (small, medium, large) and **two initial state classes** (modern,
-  poor). The axes match how the published fragility sets are parameterised —
-  wall type, height and initial condition — so each cell can carry a curve from
+  subclasses** — small below 1 m, medium 1 to 2.5 m, large above 2.5 m — and
+  **two initial state classes** (modern, poor). The axes match how the published
+  fragility sets are parameterised — wall type, height and initial condition —
+  so each cell can carry a curve from
   `.agents/context/retaining-wall-fragility.md`.
+- Carry **two damage states only: no damage, and replace.** A wall either
+  survives or is written off, which is how the policy settles it — on
+  replacement value up to the sub-cap. The initial state class is a separate
+  axis and is not a damage state.
+- Size the three subclasses by what the costing can tell apart rather than by
+  engineering interest. Above the cap the settlement stops depending on height,
+  so a three metre and a six metre wall cost the same to settle and do not need
+  separating.
 - **Predict where walls are and how big they are** from a model over the DEM,
   geomorphology, and road and dwelling locations. No retaining wall dataset
   exists for the study area, so the population has to be inferred rather than
@@ -41,8 +50,8 @@ folder, and no script in the repository reads a retaining wall dataset.
 
 ## Next
 
-1. Name the six wall classes, and set the height thresholds that separate small,
-   medium and large.
+1. Name the six wall classes. The height thresholds are set: small below 1 m,
+   medium 1 to 2.5 m, large above 2.5 m.
 2. Bring the collected input datasets into the repository, or record where they
    are held and how they are read, so the inputs are reproducible.
 3. Bring the manual mapping and the remote sensing pilot into the repository on
@@ -69,6 +78,8 @@ folder, and no script in the repository reads a retaining wall dataset.
 - The six wall classes are not yet named. They should map onto the wall types
   that carry published fragility curves, or the classification will not be able
   to attach one.
+- Whether repair cost scales with wall length or wall height, and what the fixed
+  per-job costs are (**T-32**).
 - What separates "modern" from "poor", and the dwelling age that divides them.
 - Access to the ICNZ database, which is not covered by a register task.
 - **T-19** — the SME estimate of wall prevalence by suburb.

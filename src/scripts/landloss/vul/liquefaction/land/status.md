@@ -7,13 +7,17 @@ packaged; nothing reads them yet.
 
 ## Approach
 
-- Settle liquefaction land damage from an **observed land damage category**, and
-  attach a **cost to each category**, rather than modelling a damage ratio and
-  multiplying it by land value. Canterbury gives observed categories and settled
+- Settle liquefaction land damage from an **observed land damage state**, and
+  attach a **cost to each state**, rather than modelling a damage ratio and
+  multiplying it by land value. Canterbury gives observed states and settled
   costs for the same properties, which is the strongest evidence the study has.
+- Keep **states** and **categories** apart. States are the severity scale, 1 to
+  6, None through Very Severe. Categories are the nine damage types NHC pays
+  out on, 1 to 9, where 8 is ILV and 9 is IFV. The costs are keyed on states
+  and cover categories 1 to 7, so **ILV and IFV costs are excluded**.
 - Take the category costs from the **Dec 2016 ILVR land liability rates**,
   packaged under `src/landloss/vul/liquefaction/assets/` as
-  `costs_liq_ld_refined_cats_2011.csv` with its own README. They are
+  `costs_liq_ld_refined_states_2011.csv` with its own README. They are
   2010/2011 dollars excluding GST, carried as 15th, 50th and 85th
   percentiles so the spread within a category survives.
 - Calibrate against the **Canterbury earthquake sequence**, joining NHC's
@@ -32,13 +36,13 @@ packaged; nothing reads them yet.
 - `report/fig_land_damage_maps.py` maps the observed land damage.
 - The category cost rates are packaged as a committed asset with a README
   recording their source, units and limitations. No code reads the file, and the
-  join from a category to a cost is not implemented.
+  join from a state to a cost is not implemented.
 - Nothing in the module produces a Wellington result yet; everything built so
   far is the Canterbury evidence the Wellington relationship will be fitted to.
 
 ## Next
 
-1. Read the packaged cost rates and join them to the observed damage categories.
+1. Read the packaged cost rates and join them to the observed damage states.
 2. Check the resulting costs against the settled losses already in the observed
    damage database, which is the test of whether the 2016 rates reproduce what
    was actually paid.
@@ -52,7 +56,7 @@ packaged; nothing reads them yet.
 - Modelled category costs against the settled Canterbury losses per property, on
   the same properties. The observed damage database holds both, so this is a
   direct comparison rather than a proxy.
-- Distribution of properties across categories 1 to 6, against the observed
+- Distribution of properties across states 1 to 6, against the observed
   distribution in the Canterbury data.
 
 ## Open decisions
@@ -62,6 +66,9 @@ packaged; nothing reads them yet.
   culvert and bridge damage, in which case modelling those assets separately
   would double count them. **T-27** covers confirming it, and the answer decides
   whether this module needs a retaining wall term at all.
+- **How ILV and IFV are covered.** The packaged rates exclude both, and they
+  were a large share of what was paid in Canterbury, so a total built from
+  these rates alone understates the loss.
 - **T-17**, **T-18** — NHC land damage claim costs for Wellington, which would
   let the Canterbury-derived rates be checked against a second population.
 - The source description for the ILVR rates is still to be supplied by Virginie

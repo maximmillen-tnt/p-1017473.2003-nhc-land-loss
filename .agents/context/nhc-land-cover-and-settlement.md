@@ -54,6 +54,41 @@ council walls supporting roads inundated private property below. That damage is
 driven by the cost of clean-up and remediation rather than by land value, which
 does not fit the value-based cost logic used elsewhere in the tool.
 
+## Settling damaged land: value or repair, not both
+
+Added from the "Wgtn Land Model" meeting, 21 September 2026.
+
+A damaged-land claim is settled one of two ways, and the choice is made for the
+claim as a whole:
+
+- **On value** — the area of damaged or evacuated land multiplied by its market
+  value per square metre.
+- **On repair** — the cost of bringing the land back to its original state.
+
+Sub-caps apply, and there may be a total cap as well. **The two routes cannot be
+mixed within a single claim**: a claimant cannot have part of the damage
+repaired and then settle the evacuated land on value. The model has to make the
+election per claim rather than per piece of damage.
+
+### Evacuated and inundated land are both damaged land
+
+When land moves downslope it leaves **evacuated** land where it came from and
+creates **inundated** land where it comes to rest. Both count: the damaged area
+is the **total footprint** of the two together, not one or the other. Perrie
+Gilbert, who has settled claims of this kind, confirmed the distinction on the
+call.
+
+Repair cost for inundated land is represented by two rates per square metre —
+one for volumes a shovel and a truck can clear, one for volumes needing an
+excavator — varied by whether the site has access (**L-28**). For the largest
+landslides the cost is expected to be over the cap regardless, so the precision
+stops mattering.
+
+**Imminent risk** was raised and left unresolved: whether land at imminent risk
+of failure is claimable, and how it would be represented, is open (**T-35**).
+The settlement logic as a whole is to be written out as pseudo-logic and run
+past John Leeves (**T-34**).
+
 ## Sub-caps and multiple insured interests
 
 Where a property has multiple land structures, multiple sub-caps apply, and where

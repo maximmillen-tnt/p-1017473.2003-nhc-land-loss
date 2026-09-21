@@ -68,6 +68,9 @@ before making decisions about methodology, outputs, or what belongs in the tool:
   property, how retaining walls and sub-caps are settled, and what is still unconfirmed.
 - `.agents/context/land-damage-mechanisms.md` — the team's working picture of how land
   damage actually occurs in Wellington, and what that means for the model.
+- `.agents/context/canterbury-land-claim-costs.md` — the Canterbury payout data the
+  cost model is anchored on, what it excludes, and why its category numbers are
+  damage types rather than severity levels.
 - `.agents/context/data-sources.md` — which dataset comes from where, and what is not
   obtainable.
 - `.agents/context/nhc-natural-hazards-portal.md` — why the public Natural Hazards

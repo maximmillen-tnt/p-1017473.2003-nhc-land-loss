@@ -16,9 +16,10 @@ Intended, not implemented.
 - Count **any watercourse**, not only the named rivers that
   `classify_waterways` separates out. Most accessway crossings are of small
   streams, so filtering to named rivers would drop the bulk of the population.
-- Where a watercourse does cross, assign **a 10% chance of a bridge and a 60%
-  chance of a culvert**. The two are mutually exclusive, and the remaining 30%
-  carries neither structure. Both figures are engineering judgement.
+- Where a watercourse does cross, assign **an 80% chance of a culvert and a 20%
+  chance of a bridge**. The two are mutually exclusive and exhaust the
+  possibilities: a crossing carries one or the other, because something has to
+  carry the accessway over the water. Both figures are engineering judgement.
 - **Sample** the structure per realisation rather than carrying an expected
   value, under a **fixed random seed** so a run reproduces. Sampling matches
   the Monte Carlo realisations the landslide module produces.
@@ -59,8 +60,8 @@ folder.
    `get_nz_river_name_lines`.
 2. Detect crossings by intersecting the insured accessway with the river lines
    and polygons, once the accessway exists.
-3. Sample a bridge, a culvert or neither at each crossing under a fixed seed,
-   and write the result per `claim_id`.
+3. Sample a culvert or a bridge at each crossing under a fixed seed, and write
+   the result per `claim_id`.
 
 ## Validation
 
@@ -80,7 +81,7 @@ folder.
   watercourse therefore still misses the unnamed streams, which is where the
   small accessway crossings mostly are, so whether the topo50 centrelines are
   needed alongside them is open.
-- The 10% and 60% figures are engineering judgement and will need disclosing
+- The 80% and 20% figures are engineering judgement and will need disclosing
   in the report. No register limitation covers them yet.
 - Sampling is the method for now. Whether an expected value per property
   replaces it later depends on how the loss module consumes the realisations.

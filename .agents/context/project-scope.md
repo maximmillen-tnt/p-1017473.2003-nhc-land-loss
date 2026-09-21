@@ -224,6 +224,8 @@ Refinements:
   in practice, parked for a possible later sub-study.
 - Privately owned service connections cannot be mapped, as councils hold only
   public services and the connection points.
+- Pipes are covered under the building rather than the land, so they fall outside
+  the land loss model (Wgtn Land Model meeting, 21 September 2026).
 
 ## Deliverables
 

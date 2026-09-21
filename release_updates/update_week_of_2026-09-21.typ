@@ -128,7 +128,7 @@
   [
     #todo[Detect watercourse crossings of the insured accessway]
     #todo[Read both the river line and river polygon layers]
-    #todo[Sample a bridge, a culvert or neither at each crossing]
+    #todo[Sample a culvert or a bridge at each crossing]
   ],
   nextrow(3),
   [
