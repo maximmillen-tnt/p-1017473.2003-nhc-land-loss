@@ -88,3 +88,19 @@ def get_nlm_scenario_rp2500y_gwd_med_p_ld_moderate_fu() -> xr.DataArray:
         f"core/{CORE_NLM_VERSION}/scenario/return_period/"
         "rp2500y_lsn_pl50_gwd-med_p_ld_moderate_fu.tif"
     )
+
+
+def get_nlm_scenario_rp2500y_gwd_med_p_ld_major_fu() -> xr.DataArray:
+    """Read the NLM's RP2500y, median groundwater, major land damage grid.
+
+    Source:
+        National Liquefaction Model core release ``CORE_NLM_VERSION``, under
+        ``scenario/return_period`` in the NLM's release tree on T:.
+
+    Returns:
+        The probability grid, as delivered.
+    """
+    return get_nlm_scenario_raster(
+        f"core/{CORE_NLM_VERSION}/scenario/return_period/"
+        "rp2500y_lsn_pl50_gwd-med_p_ld_major_fu.tif"
+    )

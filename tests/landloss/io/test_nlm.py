@@ -73,7 +73,9 @@ def test_the_nodata_marker_arrives_as_nan_rather_than_as_a_number(
     assert raster.to_numpy()[0, 0] == pytest.approx(0.25)
 
 
-def test_the_rp2500y_helper_reads_its_hardcoded_path(tmp_path, monkeypatch) -> None:
+def test_the_rp2500y_moderate_helper_reads_its_hardcoded_path(
+    tmp_path, monkeypatch
+) -> None:
     """The path is a constant precisely so that nobody retypes it into a script."""
     path = write_raster(tmp_path / "rp2500y.tif", np.full((4, 4), 0.01))
     asked_for = []
@@ -93,6 +95,30 @@ def test_the_rp2500y_helper_reads_its_hardcoded_path(tmp_path, monkeypatch) -> N
         )
     ]
     assert raster.to_numpy() == pytest.approx(0.01)
+
+
+def test_the_rp2500y_major_helper_reads_its_hardcoded_path(
+    tmp_path, monkeypatch
+) -> None:
+    """The path is a constant precisely so that nobody retypes it into a script."""
+    path = write_raster(tmp_path / "rp2500y.tif", np.full((4, 4), 0.02))
+    asked_for = []
+
+    def record(relative_path, **_):
+        asked_for.append(relative_path)
+        return path
+
+    monkeypatch.setattr(nlm, "nlm_release_path", record)
+
+    raster = nlm.get_nlm_scenario_rp2500y_gwd_med_p_ld_major_fu()
+
+    assert asked_for == [
+        (
+            f"core/{nlm.CORE_NLM_VERSION}/scenario/return_period/"
+            "rp2500y_lsn_pl50_gwd-med_p_ld_major_fu.tif"
+        )
+    ]
+    assert raster.to_numpy() == pytest.approx(0.02)
 
 
 def test_nlm_release_path_appends_the_relative_path_and_caches(
