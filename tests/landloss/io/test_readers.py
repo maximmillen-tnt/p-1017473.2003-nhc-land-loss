@@ -210,17 +210,6 @@ def test_resolve_api_key_requires_the_variable_to_be_set(
 # --- Cache directory -----------------------------------------------------------
 
 
-def test_default_cache_dir_is_anchored_to_the_repo_root() -> None:
-    """DEFAULT_CACHE_DIR must not be a bare relative path.
-
-    A relative ".koopcache" resolves against whatever the current working
-    directory happens to be, so it scatters a separate cache under every
-    directory a script is ever run from instead of sharing one.
-    """
-    assert readers.DEFAULT_CACHE_DIR.is_absolute()
-    assert readers.DEFAULT_CACHE_DIR.name == ".koopcache"
-
-
 def test_the_domain_key_is_used_for_the_connection(
     fake_koordinates: dict[str, object],
 ) -> None:

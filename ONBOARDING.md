@@ -71,7 +71,14 @@ conversation plus the repo's own skills.
       catalog, documents:read, exports:read, exports:write, items:read,
       items:write, layers:read, query, sets:read, sources:read, tiles,
       wxs:esri, wxs:wfs
-- [ ] Set `KOOPCACHE_DIR` — `get_latest_layer` raises if it is unset. `.koopcache` in the repo root is fine; it is gitignored
+- [ ] Leave `KOOPCACHE_DIR` unset unless you want the download cache off the repo's disk — and if you do set it, use an absolute path. It defaults to `.koopcache` at the repo root, which is gitignored, and every reader that caches — Koordinates layers, clipped extents, DEM tiles, the LINZ elevation catalogue — resolves it through the one function, `landloss.io.koopcache_dir`, so they all share that root. If your `.env` carries `KOOPCACHE_DIR=.koopcache` from an older copy of `.env.example`, you can delete the line; a relative value is anchored to the repo root anyway now
+- [ ] Check you can reach `T:\Auckland\Projects\1017473`. Everything that is not a Koordinates layer comes from there: this project's own derived data, the source material NHC supplied, and the National Liquefaction Model's release tree
+
+  Every one of those reads is mirrored into a local cache and refreshed only when
+  the copy on `T:` has changed, so the first read of a file is slow and the rest
+  do not touch the network at all. The two caches are `.koopcache` and
+  `.tdrivecache` at the repo root, both gitignored; set `KOOPCACHE_DIR` or
+  `TTDRIVE_SYNC_CACHE_DIR` in `.env` only if you want them somewhere else
 - [ ] Check `uv run --frozen pytest` and `uv run --frozen prek -a` both pass before you change anything
 
 ### MCP Servers to Activate
@@ -127,6 +134,42 @@ in `AGENTS.md` or nobody — including Claude — will read them.
 folder. Add entries; never renumber or rewrite existing ones, because other
 documents cite the IDs. The workbook owns the Status column, so anything you tick
 off in Excel survives the next append.
+
+**Read `T:` through `tdrive_sync`, never with a bare path.** Opening a `T:` path
+directly works right up until you are on a train, and it hits the network on
+every run. Each helper mirrors the file into the local cache and refreshes it
+only when `T:` has a newer one; which helper you want depends on whose data it
+is:
+
+- `ts.local_read` / `ts.get_path` — data this project derives and writes itself,
+  under the `BASE_DIR`/`DATA_VERSION` in `tdrive_sync_config.py`
+- `ts.get_source_mat` — data someone else supplied to us, under
+  `SOURCE_MATERIAL_DIR`. `landloss.io.source_material` wraps it for rasters
+- `ts.get_cached` — any other absolute `T:` path, for a tree that has no reason
+  to go through `tdrive_sync_config.py` at all. Read-only, no save side, no
+  local-only working mode. This is the newest of the three
+
+**The National Liquefaction Model releases are cached the same way now.** The NLM
+publishes to its own tree at
+`T:\Auckland\Projects\1017473\WorkingMaterial\new_versioned_releases`, one level
+above this project's folder because every subproject under 1017473 shares it.
+`landloss.io.nlm` reads it through `ts.get_cached`, so ask it for the grid —
+`get_nlm_scenario_raster`, or `nlm_release_path` if you want the file rather than
+the data — instead of opening a path under `new_versioned_releases` yourself.
+
+**There is one NLM release pin, and it is an enum.** `CORE_NLM_VERSION` in
+`landloss.domain.constants` is the release this whole study reads the NLM at —
+the scenario grids, the mapped land damage observations, everything. Bump it and
+the study follows; there is deliberately no second pin per sub-tree, because two
+of them drift and you end up reading one release's hazard against another's
+observations without noticing.
+
+The releases themselves are the `NlmRelease` enum next to it. Pick a member
+rather than typing a folder name: they are punctuated inconsistently
+(`v2025p0_rc4` has an underscore, `v2026p0rc4` does not), and a mistyped release
+is a `FileNotFoundError` three directories deep. If a reader genuinely has to
+stay on an older release — a file the NLM did not carry forward — name the enum
+member at the point of use, where it is visible, rather than adding a constant.
 
 **Never hardcode your username in a path.** The project outputs live in a shared
 OneDrive folder, so write `$env:USERPROFILE` (or `Path.home()` in Python). A path

@@ -584,5 +584,23 @@
       "Source": "Land value model planning 2026-09-17",
       "Status": "Parked"
     }
+  ],
+  "Questions": [
+    {
+      "ID": "Q-01",
+      "Question": "Can a single property carry more than one land damage claim? A single claim cannot mix settling on market value with settling on repair cost, but whether a property can hold several claims that each make their own election is unknown.",
+      "Asked of": "John Leeves / NHC",
+      "Answer": "",
+      "Source": "Wgtn Land Model follow-up 2026-09-22",
+      "Status": "Open"
+    },
+    {
+      "ID": "Q-02",
+      "Question": "How do the sub-caps interact where a property carries more than one of them, and how does the total cap sit over them? The sub-caps themselves are known: $25k for bridges and culverts, and $50k per dwelling for retaining walls, both plus GST.",
+      "Asked of": "John Leeves / NHC",
+      "Answer": "",
+      "Source": "Wgtn Land Model follow-up 2026-09-22",
+      "Status": "Open"
+    }
   ]
 }

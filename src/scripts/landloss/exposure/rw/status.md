@@ -16,9 +16,12 @@ Intended, not implemented.
   so each cell can carry a curve from
   `.agents/context/retaining-wall-fragility.md`.
 - Carry **two damage states only: no damage, and replace.** A wall either
-  survives or is written off, which is how the policy settles it — on
-  replacement value up to the sub-cap. The initial state class is a separate
-  axis and is not a damage state.
+  survives or is written off. Repair is not modelled because very few damaged
+  walls are repaired in practice, so the third state would carry almost nothing.
+  The initial state class is a separate axis and is not a damage state.
+- Settle a replaced wall against the **$50,000 per dwelling** sub-cap, plus GST.
+  The cap is per dwelling rather than per wall, so a property with several walls
+  and one dwelling shares one cap.
 - Size the three subclasses by what the costing can tell apart rather than by
   engineering interest. Above the cap the settlement stops depending on height,
   so a three metre and a six metre wall cost the same to settle and do not need
@@ -36,6 +39,17 @@ Intended, not implemented.
 - Treat the **remote sensing detection as a pilot** rather than a primary
   source. Dense vegetation obscures walls in exactly the suburbs of interest and
   the detection rate is itself unknown (**L-05**).
+
+
+## Beta build
+
+A first end-to-end run is being assembled that produces the right data
+structures rather than the right numbers; see
+`.agents/plans/beta-build.md` for the whole chain.
+
+The retaining wall exposure the chain expects is **lines**, one per wall, keyed
+to `claim_id` and carrying `size_class` and `initial_condition`. That is the
+structure the beta has to emit however the population is produced.
 
 ## Where it is now
 

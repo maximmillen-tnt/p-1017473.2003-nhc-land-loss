@@ -11,9 +11,13 @@
   event they hold — `CESSept` is Darfield, `CESFeb` is February 2011, `CHCH16` is
   February 2016 — so `EVENTS` is the record of that mapping.
 - The National Liquefaction Model release the observations are read from is
-  pinned as `NLM_OBS_VERSION` in `src/landloss/domain/constants.py`. It is
-  deliberately older than `NLM_VERSION`: the observations are survey data and do
-  not change when the model is re-run.
+  `CORE_NLM_VERSION` in `src/landloss/domain/constants.py`, the single pin every
+  part of this study reads the NLM at. The releases themselves are listed in the
+  `NlmRelease` enum beside it; if a release ever ships without the buffered
+  observations — they are survey data that does not change when the model is
+  re-run, so they are not necessarily carried forward — `OBS_DIR` in
+  `gen_observed_damage_db.py` names the member that has them, rather than a
+  second project-wide constant being reintroduced.
 - The loss records are read from the GeoPackage written by
   `../../static_data_gen/gen_ces_loss_data.py`, not from NHC's source CSV, so
   that script runs first. The GeoPackage is fetched from T:'s SourceMaterial

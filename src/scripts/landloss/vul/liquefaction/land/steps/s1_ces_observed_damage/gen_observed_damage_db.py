@@ -46,14 +46,20 @@ from landloss.io import versioned_store
 # fetched from T:'s SourceMaterial via tdrive_sync.get_source_mat (see main()).
 LOSS_MAT_PATH = "CHC-loss-data-from-NHC/ces_loss_data_with_geometry.gpkg"
 
-# The National Liquefaction Model's versioned core releases. The observations
-# come from NLM_OBS_VERSION rather than the current release -- see the comments
-# on it in landloss.domain.constants.
+# The National Liquefaction Model's versioned core releases. The observations are
+# read at constants.CORE_NLM_VERSION, the one release this study pins the NLM at.
+# If a release ever ships without the buffered observations -- they are survey
+# data that does not change when the model is re-run, so they are not necessarily
+# carried forward -- name the release that has them here, as a member of
+# constants.NlmRelease, rather than reintroducing a second project-wide pin.
 NLM_CORE_DIR = Path(
     r"T:\Auckland\Projects\1017473\WorkingMaterial\new_versioned_releases\core"
 )
 OBS_DIR = (
-    NLM_CORE_DIR / constants.NLM_OBS_VERSION / "fragility" / "event_obs_buffered_no_map"
+    NLM_CORE_DIR
+    / constants.CORE_NLM_VERSION
+    / "fragility"
+    / "event_obs_buffered_no_map"
 )
 
 # Where the database is written: this project's own versioned data store
@@ -474,7 +480,7 @@ def describe(database):
 def main():
     loss_fp = ts.get_source_mat(LOSS_MAT_PATH)
 
-    print(f"Observations : {constants.NLM_OBS_VERSION}")
+    print(f"NLM release  : {constants.CORE_NLM_VERSION}")
     print(f"Mask         : {CHCH_FLAT_ONLY.name}")
     print(RULE)
 

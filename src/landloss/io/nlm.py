@@ -5,10 +5,12 @@ The NLM publishes its releases to
 one level above this project's own ``1017473.2003`` folder, because it is
 shared across every subproject that reads from it rather than owned or
 versioned by this study. This is therefore a different tree from
-``tdrive_sync_config.py``'s ``BASE_DIR``, and from ``NLM_VERSION``/
-``NLM_OBS_VERSION`` in ``landloss.domain.constants``, which pin the release
-this study's own hazard/exposure/vul steps read from -- ``CORE_NLM_VERSION``
-below is a separate pin for the scenario grids read here.
+``tdrive_sync_config.py``'s ``BASE_DIR``, which holds the data this project
+derives and writes out itself.
+
+Which release is read is ``CORE_NLM_VERSION`` in ``landloss.domain.constants``,
+the single pin every part of this study reads the NLM at -- the scenario grids
+here, and the hazard, exposure and vul steps alike.
 
 Reads are read-only and cached locally through ``tdrive_sync.get_cached``, the
 same "fetch once from T:, then read the local copy" behaviour
@@ -23,6 +25,7 @@ import rioxarray
 import xarray as xr
 
 import tdrive_sync
+from landloss.domain.constants import CORE_NLM_VERSION
 
 # The root of the NLM's own release tree, shared across every subproject under
 # 1017473. Not to be confused with this project's own versioned data store
@@ -30,10 +33,6 @@ import tdrive_sync
 NLM_RELEASES_DIR = Path(
     r"T:\Auckland\Projects\1017473\WorkingMaterial\new_versioned_releases"
 )
-
-# The NLM core release the scenario grids below are read from. Bump this when
-# the NLM turns a release over; nothing else here has to change.
-CORE_NLM_VERSION = "v2026p0rc6"
 
 
 def nlm_release_path(relative_path: str | Path, *, copy_to_local: bool = True) -> Path:

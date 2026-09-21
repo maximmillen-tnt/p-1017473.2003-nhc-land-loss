@@ -13,13 +13,12 @@ Requires TNT_KOORDINATES_API_KEY and LINZ_API_KEY in .env.
 """
 
 import argparse
-import os
 import time
-from pathlib import Path
 
 import requests
 
 from landloss.domain import constants
+from landloss.io import koopcache_dir
 from landloss.io.area_of_interest import SMALL_WLG_PILOT, WGS84
 from landloss.io.readers import get_koordinates_layer_extent
 
@@ -43,7 +42,7 @@ def describe_extent():
 def describe_cache():
     """Print where layers and clipped extents are cached, and how big that is."""
     print(RULE)
-    root = Path(os.environ.get("KOOPCACHE_DIR", ".koopcache"))
+    root = koopcache_dir(create=False)
     print(f"Cache directory: {root.resolve()}")
 
     if not root.exists():

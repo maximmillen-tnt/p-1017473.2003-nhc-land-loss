@@ -51,9 +51,21 @@ SHEETS: dict[str, list[str]] = {
         "Status",
         "Updated",
     ],
+    # Questions nobody on the team can answer yet. Distinct from a task: a task
+    # has someone who can go and do it, whereas a question is waiting on an
+    # answer that has to come from outside, usually from NHC.
+    "Questions": [
+        "ID",
+        "Question",
+        "Asked of",
+        "Answer",
+        "Source",
+        "Status",
+        "Updated",
+    ],
 }
 
-ID_PREFIXES = {"Tasks": "T", "Limitations": "L", "Improvements": "I"}
+ID_PREFIXES = {"Tasks": "T", "Limitations": "L", "Improvements": "I", "Questions": "Q"}
 
 # Each sheet closes out differently: a task gets done, a limitation gets mitigated
 # or is accepted as a permanent caveat, an improvement gets scheduled or dropped.
@@ -61,12 +73,21 @@ STATUSES = {
     "Tasks": ("Open", "In progress", "Done", "Dropped"),
     "Limitations": ("Open", "Mitigated", "Accepted", "Dropped"),
     "Improvements": ("Parked", "Scheduled", "Done", "Dropped"),
+    "Questions": ("Open", "Asked", "Answered", "Dropped"),
 }
 
-CLOSED_STATUSES = {"Done", "Dropped", "Mitigated", "Accepted"}
+CLOSED_STATUSES = {"Done", "Dropped", "Mitigated", "Accepted", "Answered"}
 
 # Wide enough to read a sentence without wrapping the whole sheet.
-WIDE_COLUMNS = {"Task", "Limitation", "Improvement", "Rationale", "Affects"}
+WIDE_COLUMNS = {
+    "Task",
+    "Limitation",
+    "Improvement",
+    "Rationale",
+    "Affects",
+    "Question",
+    "Answer",
+}
 WIDE_WIDTH = 70
 NARROW_WIDTH = 14
 

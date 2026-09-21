@@ -37,6 +37,18 @@ Intended, not implemented.
 - [ ] Settle each claim at the lower of repair cost and insured land value, so land
   that costs more to repair than it is worth is written off rather than repaired.
 
+
+## Beta build
+
+The damage measure for landslide on land is **geometric, not a damage state**:
+intersect the hazard module's evacuated and inundated polygons with the insured
+land polygon and keep **the two areas separately**, each carrying the depth of
+its parent landslide. Those areas are what the repair cost is computed from.
+
+Inundated polygons can overlap one another today, so this intersect has to
+dissolve or otherwise resolve them before summing area, or a property under two
+landslides is charged twice. See `.agents/plans/beta-build.md`.
+
 ## Where it is now
 
 Nothing is implemented. This file is the only thing in the folder. The rate

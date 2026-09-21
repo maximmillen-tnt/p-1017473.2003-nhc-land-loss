@@ -65,18 +65,39 @@ claim as a whole:
   value per square metre.
 - **On repair** — the cost of bringing the land back to its original state.
 
-Sub-caps apply, and there may be a total cap as well. **The two routes cannot be
-mixed within a single claim**: a claimant cannot have part of the damage
-repaired and then settle the evacuated land on value. The model has to make the
-election per claim rather than per piece of damage.
+**The two routes cannot be mixed within a single claim**: a claimant cannot have
+part of the damage repaired and then settle the evacuated land on value. The
+model has to make the election per claim rather than per piece of damage.
+Whether one property can carry *several* claims, each making its own election,
+is not known (**Q-01**).
+
+### The caps
+
+| What | Sub-cap |
+| --- | --- |
+| Bridges and culverts | $25,000 |
+| Retaining walls | $50,000 per dwelling on the property |
+
+**Both are exclusive of GST, so GST has to be added to them.** Note the
+retaining wall cap is per dwelling rather than per wall, so a property with
+several walls and one dwelling shares one cap.
+
+The **total cap** over the sub-caps should be carried as a variable of the
+study rather than a fixed number, since it is one of the policy settings under
+test. How the sub-caps interact where a property carries more than one is not
+known (**Q-02**).
+
+`nhi-act-land-cover-explainer.md` carries the fuller picture and came from
+Bridget Attwood at NHC, so it can be treated as the authoritative account
+rather than as working understanding.
 
 ### Evacuated and inundated land are both damaged land
 
 When land moves downslope it leaves **evacuated** land where it came from and
-creates **inundated** land where it comes to rest. Both count: the damaged area
-is the **total footprint** of the two together, not one or the other. Perrie
-Gilbert, who has settled claims of this kind, confirmed the distinction on the
-call.
+creates **inundated** land where it comes to rest. Both count, and the damaged
+area is the **total footprint** of the two — meaning the union of the two
+polygons, not the sum of two areas calculated independently. Where the
+evacuated and inundated areas overlap, that ground is counted once.
 
 Repair cost for inundated land is represented by two rates per square metre —
 one for volumes a shovel and a truck can clear, one for volumes needing an
@@ -84,8 +105,10 @@ excavator — varied by whether the site has access (**L-28**). For the largest
 landslides the cost is expected to be over the cap regardless, so the precision
 stops mattering.
 
-**Imminent risk** was raised and left unresolved: whether land at imminent risk
-of failure is claimable, and how it would be represented, is open (**T-35**).
+**Imminent risk is claimable**, and like the total cap it should be carried as a
+variable of the study rather than as a fixed rule. How it is represented is
+still being worked through (**T-35**).
+
 The settlement logic as a whole is to be written out as pseudo-logic and run
 past John Leeves (**T-34**).
 

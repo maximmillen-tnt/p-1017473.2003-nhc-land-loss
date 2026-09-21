@@ -158,17 +158,23 @@ resolve anything that lives on T: or in the versioned data store. A script's
 behaviour should be determined entirely by reading its source, not by
 undocumented flags a caller might pass.
 
+Settings that do change between runs — an extent, a seed, whether to reuse a
+cache — go in a `config.py` beside the scripts, read in the
+`if __name__ == "__main__":` block and passed into `main()` as keyword
+arguments. `main()` holds no defaults of its own, and every script in the step
+reads the same `config.py`. See section 2a of the `adding-steps-scripts` skill.
+
 Do not guard against missing files or an unmapped T: drive with manual
 `try`/`except`/`path.exists()` checks that print a friendly message and
 `return 1`. Let the natural exception (`FileNotFoundError`, `ValueError`,
 etc.) propagate — its traceback already says what went wrong.
 
 `main()` should not return a status code, and the `if __name__ == "__main__":`
-block should just be:
+block should do nothing but read `config.py` and call it:
 
 ```python
 if __name__ == "__main__":
-    main()
+    main(pilot=config.PILOT, seed=config.SEED)
 ```
 
 Do not add a `status = main(); if status: raise SystemExit(status)` dance.

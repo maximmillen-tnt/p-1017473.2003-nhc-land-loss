@@ -23,6 +23,9 @@ Intended, not implemented.
 - **Sample** the structure per realisation rather than carrying an expected
   value, under a **fixed random seed** so a run reproduces. Sampling matches
   the Monte Carlo realisations the landslide module produces.
+- Carry **two damage states: no damage, and replace**, the same pair the
+  retaining walls use, and settle a replacement against the **$25,000** sub-cap
+  plus GST.
 - Read the rivers from **both LINZ pilot layers** — the name lines
   ([103632](https://data.linz.govt.nz/layer/103632-nz-river-name-lines-pilot/))
   and the name polygons
@@ -36,6 +39,17 @@ Intended, not implemented.
 
 The insured accessway is the driveway component of the insured land extent built
 in `../land/`, so this module cannot run before that one does.
+
+
+## Beta build
+
+A first end-to-end run is being assembled that produces the right data
+structures rather than the right numbers; see
+`.agents/plans/beta-build.md` for the whole chain.
+
+The culvert and bridge exposure the chain expects is **lines**, one per
+structure, keyed to `claim_id` and carrying which structure it is. Culverts and
+bridges share the structure and differ only by that attribute.
 
 ## Where it is now
 

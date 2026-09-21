@@ -1,7 +1,8 @@
 # Step 1 — Canterbury observed land damage: implementation plan
 
 **Status:** Phase 4 not started — neither script has been run against the real
-data yet.
+data yet. The NLM release pin was consolidated onto `CORE_NLM_VERSION`, which
+leaves one open check in phase 1.
 
 ## Why this step exists
 
@@ -24,13 +25,17 @@ property falls inside more than one observation polygon. This step replaces the
 chain with a single join from the loss points straight to the observations,
 over properties masked to flat land.
 
-## Phase 1 — Pin the National Liquefaction Model release (complete)
+## Phase 1 — Pin the National Liquefaction Model release
 
-- [x] `NLM_VERSION` and `NLM_OBS_VERSION` added to
-      `src/landloss/domain/constants.py`, so the release is named once rather
-      than spelled out in every path reaching into its tree.
-- [x] Comment recording why the observation release is deliberately older than
-      the model release.
+- [x] The release named once in `src/landloss/domain/constants.py` rather than
+      spelled out in every path reaching into its tree. Now `CORE_NLM_VERSION`,
+      the single pin the whole study reads the NLM at, chosen from the
+      `NlmRelease` enum of the releases the code has been pointed at.
+- [ ] Confirm the buffered observations exist under `CORE_NLM_VERSION`. They
+      were previously read from an older release, on the grounds that survey data
+      does not change when the model is re-run and so is not necessarily carried
+      forward. If `fragility/event_obs_buffered_no_map` is absent there, point
+      `OBS_DIR` at the `NlmRelease` member that has it.
 
 ## Phase 2 — Join the losses to the observations (complete)
 
@@ -41,10 +46,10 @@ over properties masked to flat land.
 - [x] Mask the properties to flat land (`mask_to_flat_land`, using
       `CHCH_FLAT_ONLY`), so the reach of the database is a named extent rather
       than the coverage of whatever layer the step joins to.
-- [x] Fold each event's observation vocabulary onto the five standard categories
-      (`OBS_HAZ_MAP`, `get_observed_damage`).
-- [x] Join the observations with a worst-category-wins reduction where a
-      property falls inside several polygons (`assign_observed_damage`).
+- [x] Resolve each event's observation vocabulary onto the six land damage
+      states (`OBS_HAZ_MAP`, `DAMAGE_STATES`, `get_observed_damage`).
+- [x] Join the observations with a worst-state-wins reduction where a property
+      falls inside several polygons (`assign_observed_damage`).
 - [x] Write `observed_damage_db.parquet`, keeping the geometry.
 
 ## Phase 3 — Draw the figure (complete)

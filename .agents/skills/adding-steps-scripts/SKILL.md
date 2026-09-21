@@ -61,6 +61,7 @@ src/scripts/landloss/exposure/
             __init__.py
             s2_land_value/
                 __init__.py
+                config.py                  # the run settings; see section 2a
                 s2_land_value_implementation_plan.md
                 s2_land_value_method.md
                 s1_build_terrain_attributes.py
@@ -89,10 +90,69 @@ docstring is what a directory listing has to explain itself with, so
 `"""Steps."""` is not enough.
 
 Scripts inside follow the naming prefixes in `AGENTS.md` — `fig_`, `table_`,
-`gen_`, `get_` — and the script pattern in
-`src/scripts/landloss/hazard/liquefaction/report/fig_waterway_map.py`: a module
-docstring carrying the literal run command and any required `.env` keys,
-`argparse` with `description=__doc__`, and `def main()` returning 0 or 1.
+`gen_`, `get_` — and the run settings pattern in section 2a. Each carries a
+module docstring with the literal run command and any required `.env` keys.
+
+## 2a. Run settings live in the step's `config.py`
+
+**A step script takes no command line arguments.** No `argparse`, no other
+parser, no flags. A flag left off the command line is invisible afterwards, and
+a realisation is a result somebody has to be able to account for months later.
+`AGENTS.md` states the prohibition; this section says what to do instead.
+
+Everything that changes between one run and the next goes in a `config.py`
+beside the scripts, read in the `if __name__ == "__main__":` block and passed
+into `main()` as keyword arguments:
+
+```python
+# config.py
+"""Run settings for the landslide realisation step."""
+
+# Whether to run over the small Wellington pilot box rather than the four
+# territorial authorities. Leave this True while the model is being changed.
+PILOT = True
+
+# The random seed, so a realisation reproduces exactly.
+SEED = 1017473
+```
+
+```python
+# s1_simulate_landslides.py
+from scripts.landloss.hazard.landslide.steps.s1_landslide_realisation import config
+
+
+def main(*, pilot, seed):
+    """Draw one realisation of landslides and write it out.
+
+    Args:
+        pilot: Whether to run over the small Wellington pilot box.
+        seed: The random seed, so the realisation reproduces exactly.
+    """
+    ...
+
+
+if __name__ == "__main__":
+    main(pilot=config.PILOT, seed=config.SEED)
+```
+
+Three rules follow, and the value of the pattern is lost if any is skipped.
+
+- **`main()` takes the settings as arguments and holds no defaults of its own.**
+  A default in the signature is a second place the value lives, and the two
+  disagree the first time one is changed.
+- **`main()` returns nothing.** No status code, and no
+  `status = main(); if status: raise SystemExit(status)` dance — that surfaces
+  in the PyCharm console the step is usually run from as a `SystemExit: 0`
+  traceback. Let a genuine failure raise: the traceback says more than a printed
+  message and a `return 1` would.
+- **Every script in the step reads the same `config.py`.** A figure script that
+  rebuilds the output path from its own copy of `PILOT` will one day draw a
+  different extent from the one that was run. Have the script that writes the
+  output expose a small function returning its path, and have the figure call
+  it.
+
+`config.py` is tracked, like the two markdown files: its diff is the record of
+what a given run was configured to do.
 
 Paths out of the repo come from `src/scripts/landloss/paths.py` — `REPORT_DIR`,
 `RESEARCH_DIR`, `TEMP_DIR`, `REPO_ROOT`. Do not resolve the repo root with
@@ -249,7 +309,8 @@ library. A figure script is `fig_`, never `plot_`.
 2. Write `s<n>_<topic>_implementation_plan.md` first, in phases, with every box
    unticked. Writing the phases before the code is what makes the plan worth
    reading later.
-3. Write the scripts, following the naming prefixes and the script pattern.
+3. Write the scripts, following the naming prefixes, and put every run setting
+   in `config.py` beside them rather than in a flag (section 2a).
 4. Write `s<n>_<topic>_method.md` describing what you actually built, with every
    bullet pointing at a script, function, asset or figure, and ending with the
    `Potential future improvements:` line.
@@ -258,7 +319,10 @@ library. A figure script is `fig_`, never `plot_`.
 6. Confirm both markdown files are tracked — no ignore rule covers them, but
    check, because a step documented only in an untracked file is a step
    documented nowhere.
-7. Run `uv run --frozen prek -a`.
+7. Run the hooks. `uv run --frozen prek -a` only reaches files git already knows
+   about, so a brand new step folder is skipped entirely and reports a clean
+   pass over nothing. Either `git add -N` the new files first, or name them:
+   `uv run --frozen prek run --files <path> [<path> ...]`.
 
 ## 8. Checklist: changing an existing step
 

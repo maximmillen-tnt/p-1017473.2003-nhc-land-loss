@@ -1,5 +1,7 @@
 """Constants shared across the landloss modules."""
 
+from enum import StrEnum
+
 # NZGD2000 / New Zealand Transverse Mercator 2000
 DEFAULT_CRS = "EPSG:2193"
 
@@ -68,6 +70,20 @@ GWRC_SEVERITY_RANKS = {
     "5 High": 5,
 }
 
+# The supplied earthquake-induced landslide probability grid, below the
+# project's SourceMaterial folder on T:. Read by
+# landloss.io.source_material.get_eil_landslide_probability; forward slashes so
+# the path reads the same on any platform.
+#
+# One probability of slope failure per cell, on a 25 m grid covering Wellington.
+# Two things about it are taken from the file name rather than from
+# documentation, and both need confirming with the supplier before any number
+# derived from it is quoted: that "PGA2g" names the shaking level the grid is
+# conditioned on, and what that level is in g. Nothing in the code depends on
+# the answer -- the grid is used as supplied -- but the report cannot describe
+# the result without it.
+EIL_PROBABILITY_SOURCE_PATH = "EILProb_Wellington/EILProb_PGA2g.tif"
+
 # The National Liquefaction Model's flatland model, mirrored on the T+T
 # Koordinates instance. This is the flat versus sloping land split the study
 # takes from the NLM rather than rebuilding; the representation is simplified,
@@ -79,18 +95,39 @@ NLM_FLATLAND_LAYER_ID = 120641
 # liquefaction susceptibility the exposure attributes are built from.
 NLM_GEOMORPHOLOGY_LAYER_ID = 121398
 
-# The National Liquefaction Model core release this study reads hazard layers
-# from, under
-# ``T:\Auckland\Projects\1017473\WorkingMaterial\new_versioned_releases\core``.
-# The NLM turns releases over during the life of this study, so the version is
-# named once here and every path that reaches into that tree is built from it.
-NLM_VERSION = "v2026p0rc4"
 
-# The release the buffered land damage observations come from. It is deliberately
-# older than NLM_VERSION: the observations are survey data that does not change
-# when the model is re-run, and they were not carried forward into the newer
-# release. Keep the two separate rather than quietly pinning everything to one.
-NLM_OBS_VERSION = "v2025p0_rc4"
+class NlmRelease(StrEnum):
+    r"""The National Liquefaction Model core releases, as the folders name them.
+
+    The releases live under
+    ``T:\Auckland\Projects\1017473\WorkingMaterial\new_versioned_releases\core``,
+    one directory per member. The folder names are not consistently punctuated --
+    ``v2025p0_rc4`` has an underscore that ``v2026p0rc4`` does not -- which is
+    exactly why they are listed here once rather than retyped into a path.
+
+    A ``StrEnum``, so a member drops straight into a path join or an f-string and
+    reads as the folder name it is.
+
+    Add a member when the NLM publishes a release this study reads; the list is
+    what the code has been pointed at, not everything the NLM has ever cut.
+    """
+
+    V2025P0_RC4 = "v2025p0_rc4"
+    V2026P0_RC4 = "v2026p0rc4"
+    V2026P0_RC6 = "v2026p0rc6"
+
+
+# The National Liquefaction Model release this study reads, named once here so
+# that every path reaching into the NLM's tree is built from it. The NLM turns
+# releases over during the life of this study, and bumping this is how the study
+# follows: there is one pin rather than one per sub-tree, so hazard layers,
+# scenario grids and mapped observations cannot silently drift onto different
+# releases from one another.
+#
+# A reader that genuinely has to stay on an older release names the member
+# instead -- ``NlmRelease.V2025P0_RC4`` -- so that it is visible at the point of
+# use rather than hidden in a second constant.
+CORE_NLM_VERSION = NlmRelease.V2026P0_RC6
 
 # The cell size the study works at when deriving terrain attributes, in metres.
 # The LINZ LiDAR is 1 m, but the study area is 59 by 54 km: at 1 m that is about

@@ -26,15 +26,9 @@ from shapely import box, make_valid
 from ttpy.gis.koop import KoordinatesConnection, get_latest_layer
 
 from landloss.domain import constants
-from landloss.io import REPO_ROOT
+from landloss.io import koopcache_dir
 
 dotenv.load_dotenv()
-
-# Anchored to the repo root, not the current working directory -- a bare
-# relative ".koopcache" would land wherever a script happened to be run from
-# (e.g. an IDE run configuration's working directory) instead of one shared
-# cache.
-DEFAULT_CACHE_DIR = REPO_ROOT / ".koopcache"
 
 
 def resolve_api_key(domain: str) -> str:
@@ -70,10 +64,7 @@ def resolve_api_key(domain: str) -> str:
 
 def extent_cache_dir() -> Path:
     """Return the directory clipped extents are cached in, creating it if needed."""
-    root = Path(os.environ.get("KOOPCACHE_DIR", DEFAULT_CACHE_DIR))
-    cache_dir = root / "extents"
-    cache_dir.mkdir(parents=True, exist_ok=True)
-    return cache_dir
+    return koopcache_dir("extents")
 
 
 def extent_cache_path(
@@ -414,9 +405,7 @@ def dem_cache_path(
     """
     key = f"{bbox}|{resolution}|{crs}"
     digest = hashlib.sha256(key.encode()).hexdigest()[:16]
-    cache_dir = Path(os.environ.get("KOOPCACHE_DIR", DEFAULT_CACHE_DIR)) / "dem"
-    cache_dir.mkdir(parents=True, exist_ok=True)
-    return cache_dir / f"dem_{resolution}m_{digest}.tif"
+    return koopcache_dir("dem") / f"dem_{resolution}m_{digest}.tif"
 
 
 def get_dem(

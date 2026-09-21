@@ -28,6 +28,20 @@ held as the alternative to TS1170.5. That route is parked: the demand comes from
 TS1170.5. It would produce the same PGA and PGV layers from the same
 V<sub>s</sub>30 input, so it stays reinstatable if the decision is revisited.
 
+
+## Beta build
+
+A first end-to-end run is being assembled that produces the right data
+structures rather than the right numbers; see
+`.agents/plans/beta-build.md` for the whole chain.
+
+The shaking beta reads the **NLM TS1170.5 PGA raster directly**: no Vs30, no
+site class, and no port of `gen_pga_layer`. Realisations come from a **10%
+coefficient of variation** on PGA. **PGV is not produced** — it may be dropped
+from the study, so nothing downstream should depend on it yet.
+
+The output structure is a raster of PGA in g, one per realisation.
+
 ## Where it is now
 
 Nothing is implemented here. The folder holds this file and `__init__.py`, and

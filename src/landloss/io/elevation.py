@@ -22,7 +22,6 @@ any workable time.
 """
 
 import json
-import os
 import re
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -34,7 +33,7 @@ import requests
 from pyproj import Transformer
 
 from landloss.domain import constants
-from landloss.io import REPO_ROOT
+from landloss.io import koopcache_dir
 
 ELEVATION_CATALOG_URL = (
     "https://nz-elevation.s3-ap-southeast-2.amazonaws.com/catalog.json"
@@ -45,9 +44,6 @@ ELEVATION_CATALOG_URL = (
 # and rooftops into a terrain section.
 DEM_PATH_MARKER = "/dem_1m/"
 
-# Anchored to the repo root, not the current working directory -- see the
-# matching comment in readers.py.
-DEFAULT_CACHE_DIR = REPO_ROOT / ".koopcache"
 CACHE_SUBDIR = "nz-elevation"
 
 # Enough threads to hide the latency of many small S3 reads without being
@@ -59,10 +55,7 @@ _YEAR = re.compile(r"(\d{4})(?:-(\d{4}))?")
 
 def cache_dir() -> Path:
     """Return the directory catalogue JSON is cached in, creating it if needed."""
-    root = Path(os.environ.get("KOOPCACHE_DIR", DEFAULT_CACHE_DIR))
-    path = root / CACHE_SUBDIR
-    path.mkdir(parents=True, exist_ok=True)
-    return path
+    return koopcache_dir(CACHE_SUBDIR)
 
 
 def _cache_path(url: str) -> Path:

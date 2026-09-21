@@ -22,6 +22,25 @@ Beyond the prototype:
 - [ ] Switch the National Liquefaction Model (NLM) output to LD categories 1–6.
 - [ ] Refine the LS buffer zones.
 
+
+## Beta build
+
+A first end-to-end run is being assembled that produces the right data
+structures rather than the right numbers; see
+`.agents/plans/beta-build.md` for the whole chain.
+
+The liquefaction beta replaces the lateral spreading work entirely with two
+steps, and still ends at the structure the full version produces:
+
+- [ ] `gen_liq_ld_probabilities` — read the current NLM 2500-year probability
+      layer, which carries Moderate and Major only, and expand it to all six
+      land damage states by subdividing those masses.
+- [ ] `gen_liq_ld_states` — draw a state per cell and write one raster of
+      `ld_state` per realisation. One realisation for the beta.
+
+No river buffers, no LS zone modifier. Output is a raster of `ld_state` values
+1 to 6, which is what the full version emits too.
+
 ## Where it is now
 
 - The NLM output in hand is built on **draft** TS1170.5, not the published

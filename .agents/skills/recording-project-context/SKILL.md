@@ -24,6 +24,10 @@ Work through the source once and sort what it contains into five buckets:
   approach. These are the things that will need to be disclosed in the report.
 - **Improvements** — things worth doing that are likely out of scope for the
   current engagement.
+- **Questions** — something nobody on the team can answer yet. The distinction
+  from a task is who can act: a task has someone who can go and do it, whereas a
+  question is waiting on an answer that has to come from outside, usually from
+  NHC. Do not file a question as a task with an owner who cannot answer it.
 - **Refinements** — new clarity on what the project is trying to do, or on a scope
   item that was previously vague.
 - **General context** — background on a topic that will be referred to repeatedly
@@ -54,6 +58,11 @@ The workbook has three sheets, each with fixed columns:
 | `Tasks` | ID, Task, Owner, Phase, Source, Status, Updated |
 | `Limitations` | ID, Limitation, Affects, Source, Status, Updated |
 | `Improvements` | ID, Improvement, Rationale, Phase, Source, Status, Updated |
+| `Questions` | ID, Question, Asked of, Answer, Source, Status, Updated |
+
+A question carries the `Answer` column so the reply lands beside what was asked
+rather than in a transcript nobody reopens. Fill it in when the answer arrives
+and set the status to `Answered`.
 
 ### The register is append-only
 
@@ -86,6 +95,7 @@ and greys out a row once it reaches a closing status.
 | `Tasks` | `Open`, `In progress`, `Done`, `Dropped` |
 | `Limitations` | `Open`, `Mitigated`, `Accepted`, `Dropped` |
 | `Improvements` | `Parked`, `Scheduled`, `Done`, `Dropped` |
+| `Questions` | `Open`, `Asked`, `Answered`, `Dropped` |
 
 `Accepted` means a limitation is a permanent caveat to disclose in the report
 rather than something anyone intends to fix. Setting a status also stamps the
@@ -99,6 +109,11 @@ says it is done, or when the session itself produced the evidence that it is.
 - A task is **one sentence**, written as an instruction with a verb — "Confirm the
   seismic demand return period with NHC", not "Seismic demand".
 - A limitation or improvement is **one to two sentences**, no more.
+- Every question names who it is **Asked of**, and an answer is attributed to
+  whoever actually gave it. An answer relayed by a colleague is not the same as
+  one from the person with the authority, and the `Source` has to say which it
+  was — a working answer recorded as an authoritative one is how a wrong
+  assumption gets built on.
 - Every task has an **Owner**. Use the person's name as it appears in the source.
   If the source genuinely does not say, write `Unassigned` rather than guessing —
   an owner invented here becomes an owner someone is chased about later.
@@ -108,7 +123,7 @@ says it is done, or when the session itself produced the evidence that it is.
   transcript date, or the context filename. With several transcripts in the
   register this is the only way to tell which meeting produced a row, so it is not
   optional.
-- IDs are stable: `T-01`, `L-01`, `I-01`, and so on. Never reuse or renumber one —
+- IDs are stable: `T-01`, `L-01`, `I-01`, `Q-01`, and so on. Never reuse or renumber one —
   other documents may cite them. Omit the ID and the script allocates the next in
   sequence, which is safer than counting rows by hand.
 

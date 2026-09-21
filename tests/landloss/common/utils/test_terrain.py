@@ -16,8 +16,12 @@ import xarray as xr
 from shapely.geometry import Point
 
 from landloss.common.utils.terrain import (
+    DOWNHILL_AZIMUTH_NAME,
     SLOPE_NAME,
     TOPOGRAPHIC_POSITION_NAME,
+    azimuth_offsets,
+    cell_size,
+    downhill_azimuth_degrees,
     sample_at_points,
     slope_degrees,
     topographic_position,
@@ -188,6 +192,176 @@ def test_a_non_positive_cell_size_is_rejected() -> None:
 
     with pytest.raises(ValueError, match="positive"):
         slope_degrees(dem, resolution=0.0)
+
+
+# --- downhill direction -------------------------------------------------------
+#
+# Every claim below is about a hillside whose downhill direction anybody can
+# point at. That is the whole risk in this function: an azimuth of 253 degrees
+# looks equally plausible whether or not the y axis was read the right way up,
+# and only a slope whose answer is known in advance catches the mistake.
+
+
+def test_ground_that_rises_to_the_east_runs_downhill_to_the_west() -> None:
+    """A bearing is clockwise from north, so due west is 270 and nothing else."""
+    dem = make_dem(ramp(7, rise_per_cell=5.0, axis=1, sign=1))
+
+    azimuth = downhill_azimuth_degrees(dem, resolution=10.0)
+
+    assert interior(azimuth) == pytest.approx(270.0)
+
+
+def test_ground_that_rises_to_the_south_runs_downhill_to_the_north() -> None:
+    """The one that fails if the array's rows are mistaken for map north."""
+    # Row index increases southwards on a north-up raster, so a ramp rising with
+    # the row index rises to the south.
+    dem = make_dem(ramp(7, rise_per_cell=5.0, axis=0, sign=1))
+
+    azimuth = downhill_azimuth_degrees(dem, resolution=10.0)
+
+    assert interior(azimuth) == pytest.approx(0.0)
+
+
+def test_ground_that_falls_to_the_south_runs_downhill_to_the_south() -> None:
+    """The mirror of the last one: the two together pin the sign of the y axis."""
+    dem = make_dem(ramp(7, rise_per_cell=5.0, axis=0, sign=-1))
+
+    azimuth = downhill_azimuth_degrees(dem, resolution=10.0)
+
+    assert interior(azimuth) == pytest.approx(180.0)
+
+
+def test_a_hillside_rising_to_the_north_east_runs_downhill_to_the_south_west() -> None:
+    """A diagonal catches a bearing measured anticlockwise, which the axes do not."""
+    dem = make_dem(
+        ramp(7, rise_per_cell=5.0, axis=1, sign=1)
+        + ramp(7, rise_per_cell=5.0, axis=0, sign=-1)
+    )
+
+    azimuth = downhill_azimuth_degrees(dem, resolution=10.0)
+
+    assert interior(azimuth) == pytest.approx(225.0)
+
+
+def test_a_raster_stored_the_other_way_up_describes_the_same_hillside() -> None:
+    """The direction is read off the coordinates, so the storage order cannot matter."""
+    elevation = ramp(7, rise_per_cell=5.0, axis=0, sign=1)
+    north_up = make_dem(elevation)
+
+    # The same ground, written south-up: rows reversed, and y ascending to match.
+    south_up = xr.DataArray(
+        elevation[::-1],
+        dims=("y", "x"),
+        coords={
+            "y": north_up["y"].to_numpy()[::-1],
+            "x": north_up["x"].to_numpy(),
+        },
+    ).rio.write_crs(constants.DEFAULT_CRS)
+
+    assert interior(
+        downhill_azimuth_degrees(south_up, resolution=10.0)
+    ) == pytest.approx(interior(downhill_azimuth_degrees(north_up, resolution=10.0)))
+
+
+def test_level_ground_has_no_downhill_direction_at_all() -> None:
+    """Reporting one would send debris off in whatever direction rounding chose."""
+    dem = make_dem(np.full((7, 7), 42.0))
+
+    azimuth = downhill_azimuth_degrees(dem, resolution=10.0)
+
+    assert np.isnan(interior(azimuth)).all()
+
+
+def test_every_bearing_is_a_bearing() -> None:
+    """Anything outside [0, 360) is not a compass direction, whatever it means."""
+    rng = np.random.default_rng(seed=1017473)
+    dem = make_dem(rng.normal(loc=150.0, scale=40.0, size=(15, 15)))
+
+    azimuth = interior(downhill_azimuth_degrees(dem, resolution=10.0))
+
+    assert (azimuth >= 0).all()
+    assert (azimuth < 360).all()
+
+
+def test_a_cone_sheds_material_away_from_its_peak_in_every_direction() -> None:
+    """The check a single ramp cannot make: the bearing turns with the hillside."""
+    size = 15
+    dem = make_dem(cone(size, peak_height=100.0))
+    peak = size // 2
+
+    azimuth = downhill_azimuth_degrees(dem, resolution=10.0).to_numpy()
+
+    # Four cells around the peak, each of which can only fall away from it.
+    assert azimuth[peak, peak + 3] == pytest.approx(90.0)
+    assert azimuth[peak, peak - 3] == pytest.approx(270.0)
+    assert azimuth[peak - 3, peak] == pytest.approx(0.0)
+    assert azimuth[peak + 3, peak] == pytest.approx(180.0)
+
+
+def test_the_downhill_raster_keeps_the_grid_and_the_projection() -> None:
+    """It is written out and sampled beside the slope, so it stays georeferenced."""
+    dem = make_dem(ramp(7, rise_per_cell=10.0))
+
+    azimuth = downhill_azimuth_degrees(dem, resolution=10.0)
+
+    assert azimuth.name == DOWNHILL_AZIMUTH_NAME
+    assert azimuth.shape == dem.shape
+    assert azimuth.rio.crs == dem.rio.crs
+
+
+def test_a_dem_whose_coordinates_double_back_is_rejected() -> None:
+    """Coordinates that do not run one way are not a grid, and have no direction."""
+    dem = make_dem(np.zeros((7, 7)))
+    scrambled = dem.assign_coords(x=np.array([0.0, 2.0, 1.0, 3.0, 4.0, 5.0, 6.0]))
+
+    with pytest.raises(ValueError, match="do not run in one direction"):
+        downhill_azimuth_degrees(scrambled, resolution=10.0)
+
+
+# --- bearings and cell sizes --------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("azimuth", "east", "north"),
+    [(0.0, 0.0, 10.0), (90.0, 10.0, 0.0), (180.0, 0.0, -10.0), (270.0, -10.0, 0.0)],
+)
+def test_the_four_cardinal_bearings_move_the_way_a_compass_says(
+    azimuth: float, east: float, north: float
+) -> None:
+    """If these four are right the sines and cosines cannot have been swapped."""
+    eastward, northward = azimuth_offsets(azimuth, 10.0)
+
+    assert float(eastward) == pytest.approx(east, abs=1e-9)
+    assert float(northward) == pytest.approx(north, abs=1e-9)
+
+
+def test_moving_along_a_bearing_covers_the_distance_asked_for() -> None:
+    """The offsets are a decomposition, so their length is the distance itself."""
+    eastward, northward = azimuth_offsets(np.array([37.0, 214.0, 301.0]), 25.0)
+
+    assert np.hypot(eastward, northward) == pytest.approx(25.0)
+
+
+def test_an_unknown_bearing_cannot_move_anything() -> None:
+    """A cell with no downhill direction must not quietly end up displaced due north."""
+    eastward, northward = azimuth_offsets(np.nan, 10.0)
+
+    assert np.isnan(eastward)
+    assert np.isnan(northward)
+
+
+def test_the_cell_size_is_read_off_the_grid_as_a_positive_number() -> None:
+    """The negative y resolution says which way the rows run, not how big a cell is."""
+    assert cell_size(make_dem(np.zeros((5, 5)), resolution=25.0)) == pytest.approx(25.0)
+
+
+def test_a_grid_with_rectangular_cells_is_refused() -> None:
+    """Every derivative here uses one run length, and would mis-measure one axis."""
+    dem = make_dem(np.zeros((5, 5)), resolution=10.0)
+    stretched = dem.assign_coords(x=dem["x"].to_numpy() * 2.0)
+
+    with pytest.raises(ValueError, match="square"):
+        cell_size(stretched)
 
 
 # --- topographic position -----------------------------------------------------
