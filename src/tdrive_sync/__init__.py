@@ -14,6 +14,11 @@ fetching a file from the project's ``SOURCE_MATERIAL_DIR`` (data supplied by
 someone else, e.g. NHC) and caching it locally -- there is no corresponding
 save, and local-only working mode does not apply to it.
 
+``get_cached`` is the same read-only, cache-locally behaviour for an arbitrary
+absolute T: path -- for a caller with its own release tree elsewhere on T:
+(e.g. another project's upstream data) that has no reason to go through
+``tdrive_sync_config.py`` at all.
+
 See the project's README for the full behaviour of each environment
 variable, and ``tdrive_sync_config.py`` for the project-wide settings.
 """
@@ -23,12 +28,19 @@ from typing import Any
 
 from tdrive_sync import _config, _copy, _formats, _paths
 from tdrive_sync._config import SCRATCH_VERSION, TdriveSyncConfigError
-from tdrive_sync._paths import get_base_path, get_local_path, get_path, get_source_mat
+from tdrive_sync._paths import (
+    get_base_path,
+    get_cached,
+    get_local_path,
+    get_path,
+    get_source_mat,
+)
 
 __all__ = [
     "SCRATCH_VERSION",
     "TdriveSyncConfigError",
     "get_base_path",
+    "get_cached",
     "get_local_path",
     "get_path",
     "get_source_mat",

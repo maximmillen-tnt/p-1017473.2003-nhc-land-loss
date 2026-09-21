@@ -82,6 +82,15 @@ which fetches the file from `T:` and caches it locally the same way
 checks `T:` for a fresher copy, since there is no local, disposable stand-in
 for someone else's source data.
 
+### `get_cached`: reading from any other absolute T: path
+
+For a caller with its own absolute path elsewhere on `T:` — outside both
+`BASE_DIR`/`DATA_VERSION` and `SOURCE_MATERIAL_DIR`, e.g. another project's own
+release tree — `ts.get_cached(path)` gives the same read-only, cache-locally,
+no-local-mode behaviour as `get_source_mat`, without needing that path to sit
+under anything configured in `tdrive_sync_config.py` at all. `landloss.io.nlm`
+uses it to read the National Liquefaction Model's own scenario releases.
+
 ## Other Development Tasks
 
 ### Adding a dependency (or regenerating the requirements files.)

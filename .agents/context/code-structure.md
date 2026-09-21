@@ -263,6 +263,16 @@ This is separate from the NLM's own *upstream* release directory
 repo only reads from — `versioned_store` is for data this project derives and
 writes out itself.
 
+`src/landloss/io/nlm.py` reads that upstream release tree
+(`T:\Auckland\Projects\1017473\WorkingMaterial\new_versioned_releases`, one
+level above this project's own folder, shared across every subproject) through
+`ts.get_cached`, a generic tdrive_sync helper for caching an arbitrary absolute
+T: path locally with no `DATA_VERSION`/`SOURCE_MATERIAL_DIR` concept attached —
+the same read-only, no-save, no-local-mode contract as `get_source_mat`.
+`CORE_NLM_VERSION` there pins the scenario release its readers use, kept apart
+from `NLM_VERSION`/`NLM_OBS_VERSION` since it names a different sub-tree
+(`scenario/` rather than `fragility/`).
+
 ## Causes of financial land loss
 
 These are the distinct causes the model has to represent. They are not

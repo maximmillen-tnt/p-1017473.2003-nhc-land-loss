@@ -224,3 +224,33 @@ def get_source_mat(relative_path: str | Path, *, copy_to_local: bool = True) -> 
     return _resolve_cached_path(
         base_path=base_path, local_path=local_path, copy_to_local=copy_to_local
     )
+
+
+def get_cached(path: Path, *, copy_to_local: bool = True) -> Path:
+    """Resolve an arbitrary T: path against its local cache mirror.
+
+    For a caller with its own absolute T: path -- outside both the
+    DATA_VERSION store and SOURCE_MATERIAL_DIR, e.g. another project's own
+    versioned release tree -- that wants the same "local cache mirrors T:,
+    refresh if stale" behaviour as ``get_path`` and ``get_source_mat``,
+    without adding another concept to ``tdrive_sync_config.py``. Like
+    ``get_source_mat``, there is no save side and no local-only working mode
+    fallback: this only ever fetches from T: and caches locally.
+
+    Args:
+        path: The absolute path to read, anywhere on T:.
+        copy_to_local: Whether to refresh the local cache from T: when it is
+            missing or stale.
+
+    Returns:
+        The resolved path: the local cache copy if it exists (and, if
+        ``copy_to_local``, is now up to date), otherwise ``path`` itself.
+
+    Raises:
+        ValueError: If the file exists at neither location.
+    """
+    settings = _config.load_local_mode_settings()
+    local_path = _cache_root(settings) / _relative_base_dir(path)
+    return _resolve_cached_path(
+        base_path=path, local_path=local_path, copy_to_local=copy_to_local
+    )

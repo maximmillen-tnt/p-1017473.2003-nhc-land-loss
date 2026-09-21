@@ -1,0 +1,91 @@
+r"""Readers for the National Liquefaction Model's own versioned release tree.
+
+The NLM publishes its releases to
+``T:\\Auckland\\Projects\\1017473\\WorkingMaterial\\new_versioned_releases`` --
+one level above this project's own ``1017473.2003`` folder, because it is
+shared across every subproject that reads from it rather than owned or
+versioned by this study. This is therefore a different tree from
+``tdrive_sync_config.py``'s ``BASE_DIR``, and from ``NLM_VERSION``/
+``NLM_OBS_VERSION`` in ``landloss.domain.constants``, which pin the release
+this study's own hazard/exposure/vul steps read from -- ``CORE_NLM_VERSION``
+below is a separate pin for the scenario grids read here.
+
+Reads are read-only and cached locally through ``tdrive_sync.get_cached``, the
+same "fetch once from T:, then read the local copy" behaviour
+``landloss.io.source_material`` gets from ``tdrive_sync.get_source_mat``.
+There is no save side, and local-only working mode does not apply: a release
+someone else publishes has no local, disposable stand-in.
+"""
+
+from pathlib import Path
+
+import rioxarray
+import xarray as xr
+
+import tdrive_sync
+
+# The root of the NLM's own release tree, shared across every subproject under
+# 1017473. Not to be confused with this project's own versioned data store
+# (tdrive_sync_config.py's BASE_DIR).
+NLM_RELEASES_DIR = Path(
+    r"T:\Auckland\Projects\1017473\WorkingMaterial\new_versioned_releases"
+)
+
+# The NLM core release the scenario grids below are read from. Bump this when
+# the NLM turns a release over; nothing else here has to change.
+CORE_NLM_VERSION = "v2026p0rc6"
+
+
+def nlm_release_path(relative_path: str | Path, *, copy_to_local: bool = True) -> Path:
+    """Resolve a file under the NLM's release tree, caching it locally.
+
+    Args:
+        relative_path: The file's path below ``NLM_RELEASES_DIR``, e.g.
+            ``"core/v2026p0rc6/scenario/return_period/rp2500y_....tif"``.
+        copy_to_local: Whether to mirror the file into the local cache, and
+            refresh that copy when the one on T: has changed.
+
+    Returns:
+        The path to read: the local cache copy where there is one, otherwise
+        the file on T:.
+    """
+    return tdrive_sync.get_cached(
+        NLM_RELEASES_DIR / relative_path, copy_to_local=copy_to_local
+    )
+
+
+def get_nlm_scenario_raster(
+    relative_path: str | Path, *, copy_to_local: bool = True
+) -> xr.DataArray:
+    """Read a single-band raster from the NLM's scenario release tree.
+
+    Unlike ``landloss.io.source_material``'s readers, this does not clip or
+    reproject: the NLM's scenario grids are read as delivered. Add that
+    handling here if and when a caller needs it against a study extent.
+
+    Args:
+        relative_path: The file's path below ``NLM_RELEASES_DIR``.
+        copy_to_local: Whether to mirror the file into the local cache.
+
+    Returns:
+        The raster, in its own native projection, cell size and nodata as
+        NaN.
+    """
+    path = nlm_release_path(relative_path, copy_to_local=copy_to_local)
+    return rioxarray.open_rasterio(path, masked=True).squeeze(drop=True)
+
+
+def get_nlm_scenario_rp2500y_gwd_med_p_ld_moderate_fu() -> xr.DataArray:
+    """Read the NLM's RP2500y, median groundwater, moderate land damage grid.
+
+    Source:
+        National Liquefaction Model core release ``CORE_NLM_VERSION``, under
+        ``scenario/return_period`` in the NLM's release tree on T:.
+
+    Returns:
+        The probability grid, as delivered.
+    """
+    return get_nlm_scenario_raster(
+        f"core/{CORE_NLM_VERSION}/scenario/return_period/"
+        "rp2500y_lsn_pl50_gwd-med_p_ld_moderate_fu.tif"
+    )
