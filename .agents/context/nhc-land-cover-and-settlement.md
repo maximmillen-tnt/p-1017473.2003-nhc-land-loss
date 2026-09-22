@@ -91,6 +91,22 @@ known (**Q-02**).
 Bridget Attwood at NHC, so it can be treated as the authoritative account
 rather than as working understanding.
 
+### Bridges and culverts
+
+Added from the "Costing tool demo" meeting, 21 September 2026.
+
+For a bridge to be covered at all, **the entire bridge including its abutments
+has to sit inside the property**. John Leeves was explicit that this is the
+property boundary, not the insured land: if one abutment falls outside the
+property, the bridge is not covered even where the span itself is inside.
+
+Damage states are **none or full replacement**, with no partial repair between
+them. John's reasoning was that almost every bridge caps out against the
+$25,000 sub-cap anyway, so resolving intermediate states would not change the
+answer, and there are few enough bridges that the choice barely moves the total.
+Bridges on residential property are unusual, and the team expected more culverts
+than the area appears to have, there being few large streams (**T-39**).
+
 ### Evacuated and inundated land are both damaged land
 
 When land moves downslope it leaves **evacuated** land where it came from and
@@ -108,6 +124,24 @@ stops mattering.
 **Imminent risk is claimable**, and like the total cap it should be carried as a
 variable of the study rather than as a fixed rule. How it is represented is
 still being worked through (**T-35**).
+
+The "Costing tool demo" meeting on 21 September 2026 settled *why* it has to be
+separable. NHC are considering removing the imminent damage provision as part of
+moving to a land cap, so they will want to see what removing it does. John
+Leeves was clear the study has to carry it for the current scheme to be
+comparable with the new one. The conclusion on the call was to model it as its
+own line item entering the costing, both so its contribution can be reported and
+because the logic for costing it may differ, while starting from the baseline
+evacuated and inundated rates.
+
+There are three forms of it, all following the same principle as evacuated and
+inundated land: imminent damage of **evacuation**, of **inundation**, and of
+**re-inundation**. For evacuation, John expected the study to apply a general
+rule rather than model it — the working suggestion was that the scarp regresses
+another half a metre on average, or a metre on slopes steeper than 30 degrees,
+with the rules to be agreed (**T-44**). Maxim noted from an NHC report that a
+site under imminent risk had needed an excavator to peel back the head scarp,
+which suggests the cost is higher than for damage that has already occurred.
 
 The settlement logic as a whole is to be written out as pseudo-logic and run
 past John Leeves (**T-34**).
