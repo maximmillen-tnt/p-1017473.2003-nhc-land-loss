@@ -71,7 +71,12 @@ def get_nlm_scenario_raster(
         NaN.
     """
     path = nlm_release_path(relative_path, copy_to_local=copy_to_local)
-    return rioxarray.open_rasterio(path, masked=True).squeeze(drop=True)
+    # Read through a context manager and load into memory. A lazily-opened
+    # GDAL handle is finalised during interpreter shutdown, which on Windows
+    # surfaces as a bare "Error in sys.excepthook" after an otherwise clean
+    # run -- and the array is small enough that holding it costs nothing.
+    with rioxarray.open_rasterio(path, masked=True) as raster:
+        return raster.squeeze(drop=True).load()
 
 
 def get_nlm_scenario_rp2500y_gwd_med_p_ld_moderate_fu() -> xr.DataArray:
@@ -103,4 +108,21 @@ def get_nlm_scenario_rp2500y_gwd_med_p_ld_major_fu() -> xr.DataArray:
     return get_nlm_scenario_raster(
         f"core/{CORE_NLM_VERSION}/scenario/return_period/"
         "rp2500y_lsn_pl50_gwd-med_p_ld_major_fu.tif"
+    )
+
+
+def get_nlm_scenario_pga_2500yr_site_class_5() -> xr.DataArray:
+    """Read the NLM's RP2500y, site class 5 peak ground acceleration grid.
+
+    Source:
+        National Liquefaction Model core release ``CORE_NLM_VERSION``, under
+        ``scenario/return_period/seismic_standard`` in the NLM's release tree
+        on T:.
+
+    Returns:
+        The PGA grid, as delivered.
+    """
+    return get_nlm_scenario_raster(
+        f"core/{CORE_NLM_VERSION}/scenario/return_period/seismic_standard/"
+        "pga_2500yr_site_class_5.tif"
     )

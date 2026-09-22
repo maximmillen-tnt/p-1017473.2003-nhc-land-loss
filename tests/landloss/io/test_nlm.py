@@ -121,6 +121,30 @@ def test_the_rp2500y_major_helper_reads_its_hardcoded_path(
     assert raster.to_numpy() == pytest.approx(0.02)
 
 
+def test_the_pga_2500yr_site_class_5_helper_reads_its_hardcoded_path(
+    tmp_path, monkeypatch
+) -> None:
+    """The path is a constant precisely so that nobody retypes it into a script."""
+    path = write_raster(tmp_path / "pga.tif", np.full((4, 4), 0.35))
+    asked_for = []
+
+    def record(relative_path, **_):
+        asked_for.append(relative_path)
+        return path
+
+    monkeypatch.setattr(nlm, "nlm_release_path", record)
+
+    raster = nlm.get_nlm_scenario_pga_2500yr_site_class_5()
+
+    assert asked_for == [
+        (
+            f"core/{nlm.CORE_NLM_VERSION}/scenario/return_period/"
+            "seismic_standard/pga_2500yr_site_class_5.tif"
+        )
+    ]
+    assert raster.to_numpy() == pytest.approx(0.35)
+
+
 def test_nlm_release_path_appends_the_relative_path_and_caches(
     tmp_path, monkeypatch
 ) -> None:
