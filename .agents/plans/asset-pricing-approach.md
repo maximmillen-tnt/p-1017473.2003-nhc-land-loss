@@ -136,10 +136,14 @@ asset's README.
   property per state, not a rate per square metre.
 - **Rate** — `costs_liq_ld_refined_states_2011.csv`, 15th / 50th / 85th
   percentiles, 2010/2011 NZD, **excluding GST**.
-- **Carry all three percentiles through to `loss`** rather than collapsing to
-  the median, so the spread reaches the output.
+- **The percentile is a run-level parameter, not a column.** See section 5.1;
+  the whole model runs once per percentile rather than carrying three costs down
+  every row.
 - **Escalate** 2010/2011 dollars to the study's valuation basis (**L-23**),
   with the index as a named constant.
+- **States 5 and 6 carry identical costs**, both read from the source band
+  "5 or 6". They are one estimate wearing two hats, not two independent ones, so
+  the spread at the severe end is thinner evidence than it looks.
 - **Flat land only.** These rates must not be applied to hill land or to
   landslide damage.
 - **Excludes ILV and IFV** (**L-25**), both of which were large in Canterbury,
@@ -240,7 +244,46 @@ Source: `src/scripts/landloss/exposure/culverts_bridges/status.md`.
 - **[proposed]** structure intersects an evacuated or inundated polygon →
   `replace`, resolved to one replacement per structure per realisation.
 
-## 5. GST and cost basis
+## 5. Cost uncertainty and GST
+
+### 5.1 The cost percentiles are a scenario, not a distribution
+
+`costs_liq_ld_refined_states_2011.csv` carries a 15th, 50th and 85th percentile
+for every land damage state. They are the spread of **actual settled costs
+between Canterbury properties assessed at the same state** — not a confidence
+interval on an estimate.
+
+- The spread is large enough to dominate the result: the 85th percentile runs
+  between **2 and 4 times the median** depending on the state, so the choice
+  moves the liquefaction land component by more than most of the modelling
+  decisions in this document.
+- **The percentile cannot be applied after the caps.** `min(repair, cap)` is
+  non-linear, so a settlement computed from a median cost is not the median
+  settlement. Cost varies first; the cap truncates second. This is the reason
+  `vul/liquefaction/land/status.md` insists the uncertainty reaches `loss`
+  rather than being collapsed upstream.
+- **[proposed]** carry the percentile as a **run-level parameter**: one scalar
+  in the run configuration, the whole model run once per value, three portfolio
+  totals reported as a cost-assumption band.
+- The alternative — a `cost_percentile` column on every row — buys nothing here.
+  Percentiles exist for **one of the nine cells** in section 4. Landslide land
+  interpolates between the remediation schedule's easy and difficult columns,
+  which is site difficulty rather than a cost distribution, and the structure
+  costs carry no packaged uncertainty at all. The column would be null or
+  meaningless nearly everywhere.
+
+Two things to be careful of when the results are written up:
+
+- **Running every property at the 85th percentile does not give the 85th
+  percentile of the portfolio total.** It assumes every property errs high
+  together. Report it as a systematic cost assumption, not a probabilistic
+  bound, or it will be read as one.
+- **Drawing each property independently is the opposite error.** The portfolio
+  total would converge to a narrow band by the central limit theorem and imply
+  precision the data does not support, because real costs correlate — the same
+  contractors, the same ground conditions, the same assessors.
+
+### 5.2 GST and cost basis
 
 Every input arrives on a different basis, and the Act mixes them:
 
@@ -311,9 +354,10 @@ realisation unless it says otherwise.
   support, landslide runout, retaining walls, culverts and bridges.
 - Contribution by **asset**.
 - **Exceedance curve** of settlement per claim.
-- **Distribution across realisations** of the portfolio total, with the spread
-  from the 15th/50th/85th cost percentiles shown separately from the spread
-  from the hazard realisations. Two different uncertainties; do not merge them.
+- **Distribution across realisations** of the portfolio total. Plot the cost
+  percentile as three separate curves rather than widening one — it is a
+  systematic assumption, not a random variable, and merging the two axes would
+  present it as though it were. See section 5.1.
 - **Map** of mean settlement per property, and aggregated per suburb.
 - Mean settlement and claim count **by suburb** and by territorial authority.
 
@@ -326,6 +370,32 @@ realisation unless it says otherwise.
   filters, counted rather than dropped silently.
 
 ## 8. What has to be decided before this can be built
+
+The settlement core in section 2 needs none of these: it is pure arithmetic and
+the explainer's three worked examples test it. Everything below either shapes a
+data structure, and so is expensive to retrofit, or supplies a number that a
+flagged placeholder can stand in for until it lands.
+
+### Shapes a data structure — decide before writing code
+
+- **The dwelling count.** Every sub-cap is `n_dwellings x $50,000 / $25,000`,
+  and the multiplier is dwellings **in the residential building**.
+  `insured-land.geoparquet` carries `building_count`, not a dwelling count, and
+  nothing upstream produces one. Either the address spine gains the attribute or
+  the model assumes one dwelling per building and says so. This touches every
+  cap in the study.
+- **The claim key.** `beta-build.md` defers minting `claim_id` to the `loss`
+  boundary. Claim = address = residential building is a workable placeholder,
+  but it has to be one named function rather than an assumption spread across
+  the module, because **Q-01** may change it.
+- **Whether landslide drives wall and structure damage** — sections 4.4 and
+  4.6. This is `vul`'s output to emit, not `loss`'s to infer, so it has to be
+  decided before `vul` is built rather than bolted on after.
+- **The cost percentile as a run-level parameter** — section 5.1. **[proposed]**
+  and not blocking, but it decides whether the percentile is a scalar in the run
+  configuration or a column on every row.
+
+### Supplies a number — a flagged placeholder will do meanwhile
 
 Ordered by how much is blocked behind them:
 
