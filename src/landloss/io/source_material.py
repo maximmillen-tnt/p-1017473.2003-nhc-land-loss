@@ -26,55 +26,18 @@ from pathlib import Path
 
 import rioxarray
 import xarray as xr
-from pyproj import CRS, Transformer
+from pyproj import CRS
 from rasterio.enums import Resampling
 from rioxarray.exceptions import NoDataInBounds, OneDimensionalRaster
 
 import tdrive_sync
+from landloss.common.utils.raster import bbox_in_crs
 from landloss.domain import constants
 
 # The dimension order the terrain derivatives in
 # :mod:`landloss.common.utils.terrain` insist on, and what every raster read
 # here is squeezed down to.
 RASTER_DIMS = ("y", "x")
-
-# How many intermediate points each edge of a bounding box is broken into before
-# it is reprojected. See :func:`_bbox_in_crs` for why a box needs any at all; 21
-# is enough to hold the error under a metre across a New Zealand sized extent,
-# and the cost is four transformed points against eighty.
-BBOX_DENSIFY_POINTS = 21
-
-
-def _bbox_in_crs(
-    bbox: tuple[float, float, float, float], from_crs: int | str, to_crs: CRS
-) -> tuple[float, float, float, float]:
-    """Re-express a bounding box in another coordinate reference system.
-
-    A rectangle in one projection is not a rectangle in another: its edges bow.
-    Transforming only the four corners and taking their envelope therefore
-    returns a box strictly *inside* the true extent, and the clip made with it
-    silently drops a lens-shaped strip along whichever edges bowed outwards. On
-    a Wellington-to-WGS84 transform that is nothing; on a South Island wide
-    extent it is over a hundred metres, which is several cells of a 25 m grid.
-
-    So the edges are broken into :data:`BBOX_DENSIFY_POINTS` points each before
-    the envelope is taken, which is what ``Transformer.transform_bounds`` does.
-    The error goes from "several cells" to well under a metre.
-
-    Args:
-        bbox: The extent (minx, miny, maxx, maxy), in ``from_crs``.
-        from_crs: The coordinate reference system ``bbox`` is expressed in.
-        to_crs: The coordinate reference system to express it in.
-
-    Returns:
-        The extent in ``to_crs``, never smaller than the true reprojected
-        extent.
-    """
-    transformer = Transformer.from_crs(from_crs, to_crs, always_xy=True)
-    west, south, east, north = transformer.transform_bounds(
-        *bbox, densify_pts=BBOX_DENSIFY_POINTS
-    )
-    return (float(west), float(south), float(east), float(north))
 
 
 def source_material_path(
@@ -175,7 +138,7 @@ def get_source_material_raster(
             # Anything downstream that cannot work with a single row says so
             # itself, in its own terms.
             raster = raster.rio.clip_box(
-                *_bbox_in_crs(bbox, crs, raster.rio.crs),
+                *bbox_in_crs(bbox, crs, raster.rio.crs),
                 allow_one_dimensional_raster=True,
             )
         except (NoDataInBounds, OneDimensionalRaster) as exc:

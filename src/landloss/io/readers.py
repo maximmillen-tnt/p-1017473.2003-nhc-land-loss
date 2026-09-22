@@ -202,6 +202,62 @@ def get_nz_addresses(
     )
 
 
+def get_nz_building_outlines(
+    bbox: tuple[float, float, float, float] | None = None,
+    crs: int | str = constants.DEFAULT_CRS,
+    *,
+    use_cache: bool = True,
+) -> gpd.GeoDataFrame:
+    """Load the LINZ NZ Building Outlines layer for an extent.
+
+    The building footprint layer at
+    https://data.linz.govt.nz/layer/101290-nz-building-outlines/, captured from
+    aerial imagery. The insured land extent is buffered off these outlines,
+    because NHC land cover attaches to the ground around the dwelling rather
+    than to the whole parcel, so the building is what the extent is measured
+    from.
+
+    Each outline carries a ``building_id``, a ``use``, the suburb, town and
+    territorial authority it sits in, and the capture source and date it was
+    digitised from. Nothing distinguishes a dwelling from a garage or a shed, so
+    an extent built from the layer covers every structure on a property.
+
+    Licence:
+        Creative Commons Attribution 4.0 International (CC BY 4.0),
+        https://data.linz.govt.nz/license/attribution-4-0-international/. The
+        data may be shared and adapted, including commercially, provided Land
+        Information New Zealand is credited as the source, a link to the licence
+        is given, and any changes made are indicated. So every figure, table or
+        layer published from the insured land extent -- which is derived from
+        these outlines -- has to carry that attribution with it.
+
+    Source:
+        Land Information New Zealand, National Topographic Office. No DOI is
+        published for the layer.
+
+    The layer covers the whole country at 3.2 million buildings, so passing a
+    bounding box is strongly preferred; the first call for a given extent
+    downloads and clips the layer, and later calls for the same extent are
+    served from the cache.
+
+    Args:
+        bbox: The extent to clip to (minx, miny, maxx, maxy) in ``crs``. Omitting
+            it returns every building outline in New Zealand.
+        crs: The coordinate reference system to return the outlines in.
+        use_cache: Whether to read and write the clipped extent cache.
+
+    Returns:
+        A GeoDataFrame of building footprint polygons.
+    """
+    return get_koordinates_layer_extent(
+        layer=constants.NZ_BUILDING_OUTLINES_LAYER_ID,
+        crs=crs,
+        bbox=bbox,
+        domain=constants.LINZ_DOMAIN,
+        use_cache=use_cache,
+    )
+
+
 def get_nz_river_name_lines(
     bbox: tuple[float, float, float, float] | None = None,
     crs: int | str = constants.DEFAULT_CRS,

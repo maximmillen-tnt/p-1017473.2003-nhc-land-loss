@@ -180,14 +180,36 @@ def get_path(
     )
 
 
-def _source_mat_base_path(relative_path: str | Path) -> Path:
-    """Return the T: path for a file under the configured SOURCE_MATERIAL_DIR."""
+def get_source_mat_base_path(relative_path: str | Path) -> Path:
+    """Return the T: path for a file under the configured SOURCE_MATERIAL_DIR.
+
+    Path construction only: nothing here touches the drive, which is what makes
+    it usable from a machine that cannot reach T: at all. A caller that wants
+    the file itself wants :func:`get_source_mat`.
+
+    Args:
+        relative_path: The file's path, relative to SOURCE_MATERIAL_DIR.
+
+    Returns:
+        The path the file has on T:, whether or not it is there.
+    """
     config = _config.load_config()
     return config.source_material_dir / relative_path
 
 
-def _source_mat_local_path(relative_path: str | Path) -> Path:
-    """Return the local cache mirror of _source_mat_base_path."""
+def get_source_mat_local_path(relative_path: str | Path) -> Path:
+    """Return the local cache mirror of :func:`get_source_mat_base_path`.
+
+    Path construction only, and the counterpart to it: between them a caller
+    can name both sides of the cache without resolving either, which is what
+    writing a file path into a document rather than reading the file needs.
+
+    Args:
+        relative_path: The file's path, relative to SOURCE_MATERIAL_DIR.
+
+    Returns:
+        The path the file has in the local cache, whether or not it is there.
+    """
     config = _config.load_config()
     settings = _config.load_local_mode_settings()
     return (
@@ -219,8 +241,8 @@ def get_source_mat(relative_path: str | Path, *, copy_to_local: bool = True) -> 
     Raises:
         ValueError: If the file exists at neither location.
     """
-    base_path = _source_mat_base_path(relative_path)
-    local_path = _source_mat_local_path(relative_path)
+    base_path = get_source_mat_base_path(relative_path)
+    local_path = get_source_mat_local_path(relative_path)
     return _resolve_cached_path(
         base_path=base_path, local_path=local_path, copy_to_local=copy_to_local
     )

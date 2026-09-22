@@ -162,7 +162,7 @@ ignore = [
   "UP040",   # This doesn't integrate well with pydantic.
     "CPY001", # not needed
 ]
-allowed-confusables = ["–", "σ", "ℹ"]
+allowed-confusables = ["–", "σ", "ℹ", "α", "γ"]
 flake8-tidy-imports.banned-api."pytz".msg = "'zoneinfo' should be preferred to 'pytz' when using Python 3.9 and later, see https://tonkintaylor-sonarqube.azurewebsites.net/coding_rules?open=python%3AS6890&rule_key=python%3AS6890"
 flake8-tidy-imports.banned-api."pandera.typing.DataFrame".msg = "Use 'pandera.typing.pandas.DataFrame' instead of 'pandas.DataFrame' to avoid warnings."
 flake8-tidy-imports.banned-api."pins.board_folder".msg = """\
@@ -183,6 +183,9 @@ flake8-import-conventions.banned-from = ["ruru"]
 ]
 ".agents/skills/**/*.py" = [
   "INP",     # Standalone skill scripts, not an importable package
+  "ANN",     # A skill script may run under another interpreter (QGIS's Python), whose types the repo venv cannot import to annotate against
+  "PLC0415", # Imports are deferred on purpose, so a script stays cheap to --help and importable without every optional dependency present
+  "FBT003",  # Third-party APIs called from skill scripts (Qt, QGIS) take positional booleans
 ]
 "release_updates/**/*.py" = [
   "INP",     # Standalone tooling beside the weekly update, not a package

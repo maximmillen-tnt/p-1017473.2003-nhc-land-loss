@@ -13,7 +13,7 @@ concrete to choose against rather than three descriptions. No progress marks
 against the module as a whole until the decision is made; the step that exists
 carries its own marked plan under `steps/`.
 
-**The starting point.** ESNZ's probabilistic landslide model is in hand: a 25 m
+**The starting point.** ESNZ's probabilistic landslide model is in hand: a 32 m
 grid carrying failure probability at discrete shaking levels. Three gaps in it
 matter for this study.
 
@@ -39,9 +39,9 @@ others replace or extend it.
   Nowicki Jessee (2018), and discrete failures sampled from a Kaikōura v3 size
   distribution. That plan has not been reviewed or agreed with the project team.
   ESNZ becomes the cross-comparison rather than an input.
-- **Extend the ESNZ model.** Keep the 25 m probability grid as the base rate and
+- **Extend the ESNZ model.** Keep the 32 m probability grid as the base rate and
   add correlation, small failures and runout on top of it. Cheaper, and starts
-  from a model that has already been through review, but inherits its 25 m
+  from a model that has already been through review, but inherits its 32 m
   resolution and its discrete shaking levels.
 
 
@@ -83,7 +83,7 @@ question.
 ## Where it is now
 
 `steps/s1_landslide_realisation/` holds a runnable first cut of the extend-ESNZ
-route. It reads the supplied 25 m probability grid, samples every cell
+route. It reads the supplied 32 m probability grid, samples every cell
 independently, gives each failure a size from a bounded power law and a circular
 footprint, drops the smaller of any overlapping pair, and moves each one downhill
 by a distance that grows with the slope — emitting the source polygon as
@@ -92,6 +92,20 @@ downhill direction it uses are in `landloss.common.utils.terrain`, and the reade
 for the grid is `landloss.io.source_material`; both are library code with tests,
 because they will outlive whatever the model turns into. Its method and its
 phased plan are in the step folder.
+
+It has now been run against the real grid over both the pilot box and the full
+study area. The full run produces **66,126 landslides over 106 ha of evacuated
+ground**, at a median slope of 28°, with a median runout of 21 m. The pattern is
+right — the hills either side of the Hutt Valley and around Porirua are dense
+and the valley floors are clear — and the figure under
+`report/hazard/landslide/landslide-realisation/fig/` is how that was checked.
+
+Two numbers from that run need settling before any of it is quoted. The grid's
+probabilities sum to 66,644 failing **cells**, which at 32 m is 6,824 ha if a
+failing cell means the cell went; the sampled sizes make it 106 ha, 1.6% of
+that. Which of the two the grid means is a question for the supplier, and the
+answer moves the loss by a factor of sixty. And the pilot box is flat suburb, so
+it exercises the code rather than the model — judge the step on the full extent.
 
 Two of the three gaps are closed only nominally. There are small failures now,
 but their size distribution is fitted to nothing; there is runout, but it is a
@@ -121,7 +135,7 @@ The phased build for the new-model route is in
 
 ## Validation
 
-- Failure probability and total areal coverage against the ESNZ 25 m grid at
+- Failure probability and total areal coverage against the ESNZ 32 m grid at
   matching shaking levels. This is the comparison the build-new route exists to
   support, and on the extend route it is the check that the base rate survived
   the extensions.

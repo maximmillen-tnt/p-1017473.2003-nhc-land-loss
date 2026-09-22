@@ -46,6 +46,7 @@ from matplotlib.lines import Line2D
 from matplotlib.patches import Patch
 from shapely.geometry import box
 
+from landloss.common.utils.colors import LAND_CLASS_COLOURS
 from landloss.common.utils.plot import style_basemap_ax
 from scripts.landloss.hazard.landslide.steps.s1_landslide_realisation import config
 from scripts.landloss.hazard.landslide.steps.s1_landslide_realisation.s1_simulate_landslides import (
@@ -66,8 +67,10 @@ DPI = 200
 
 # Red for the ground that leaves, orange for the ground it lands on. The two
 # have to be told apart at a glance, because the whole point of keeping them
-# separate is that they are settled differently.
-COLOURS = {EVACUATED: "#a50026", INUNDATED: "#f46d43"}
+# separate is that they are settled differently. Taken from
+# landloss.common.utils.colors rather than set here, so that this figure and a
+# QGIS project of the same realisation carry the same legend.
+COLOURS = {land_class: colour for land_class, (colour, _) in LAND_CLASS_COLOURS.items()}
 
 # Inundated land first, so the source is drawn over the top of it. Where the
 # displacement is short next to the landslide the two very nearly coincide, and

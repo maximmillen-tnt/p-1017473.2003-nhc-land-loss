@@ -4,7 +4,7 @@
 assumptions in it, one at a time, and none of them has been started.
 
 This step takes the "extend the ESNZ model" route described in the module's
-`status.md`: the supplied 25 m probability grid stays as the base rate, and the
+`status.md`: the supplied 32 m probability grid stays as the base rate, and the
 three things it does not carry — clustering, individual failures, runout — are
 added on top of it. The alternative route, a model built from the ground up, is
 drafted in `.agents/plans/estimating-eq-landslide-extent-wellington.md`. Choosing
@@ -90,6 +90,14 @@ to choose against.
       distribution rather than its mean.
 - [ ] Run N realisations and carry a distribution of affected area per property
       per cause, instead of the single realisation this step produces.
+- [ ] Seed from `realisation_seed(BASE_SEED, realisation_id, "landslide")` rather
+      than from this step's own `SEED`, and put the realisation id in the output
+      file name the way `gen_liq_ld_states.py` writes `ld-state-rNNN.tif`. A
+      realisation is one modelled earthquake across all three hazards, so a
+      landslide layer and a liquefaction layer can only be summed per address
+      once both carry the same `realisation_id`; today the landslide draw is
+      independent of it and the single output file cannot be paired with one.
+      The beta takes this step as it stands, so this lands with the item above.
 - [ ] Check the proportion of landslides confined to a single property against
       the local expectation in `.agents/context/land-damage-mechanisms.md`: most
       confined to one property, with multi-property failures concentrated in
@@ -98,11 +106,32 @@ to choose against.
 
 ## Open questions
 
+- **What a failing cell means, which is the question that most moves the
+  answer.** The grid gives a probability per 32 m cell, which is 1024 m² of
+  ground, and this step responds by putting a single failure of a few square
+  metres somewhere in it. Over the full study area the probabilities sum to
+  66,644 failing cells — 6,824 ha if a failing cell meant the whole cell went —
+  while the sampled sizes turn that into 106 ha of source area, 1.6% of it.
+  Those are answers to two different questions and only the supplier can say
+  which one the grid asks. Until it is settled, no total area from this step
+  should be quoted, and the choice between them moves the loss by a factor of
+  sixty.
 - **What shaking level the grid is conditioned on.** Taken from the file name
   and unconfirmed. The step runs either way; the report cannot describe the
   result without it.
 - **Whether the grid's probabilities are conditional on shaking, or already
   include a rate.** Changes what a realisation is a realisation *of*.
+- **Why the grid puts any failure probability on flat ground.** Over the full
+  study area the result looks right: the sampled failures have a median slope of
+  28° and only a tenth sit below 11°, which is the hill country the study cares
+  about. The pilot box does not, because it is largely flat suburb — its
+  failures have a median slope of 3° and the grid still carries probabilities of
+  0.3% to 7.6% across Newtown, Kilbirnie and Rongotai, including reclaimed land
+  beside the airport. That is a small share of the total but it is not nothing,
+  and it is worth asking whether the grid covers mechanisms other than classic
+  slope failure, or is smoothed across the hill margin. **Use the full extent,
+  not the pilot box, to judge this step** — the pilot exercises the code, not the
+  model.
 - **Whether to keep the ESNZ grid as the base rate at all.** This is the module
   level decision in `status.md`, and register entry **L-08** restricts the
   GNS/PRUE model — confirmed to be the same model — to cross-comparison. If the

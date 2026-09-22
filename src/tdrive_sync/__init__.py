@@ -34,6 +34,8 @@ from tdrive_sync._paths import (
     get_local_path,
     get_path,
     get_source_mat,
+    get_source_mat_base_path,
+    get_source_mat_local_path,
 )
 
 __all__ = [
@@ -44,6 +46,8 @@ __all__ = [
     "get_local_path",
     "get_path",
     "get_source_mat",
+    "get_source_mat_base_path",
+    "get_source_mat_local_path",
     "local_read",
     "local_save",
 ]

@@ -1,21 +1,23 @@
 # Land exposure: status
 
-**Status:** Land value modelled per square metre; the insured land extent it is
-applied to is not built yet.
+**Status:** Land value modelled per square metre, and applied to an insured land
+extent buffered off the building outlines. The driveway part of that extent is
+not built.
 
-**Updated:** 2026-09-18
+**Updated:** 2026-09-22
 
 ## Approach
 
 Marks: `[x]` done, `[~]` partly done, `[>]` next, `[ ]` planned.
 
-The module ends at one layer, `insured-land`, carrying one row per `claim_id`
+The module ends at one layer, `insured-land`, carrying one row per `address_id`
 with a rate per square metre and the insured land polygon. Everything below
 exists to produce that layer.
 
-- [ ] Take the insured extent as an **8 m buffer of the building outlines, combined
+- [~] Take the insured extent as an **8 m buffer of the building outlines, combined
   with the driveway**, rather than the whole parcel. That is the land NHC
-  settles on, so it is the extent the hazard modules intersect against.
+  settles on, so it is the extent the hazard modules intersect against. The
+  buffer is built; the driveway is not.
 - [>] **Generate driveways** as the shortest path from each building outline to the
   roadway, since no driveway dataset exists for the study area. This resolves
   **I-10**, which proposed mapping them by remote sensing.
@@ -25,15 +27,17 @@ exists to produce that layer.
   **premium on land within 2 m of a building** — the land immediately supporting
   the dwelling is worth more than the rest of the section, and it is also the
   land whose loss matters most.
-- [~] Key on `claim_id`. It currently carries the same value as `address_id` and is
-  held as its own column so the two can decouple (**L-11**).
+- [x] Key on `address_id`, which is what the address spine carries. A claim-level
+      identifier is introduced at the `loss` boundary rather than minted here,
+      so nothing upstream has to be rewritten when one arrives (**L-11**).
 
 Land value per square metre is a step in its own right and is already built; see
 `steps/s2_land_value/`.
 
 ## Where it is now
 
-The rate per square metre exists; the geometry it should be applied to does not.
+The rate per square metre and the polygon it is applied to both exist. The
+polygon is the buffer alone, so it is short of the driveway.
 
 - `../steps/s1_address_spine/` builds the address spine that this and every other
   asset hangs off. It sits at module level because retaining walls, culverts
@@ -45,26 +49,32 @@ The rate per square metre exists; the geometry it should be applied to does not.
   `land-value` input the rest of the chain consumes.
 - `validations/check_land_value_totals.py` checks those outputs against the
   published anchors.
-- Building outlines are already held. The property boundary and roadway layers
-  are not yet read by anything in the repository, and neither is covered by a
-  constant in `src/landloss/domain/constants.py`.
-- No part of the driveway generation, the 8 m buffer, the insured land extent or
-  the 2 m premium is implemented.
-- Land area is still the per-authority `median_lot_size_m2` assumption, not a
-  measured polygon, so no property yet carries a real insured area.
+- `steps/s5_insured_land_extent/` buffers the LINZ building outlines by 8 m,
+  attaches each building to its nearest address point, splits ground shared
+  between two properties on which building is nearer so nothing is counted
+  twice, and writes `insured-land.geoparquet` under `temp/exposure/` carrying
+  `address_id`, `land_rate_nzd_per_m2`, `area_m2` and the polygon. That layer is
+  what the hazard modules intersect against.
+- The building outlines are read by `landloss.io.readers.get_nz_building_outlines`
+  against `NZ_BUILDING_OUTLINES_LAYER_ID`. The property boundary and roadway
+  layers are still not read by anything in the repository, and neither is
+  covered by a constant in `src/landloss/domain/constants.py`.
+- Neither the driveway generation nor the 2 m premium is implemented.
+- Land area is measured on the insured land layer, but the rate per square metre
+  is still built on the per-authority `median_lot_size_m2` assumption, so the
+  two describe different pieces of ground. The run prints one against the other.
 
 ## Next
 
 1. Read the property boundary and roadway layers over the study extent, and pin
-   all three input layers as named constants beside the existing ones.
+   both as named constants beside `NZ_BUILDING_OUTLINES_LAYER_ID`.
 2. Generate driveways as the shortest building-to-roadway path, and decide how a
    route that is too steep to be a driveway is handled.
-3. Buffer the building outlines by 8 m and combine with the driveways to give
-   the insured land extent.
-4. Attribute the extent to properties against the property boundaries, carrying
-   `claim_id`.
-5. Assign the rate per square metre, with the 2 m premium, and write
-   `insured-land`.
+3. Combine the driveways with the 8 m buffer, before the shared ground is split,
+   so a driveway between two houses is allocated by the same rule.
+4. Clip the extent to the property boundaries, so a buffer cannot reach across a
+   boundary onto land the policy does not cover.
+5. Add the 2 m premium to the rate per square metre.
 6. Feed the measured insured area back into the land value step, replacing the
    assumed lot size. This closes most of **T-25**.
 
@@ -84,11 +94,11 @@ The rate per square metre exists; the geometry it should be applied to does not.
 
 ## Open decisions
 
-- **T-07** — the remaining LINZ datasets. Building outlines are held; the parcel
+- **T-07** — the remaining LINZ datasets. Building outlines are read; the parcel
   and roadway layers are not confirmed.
 - **T-25** — the assumed lot size, which a measured insured area replaces.
-- **L-11** — the claim-level identifier. `claim_id` is held apart from
-  `address_id` in anticipation of decoupling.
+- **L-11** — the claim-level identifier. The layer is keyed on `address_id`; a
+  claim key is mapped in at the `loss` boundary when one is agreed.
 - **T-23** — multi-unit, cross-lease and shared-land properties. An 8 m buffer
   around a block of flats is one extent over several claims, and the split has
   not been decided.

@@ -1,8 +1,10 @@
 """Turn the supplied landslide probability grid into one realisation of landslides.
 
-A probability grid says how likely each 25 m cell is to fail. It cannot say how
-much land a claim covers, or whose land the debris lands on, because it holds no
-landslides -- only a chance of one. This script draws a set of them:
+A probability grid says how likely each cell is to fail -- 32 m cells in the file
+supplied so far, though the cell size is read off the grid rather than assumed
+anywhere here. It cannot say how much land a claim covers, or whose land the
+debris lands on, because it holds no landslides, only a chance of one. This
+script draws a set of them:
 
     uv run --frozen python src/scripts/landloss/hazard/landslide/steps/s1_landslide_realisation/s1_simulate_landslides.py
 

@@ -12,11 +12,20 @@
   arguments and neither `main()` carries a default, so a realisation can be
   accounted for from the tracked source alone. `PILOT` is `True`, meaning runs go
   over `SMALL_WLG_PILOT` rather than the four territorial authorities.
-- The base rate is ESNZ's earthquake-induced landslide probability grid, a 25 m
-  grid covering Wellington supplied as source material and read by
+- The base rate is ESNZ's earthquake-induced landslide probability grid, read by
   `landloss.io.source_material.get_eil_landslide_probability`. The file it reads
   is named once, in `EIL_PROBABILITY_SOURCE_PATH` in
   `landloss.domain.constants`, rather than in the script.
+- The supplied file is a **32 m** grid in NZTM, float32 with NaN nodata, covering
+  1,730,628–1,791,588 E and 5,409,316–5,459,044 N, with about 57% of its cells
+  carrying a value. Probabilities run from 0.002 to 0.98, median 0.024. Nothing
+  in the code assumes 32 m — `cell_size()` reads it off the grid and every
+  derivative is computed at whatever it finds — so a resupply at another
+  resolution needs no code change.
+- That extent stops short of the study area on the east (1,791,588 against
+  1,794,002) and the north (5,459,044 against 5,464,683), so a full run covers
+  slightly less ground than the four territorial authorities. `describe_extent()`
+  prints the grid's extent rather than the requested one for that reason.
 - The shaking level the grid is conditioned on is taken from the file name
   (`EILProb_PGA2g.tif`) and has not been confirmed with the supplier. Nothing in
   the code depends on it — the grid is used exactly as supplied — but no result
@@ -58,13 +67,13 @@
   evacuated and inundated polygons may overlap. Two landslides cannot start from
   the same ground; they can perfectly well finish on it.
 - In practice this step rarely fires, and it is worth knowing why. Cell centres
-  are 25 m apart, so two circles can only meet if their radii sum to more than
-  25 m, and a median 6 m² failure has a radius of 1.4 m. Only failures of a few
-  hundred square metres and up can reach a neighbour at all — a 3000 m² one has
-  a radius of 31 m and reaches several. The step therefore constrains the top of
-  the size distribution and leaves the rest of it alone, which is the right
-  behaviour but is not the one the count in the run output suggests at first
-  reading.
+  are a cell apart — 32 m on the supplied grid — so two circles can only meet if
+  their radii sum to more than that, and a median 6 m² failure has a radius of
+  1.4 m. Only failures of several hundred square metres and up can reach a
+  neighbour at all; a 3000 m² one has a radius of 31 m and reaches several. The
+  step therefore constrains the top of the size distribution and leaves the rest
+  of it alone, which is the right behaviour but is not the one the count in the
+  run output suggests at first reading.
 - **Slope and downhill direction** come from `landloss.common.utils.terrain`:
   `slope_degrees()` and `downhill_azimuth_degrees()`, both Horn's 3×3 kernel on
   the same gradient, so the steepness and the bearing describe the same

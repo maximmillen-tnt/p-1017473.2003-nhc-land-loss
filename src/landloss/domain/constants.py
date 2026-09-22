@@ -75,7 +75,10 @@ GWRC_SEVERITY_RANKS = {
 # landloss.io.source_material.get_eil_landslide_probability; forward slashes so
 # the path reads the same on any platform.
 #
-# One probability of slope failure per cell, on a 25 m grid covering Wellington.
+# One probability of slope failure per cell, on a 32 m grid covering Wellington
+# (1,730,628 - 1,791,588 E, 5,409,316 - 5,459,044 N in NZTM, float32, NaN nodata,
+# about 57% of cells carrying a value). The cell size is read off the file rather
+# than assumed anywhere, so a resupply at another resolution needs no code change.
 # Two things about it are taken from the file name rather than from
 # documentation, and both need confirming with the supplier before any number
 # derived from it is quoted: that "PGA2g" names the shaking level the grid is
@@ -83,6 +86,12 @@ GWRC_SEVERITY_RANKS = {
 # the answer -- the grid is used as supplied -- but the report cannot describe
 # the result without it.
 EIL_PROBABILITY_SOURCE_PATH = "EILProb_Wellington/EILProb_PGA2g.tif"
+
+# https://data.linz.govt.nz/layer/101290-nz-building-outlines/
+# LINZ's building outlines, which the insured land extent is buffered off. NHC
+# settles on the land around the dwelling rather than the whole parcel, so the
+# building is what the extent is measured from.
+NZ_BUILDING_OUTLINES_LAYER_ID = 101290
 
 # The National Liquefaction Model's flatland model, mirrored on the T+T
 # Koordinates instance. This is the flat versus sloping land split the study
@@ -94,6 +103,29 @@ NLM_FLATLAND_LAYER_ID = 120641
 # instance. Carries the landform classes (``l2_geomorphology``) and the
 # liquefaction susceptibility the exposure attributes are built from.
 NLM_GEOMORPHOLOGY_LAYER_ID = 121398
+
+
+class Cause(StrEnum):
+    """The causes of financial land loss the model carries a damage measure for.
+
+    A damage measure only means something for one cause: liquefaction settlement
+    under insured land and a retaining wall shaken apart are unrelated
+    relationships, and the policy settles them differently. So every row the
+    vulnerability modules emit names its cause, and this is the vocabulary.
+
+    A ``StrEnum``, so a member writes itself into a column or a file name.
+    """
+
+    LIQUEFACTION = "liquefaction"
+    LANDSLIDE_EVACUATED = "landslide_evacuated"
+    LANDSLIDE_INUNDATED = "landslide_inundated"
+    SHAKING = "shaking"
+
+
+# The seed every realisation's random draws are derived from. One project-level
+# pin rather than a seed per step, because a realisation is one modelled
+# earthquake across all three hazards: see landloss.hazard.realisation.
+BASE_SEED = 1017473
 
 
 class NlmRelease(StrEnum):

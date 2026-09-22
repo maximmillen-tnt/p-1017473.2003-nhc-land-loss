@@ -23,54 +23,57 @@ per realisation; exposure does not vary by realisation.
 | `hazard.liquefaction` | Land damage state | raster | `ld_state` 1–6 |
 | `hazard.landslide` | Evacuated ground | polygons | `landslide_id`, `area_m2`, `depth_m` |
 | `hazard.landslide` | Inundated ground | polygons | `landslide_id`, `area_m2`, `depth_m` |
-| `exposure.land` | Insured land extent | polygons | `claim_id`, `rate_nzd_per_m2` |
+| `exposure.land` | Insured land extent | polygons | `address_id`, `land_rate_nzd_per_m2`, `area_m2` |
 | `exposure.rw` | Retaining walls | lines | `claim_id`, `size_class`, `initial_condition` |
 | `exposure.culverts_bridges` | Culverts, bridges | lines | `claim_id`, `structure` |
 | `vul.*` | Damage | table | `realisation_id`, `claim_id`, `cause`, `damage`, `quantity` |
 | repair cost | Cost | table | `realisation_id`, `claim_id`, `cause`, `repair_cost_nzd` |
 
-**[confirmed]** Shaking is a raster of PGA. Liquefaction is a raster of land
-damage states, one raster per realisation. Landslide is polygons of evacuated
-and inundated ground, where **the two types may overlap each other but polygons
-of the same type may not**. Retaining walls, culverts and bridges are lines;
-walls carry size and initial condition.
+**Shaking** is a raster of PGA. **Liquefaction** is a raster of land damage
+states, one per realisation. **Landslide** is polygons of evacuated and
+inundated ground.
 
-**The landslide step does not currently meet that last rule.**
-`drop_overlapping()` enforces non-overlap among evacuated polygons only.
-Inundated polygons are the same circles translated downslope, so two failures
-running into the same gully floor overlap — and ground buried twice is buried
-once. Either the step dissolves them before emitting, or the consumer dissolves
-on the way in; see the open questions.
+**Evacuated polygons may not overlap each other; inundated polygons may.** Two
+failures running into the same gully floor do land on top of one another, and
+that is allowed. What is not allowed is an orphan: if an evacuated polygon is
+dropped, its paired inundated polygon goes with it. The existing step already
+satisfies both — `drop_overlapping()` runs on the source frame *before*
+`to_polygons()` builds the two rows, so a dropped failure takes its runout with
+it, and the pair share a `landslide_id`.
 
-**[confirmed]** A landslide polygon carries a **depth** as well as an area.
-Depth is approximated from the **total evacuated area of the landslide it
-belongs to** — a bigger failure is a deeper one — so it is an attribute of the
-landslide, not of the piece that happens to fall inside one claim.
+A landslide polygon carries a **depth** as well as an area, from the volume–area
+power law `V = αA^γ` (Massey et al. 2020 give γ ≈ 1.46 for Kaikōura), so mean
+depth is `V/A`. The parent landslide's total evacuated area is simply
+`source_area_m2` — one evacuated polygon per landslide, nothing to aggregate.
+Note that the beta rebuilds the runout circle at the *same radius* as the
+source, so the two depths come out identical; that is correct for the structure
+and wrong for the world.
 
-**[proposed]** Land damage states are the 1–6 severity scale already defined in
-`vul/liquefaction/land/status.md` — None, Minor, Moderate, Major, Severe, Very
-Severe — and not the NHC damage *categories*. Keeping that straight is what the
-`ld_state` name is for.
+### How exposure reads a hazard
 
-### How exposure reads a hazard **[confirmed]**
+- **From a raster** — sample **one value per address**. An address carries a
+  single `ld_state` and a single PGA.
+- **From the landslide polygons** — intersect with the insured land polygon and
+  keep the **evacuated and inundated areas separately**. Those areas *are* the
+  damage measure.
 
-- **From a raster** — sample **one value per claim**. A claim carries a single
-  `ld_state` and a single PGA, and its whole insured area is costed at that
-  state's rate.
-- **From the landslide polygons** — intersect them with the insured land polygon
-  and keep the **area of evacuated and the area of inundated ground separately**.
-  Those areas *are* the damage measure; there is no damage state in between.
-  Each carries the depth of its parent landslide.
+### Realisations
 
-The two are deliberately different. A land damage state is a classification that
-a claim either has or does not; a landslide is a piece of geometry that covers
-part of a property, and how much of it is covered is the whole question.
+A `realisation_id` is **one modelled earthquake**, with one seed stream shared
+across the hazards, so a claim's causes can be summed within a realisation.
 
-### Realisations **[confirmed]**
+### The identifier
 
-A `realisation_id` is **one modelled earthquake**. Every hazard layer carrying
-that id belongs to the same event, from one seed stream, so a claim's shaking,
-liquefaction and landslide damage can be summed within a realisation.
+`address_id` throughout. `claim_id` exists in no Python today; renaming happens
+at the `loss` boundary when a real claim key arrives.
+
+### What `loss` receives
+
+- **Land** — several rows per address: `cause`, `area_m2`, `land_rate_nzd_per_m2`,
+  plus `rate_basis` and `cost_year`. Multiple areas, each with its own rate and
+  its own hazard.
+- **Retaining walls, culverts and bridges** — a **damage state** only, no repair
+  cost and no repair state. `loss` receives `no damage` or `replace`.
 
 ## Module betas
 
@@ -125,28 +128,30 @@ circular source polygons.
 
 Repair cost is the last column times the quantity. No caps, no election, no GST.
 
-## What still has to be decided
+## Naming what gets deleted
 
-These are the questions the build cannot start without. They are tracked in the
-register's `Questions` sheet where they need someone outside the team, and here
-where they are ours to settle.
+Anything that exists **because** of the beta carries `beta` in its name, so a
+grep finds everything the beta has to give back. `beta_expand_ld_probabilities`,
+`BETA_NONE_SHARES` and `BETA_MAJOR_SHARES` manufacture land damage states the
+National Liquefaction Model does not supply, and go when it does.
 
-1. **The depth relationship.** Depth is approximated from a landslide's total
-   evacuated area, but the function is not set, and evacuated depth and
-   inundated depth may not be the same function of it.
-2. **Overlapping inundated polygons.** Dissolving them satisfies the same-type
-   rule but discards the `landslide_id` that depth hangs off. Keeping them keeps
-   depth but makes the consumer responsible for not double counting, and leaves
-   open what depth applies where two landslides bury the same ground.
-2. **What the insured land polygon is in the beta.** The real extent needs
-   driveway generation, which is not built. A fixed buffer of the building
-   outline is the obvious shortcut, but it leaves `culverts_bridges` with no
-   accessway to test crossings against.
-3. **What the retaining wall, culvert and bridge repair costs are.** Nothing is
-   packaged, and **T-32** — whether wall cost scales with length or height — is
-   still open.
-4. **Which percentile of the liquefaction cost rates the beta uses.** The
-   packaged rates carry 15th, 50th and 85th.
-5. **Whether the hazard layers share a grid.** Proposed: each stays on its
-   native grid and exposure samples each separately, since sampling one value
-   per claim makes a common grid unnecessary.
+Mark only what is genuinely temporary. In the same module `exceedance_to_bands`
+and `draw_ld_states` carry no prefix, because differencing an exceedance pair
+and drawing a state from probabilities are correct whatever supplies the bands.
+The test is not "was this written during the beta" but "will this be deleted
+when the real input arrives".
+
+## What is still open
+
+- ~~Exceedance or band probabilities~~ — **settled.** The NLM grids are
+  exceedance probabilities, so the Moderate band is `p_moderate − p_major` and
+  the None band is `1 − p_moderate`. `expand_ld_probabilities` differences them
+  itself rather than trusting a caller, and refuses a swapped pair. The Major
+  reader is `nlm.get_nlm_scenario_rp2500y_gwd_med_p_ld_major_fu()`.
+- **Landslide land repair rates.** The T+T remediation schedule is not packaged,
+  so the beta uses flagged placeholders.
+- **Wall, culvert and bridge repair costs** are out of scope for the beta by
+  decision, not by omission.
+
+The sequenced build order, the new library functions and the verification steps
+are in the approved implementation plan rather than repeated here.
