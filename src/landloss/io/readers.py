@@ -258,6 +258,55 @@ def get_nz_building_outlines(
     )
 
 
+def get_nz_address_roads(
+    bbox: tuple[float, float, float, float] | None = None,
+    crs: int | str = constants.DEFAULT_CRS,
+    *,
+    use_cache: bool = True,
+) -> gpd.GeoDataFrame:
+    """Load the LINZ NZ Addresses: Roads layer for an extent.
+
+    The road centrelines of the LINZ addressing dataset,
+    https://data.linz.govt.nz/layer/123110-nz-addresses-roads/. A driveway is
+    generated as the shortest path from a building to a road, so this is the
+    layer the insured land extent is routed to.
+
+    Preferred over the topographic road centrelines because it belongs to the
+    same addressing dataset as the address spine: a property's driveway meets
+    the road its address is numbered on, so the road geometry and the address
+    points already agree rather than having to be reconciled across two
+    surveys at different generalisations.
+
+    Licence:
+        Creative Commons Attribution 4.0 International (CC BY 4.0),
+        https://data.linz.govt.nz/license/attribution-4-0-international/. In
+        practice that obliges us to credit LINZ in anything published that is
+        derived from it -- which here means the insured land extent, and so
+        every figure and table of land exposure, land damage or loss built on
+        that extent, since the driveway is part of the insured area.
+
+    Source:
+        Land Information New Zealand, data.linz.govt.nz. No DOI is published
+        for the layer.
+
+    Args:
+        bbox: The extent to clip to (minx, miny, maxx, maxy) in ``crs``.
+            Omitting it returns every road in New Zealand, 82,364 of them.
+        crs: The coordinate reference system to return the roads in.
+        use_cache: Whether to read and write the clipped extent cache.
+
+    Returns:
+        A GeoDataFrame of road centrelines.
+    """
+    return get_koordinates_layer_extent(
+        layer=constants.NZ_ADDRESS_ROADS_LAYER_ID,
+        crs=crs,
+        bbox=bbox,
+        domain=constants.LINZ_DOMAIN,
+        use_cache=use_cache,
+    )
+
+
 def get_nz_river_name_lines(
     bbox: tuple[float, float, float, float] | None = None,
     crs: int | str = constants.DEFAULT_CRS,
@@ -287,6 +336,53 @@ def get_nz_river_name_lines(
     """
     return get_koordinates_layer_extent(
         layer=constants.NZ_RIVER_NAME_LINES_LAYER_ID,
+        crs=crs,
+        bbox=bbox,
+        domain=constants.LINZ_DOMAIN,
+        use_cache=use_cache,
+    )
+
+
+def get_nz_river_name_polygons(
+    bbox: tuple[float, float, float, float] | None = None,
+    crs: int | str = constants.DEFAULT_CRS,
+    *,
+    use_cache: bool = True,
+) -> gpd.GeoDataFrame:
+    """Load the LINZ NZ River Name Polygons (Pilot) layer for an extent.
+
+    The areal extent of the wider rivers,
+    https://data.linz.govt.nz/layer/103631-nz-river-name-polygons-pilot/,
+    5,644 of them nationally. A narrow stream exists in the LINZ data only as a
+    centreline, while a river wide enough to need a bridge has an area, so the
+    culvert and bridge work tests an accessway against both this and
+    :func:`get_nz_river_name_lines`. Testing against the lines alone would miss
+    the crossings most likely to carry a bridge rather than a culvert.
+
+    Published as a pilot, so its coverage over the study area should be
+    confirmed before a crossing rate derived from it is quoted.
+
+    Licence:
+        Creative Commons Attribution 4.0 International (CC BY 4.0),
+        https://data.linz.govt.nz/license/attribution-4-0-international/. That
+        obliges us to credit LINZ in anything published that is derived from it,
+        which here means the culvert and bridge population and any loss built on
+        it.
+
+    Source:
+        Land Information New Zealand, data.linz.govt.nz. No DOI is published for
+        the layer.
+
+    Args:
+        bbox: The extent to clip to (minx, miny, maxx, maxy) in ``crs``.
+        crs: The coordinate reference system to return the polygons in.
+        use_cache: Whether to read and write the clipped extent cache.
+
+    Returns:
+        A GeoDataFrame of river extent polygons.
+    """
+    return get_koordinates_layer_extent(
+        layer=constants.NZ_RIVER_NAME_POLYGONS_LAYER_ID,
         crs=crs,
         bbox=bbox,
         domain=constants.LINZ_DOMAIN,

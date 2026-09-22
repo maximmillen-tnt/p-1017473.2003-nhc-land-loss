@@ -1,9 +1,9 @@
 # Shaking hazard: status
 
-**Status:** TS1170.5 demand built as a raster in the National Liquefaction
-Model; not yet ported into this repository.
+**Status:** A PGA field per realisation runs, off the NLM grid. Coarse: one
+cell covers the whole pilot box.
 
-**Updated:** 2026-09-21
+**Updated:** 2026-09-22
 
 ## Approach
 
@@ -43,6 +43,21 @@ from the study, so nothing downstream should depend on it yet.
 The output structure is a raster of PGA in g, one per realisation.
 
 ## Where it is now
+
+`steps/s1_pga_realisation/` writes one PGA field per realisation: the NLM's
+2500-year site class 5 grid, clipped to the extent and scaled by one lognormal
+draw against a 10% coefficient of variation, seeded from the project realisation
+stream.
+
+**The grid is national and about 9,930 m across a cell** — 149 by 114 cells over
+New Zealand, PGA 0.35 to 1.3 g, median 0.59, with Wellington's cell at 1.0 g.
+Over the four territorial authorities that is roughly 6 by 5 cells; over the
+pilot box it is a **single cell**. So every property in the pilot reads the same
+PGA, and because the realisation multiplier is shared across the field, every
+asset in a realisation shakes identically. Variation between assets has to come
+from the fragility draw, not from the shaking.
+
+PGV is not produced.
 
 Nothing is implemented here. The folder holds this file and `__init__.py`, and
 no script in the repository reads TS1170.5, V<sub>s</sub>30 or the National

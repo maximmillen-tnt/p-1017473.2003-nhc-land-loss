@@ -284,6 +284,43 @@ def nearest_building_cells(
     return faces.loc[owners.index].assign(**{id_column: owners[id_column].to_numpy()})
 
 
+def add_driveways(
+    parts: gpd.GeoDataFrame,
+    driveways: gpd.GeoDataFrame,
+    *,
+    id_column: str = ADDRESS_ID_COLUMN,
+) -> gpd.GeoDataFrame:
+    """Union each property's driveway corridors into its buffered extent.
+
+    Called before :func:`split_shared_ground`, so that a driveway running past a
+    neighbour's house is contested ground like any other and is partitioned by
+    the same rule. Merging driveways into a finished extent instead would leave
+    two properties holding the same strip.
+
+    Args:
+        parts: One buffered polygon per address, as :func:`buffer_buildings`
+            returns.
+        driveways: The driveway corridors, keyed on ``id_column``.
+        id_column: The address identifier both are keyed on.
+
+    Returns:
+        ``parts`` with each property's driveways unioned into its polygon.
+    """
+    corridors = driveways.dissolve(by=id_column).geometry
+    merged = parts.copy()
+    additions = merged[id_column].map(corridors)
+    has_driveway = additions.notna()
+    merged.loc[has_driveway, merged.geometry.name] = [
+        polygon.union(addition)
+        for polygon, addition in zip(
+            merged.loc[has_driveway, merged.geometry.name],
+            additions[has_driveway],
+            strict=True,
+        )
+    ]
+    return merged
+
+
 def split_shared_ground(
     parts: gpd.GeoDataFrame,
     buildings: gpd.GeoDataFrame,
@@ -363,8 +400,8 @@ def build_insured_land_extent(
     addresses: gpd.GeoDataFrame,
     buildings: gpd.GeoDataFrame,
     *,
+    driveways: gpd.GeoDataFrame | None = None,
     buffer_m: float = INSURED_LAND_BUFFER_M,
-    max_building_distance_m: float = MAX_BUILDING_TO_ADDRESS_M,
     id_column: str = ADDRESS_ID_COLUMN,
 ) -> gpd.GeoDataFrame:
     """Build one insured land polygon per address from the building outlines.
@@ -379,10 +416,14 @@ def build_insured_land_extent(
     Args:
         addresses: The address points, carrying ``id_column``.
         buildings: The building outlines over the same extent.
+        driveways: The driveway corridors, keyed on ``id_column``. Unioned in
+            before the ground is partitioned, not after: a driveway merged into
+            a finished extent would overlap the neighbour's and reintroduce the
+            double counting the partition exists to remove.
         buffer_m: How far the insured land reaches from a building outline.
-        max_building_distance_m: How far a building may be from an address point
-            and still be attached to it.
-        id_column: The address identifier the extent is keyed on.
+        id_column: The address identifier the extent is keyed on. A building
+            further than :data:`MAX_BUILDING_TO_ADDRESS_M` from every address
+            point is attached to none of them.
 
     Returns:
         One row per address that has a building, carrying ``id_column``,
@@ -401,7 +442,7 @@ def build_insured_land_extent(
         buildings,
         addresses,
         id_column=id_column,
-        max_distance_m=max_building_distance_m,
+        max_distance_m=MAX_BUILDING_TO_ADDRESS_M,
     )
     if attached.empty:
         return gpd.GeoDataFrame(
@@ -411,6 +452,8 @@ def build_insured_land_extent(
         )
 
     parts = buffer_buildings(attached, buffer_m=buffer_m, id_column=id_column)
+    if driveways is not None and not driveways.empty:
+        parts = add_driveways(parts, driveways, id_column=id_column)
     parts = split_shared_ground(parts, attached, id_column=id_column)
 
     parts[AREA_COLUMN] = parts.geometry.area

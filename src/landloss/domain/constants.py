@@ -36,6 +36,12 @@ NZ_ADDRESSES_LAYER_ID = 123113
 # from the smaller streams and creeks.
 NZ_RIVER_NAME_LINES_LAYER_ID = 103632
 
+# https://data.linz.govt.nz/layer/103631-nz-river-name-polygons-pilot/
+# The areal extent of the wider rivers, which the name lines carry only as a
+# centreline. A crossing test against the lines alone would miss exactly the
+# rivers wide enough to need a bridge, so the culvert and bridge work reads both.
+NZ_RIVER_NAME_POLYGONS_LAYER_ID = 103631
+
 # https://lris.scinfo.org.nz/layer/123148-lcdb-v60-land-cover-database-version-60-mainland-new-zealand/
 # LCDB v6.0, released October 2025. Polygons carrying a land cover class at each
 # of six time steps from summer 1996/97 to summer 2023/24.
@@ -86,6 +92,13 @@ GWRC_SEVERITY_RANKS = {
 # the answer -- the grid is used as supplied -- but the report cannot describe
 # the result without it.
 EIL_PROBABILITY_SOURCE_PATH = "EILProb_Wellington/EILProb_PGA2g.tif"
+
+# https://data.linz.govt.nz/layer/123110-nz-addresses-roads/
+# The roads of the LINZ addressing dataset, the same family the address spine
+# comes from. Preferred over the topographic road centrelines because a driveway
+# meets the road its address is numbered on, so the geometry and the naming
+# already agree with the addresses rather than having to be reconciled.
+NZ_ADDRESS_ROADS_LAYER_ID = 123110
 
 # https://data.linz.govt.nz/layer/101290-nz-building-outlines/
 # LINZ's building outlines, which the insured land extent is buffered off. NHC

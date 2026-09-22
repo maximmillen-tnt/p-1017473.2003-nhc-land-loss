@@ -39,7 +39,7 @@ The insured land definition includes the driveway, and the beta does not build
 it. Driveways are where most retaining walls sit, so the gap matters more than
 the area it covers.
 
-- [ ] Read the LINZ roadway layer over the study extent, and pin it as a named
+- [x] Read the LINZ roadway layer over the study extent, and pin it as a named
       constant beside `NZ_BUILDING_OUTLINES_LAYER_ID`.
 - [ ] Generate a driveway as the shortest path from each building outline to the
       roadway. This resolves **I-10**, which proposed mapping them by remote

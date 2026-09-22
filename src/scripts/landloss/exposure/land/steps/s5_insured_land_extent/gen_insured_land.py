@@ -39,6 +39,10 @@ import sys
 import geopandas as gpd
 
 from landloss.domain import constants
+from landloss.exposure.land.driveways import (
+    describe_driveways,
+    generate_driveways,
+)
 from landloss.exposure.land.extent import (
     ADDRESS_ID_COLUMN,
     AREA_COLUMN,
@@ -49,7 +53,7 @@ from landloss.exposure.land.extent import (
     buffer_buildings,
     build_insured_land_extent,
 )
-from landloss.io.readers import get_nz_building_outlines
+from landloss.io.readers import get_nz_address_roads, get_nz_building_outlines
 from scripts.landloss.exposure.land.steps.s5_insured_land_extent import config
 from scripts.landloss.paths import TEMP_DIR
 
@@ -101,6 +105,23 @@ def land_value_path(*, pilot):
         The path to the valued addresses, under ``temp/exposure/``.
     """
     return WORK_DIR / (PILOT_LAND_VALUE_NAME if pilot else LAND_VALUE_NAME)
+
+
+def driveway_path(*, pilot):
+    """Return the file a run writes the driveway corridors to.
+
+    The driveways are unioned into the insured land extent, but step 7 tests
+    watercourse crossings against the accessway itself rather than against the
+    whole property, so they are also written out on their own.
+
+    Args:
+        pilot: Whether the run is over the pilot box.
+
+    Returns:
+        The output path, under ``temp/exposure/``.
+    """
+    suffix = "-pilot" if pilot else ""
+    return WORK_DIR / f"driveways{suffix}.geoparquet"
 
 
 def insured_land_path(*, pilot):
@@ -272,10 +293,22 @@ def main(*, pilot, use_cached_extent):
     )
     describe_inputs(addresses, buildings, bbox)
 
-    extent = build_insured_land_extent(addresses, buildings)
     attached = attach_buildings_to_addresses(buildings, addresses)
 
+    # The insured land is the ground around the dwelling AND the driveway, so an
+    # extent of building buffers alone is short of NHC's own definition.
+    print("Fetching the roads to route driveways to ...", flush=True)
+    roads = get_nz_address_roads(
+        bbox=bbox, crs=constants.DEFAULT_CRS, use_cache=use_cached_extent
+    )
+    driveways = generate_driveways(attached, roads)
+
+    extent = build_insured_land_extent(addresses, buildings, driveways=driveways)
+
     describe_coverage(addresses, attached, buildings, extent)
+    print(RULE)
+    print(f"Roads: {len(roads):,}")
+    print(describe_driveways(driveways, len(attached)).to_string())
     describe_shared_ground(attached, extent)
     describe_areas(extent, addresses)
 
@@ -298,6 +331,10 @@ def main(*, pilot, use_cached_extent):
     insured.to_parquet(out_path)
     print(RULE)
     print(f"Wrote {len(insured):,} insured land polygons to {out_path}")
+
+    driveway_out = driveway_path(pilot=pilot)
+    driveways.to_parquet(driveway_out)
+    print(f"Wrote {len(driveways):,} driveway corridors to {driveway_out}")
 
 
 if __name__ == "__main__":

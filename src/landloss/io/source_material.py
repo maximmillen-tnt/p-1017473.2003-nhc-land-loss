@@ -112,7 +112,12 @@ def get_source_material_raster(
     # masked=True is what turns the file's declared nodata into NaN. It also
     # forces the array to float, which is wanted here: an integer class grid
     # with a nodata hole has no integer left to put in the hole.
-    raster = rioxarray.open_rasterio(path, masked=True).squeeze(drop=True)
+    # Read through a context manager and load into memory. A lazily-opened
+    # GDAL handle is finalised during interpreter shutdown, which on Windows
+    # surfaces as a bare "Error in sys.excepthook" after an otherwise clean
+    # run -- and the array is small enough that holding it costs nothing.
+    with rioxarray.open_rasterio(path, masked=True) as opened:
+        raster = opened.squeeze(drop=True).load()
 
     if tuple(raster.dims) != RASTER_DIMS:
         msg = (

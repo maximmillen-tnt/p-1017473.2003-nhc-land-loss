@@ -206,7 +206,8 @@ def main(*, pilot, realisation_ids):
     for realisation_id in realisation_ids:
         raster_path = ld_state_path(realisation_id, pilot=pilot)
         print(f"Reading the states from {raster_path} ...")
-        states = rioxarray.open_rasterio(raster_path, masked=True).squeeze(drop=True)
+        with rioxarray.open_rasterio(raster_path, masked=True) as opened:
+            states = opened.squeeze(drop=True).load()
 
         fig = build_figure(probabilities, states, realisation_id=realisation_id)
         figure_path = FIG_DIR / f"{raster_path.stem}.png"

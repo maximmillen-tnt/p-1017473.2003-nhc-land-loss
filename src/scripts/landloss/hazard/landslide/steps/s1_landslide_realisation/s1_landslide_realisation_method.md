@@ -154,5 +154,15 @@
   dissolving a hundred thousand of them to confirm it costs about a minute.
 - The probability grid carries no spatial correlation of its own to inherit, and
   nothing in this step adds any.
+- Each run draws one realisation per id in `config.REALISATION_IDS`. The
+  generator comes from `landloss.hazard.realisation.realisation_seed` with the
+  project-wide `BASE_SEED`, the realisation id and the stream name
+  `"landslide"`, so the landslides of realisation 3 belong to the same modelled
+  earthquake as the shaking and liquefaction of realisation 3. The step holds no
+  seed of its own; two hazards seeded separately could not be paired.
+- Every polygon carries `realisation_id`, and the output is written per
+  realisation as `landslide-realisation-rNNN[-pilot].geoparquet` by
+  `realisation_path()`.
+
 
 Potential future improvements: see `s1_landslide_realisation_implementation_plan.md`.

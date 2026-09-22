@@ -68,6 +68,7 @@ from landloss.common.utils.terrain import (
     slope_degrees,
 )
 from landloss.domain import constants
+from landloss.hazard.realisation import realisation_seed
 from landloss.io.area_of_interest import SMALL_WLG_PILOT, get_study_areas
 from landloss.io.readers import get_dem
 from landloss.io.source_material import get_eil_landslide_probability
@@ -86,8 +87,15 @@ if hasattr(sys.stdout, "reconfigure"):
 WORK_DIR = TEMP_DIR / "hazard" / "landslide"
 
 # Separate names, so a pilot run cannot overwrite a full one.
-OUT_NAME = "landslide-realisation.geoparquet"
-PILOT_OUT_NAME = "landslide-realisation-pilot.geoparquet"
+OUT_STEM = "landslide-realisation"
+
+# The stream this step draws from. One name per hazard, not per script, so every
+# script in the module draws from the same sequence for a given realisation.
+RNG_STREAM = "landslide"
+
+# Carried on every polygon so a layer can be paired with the shaking and
+# liquefaction layers of the same modelled earthquake.
+REALISATION_ID_COLUMN = "realisation_id"
 
 # The size distribution. A bounded power law: the probability density of a
 # source area falls as area to the power -SIZE_EXPONENT, between the two limits.
@@ -156,21 +164,23 @@ MIN_REPORTED_OVERLAP_PERCENT = 0.05
 RULE = "-" * 72
 
 
-def realisation_path(*, pilot):
-    """Return the file a run writes its realisation to.
+def realisation_path(*, pilot, realisation_id):
+    """Return the file a run writes one realisation to.
 
-    A function rather than a constant because the name depends on the extent,
-    and the extent is an argument now. ``fig_landslide_realisation.py`` calls
-    this too, which is what keeps the figure drawing the realisation the
-    simulation actually wrote.
+    A function rather than a constant because the name depends on the extent and
+    on which realisation it is. ``fig_landslide_realisation.py`` calls this too,
+    which is what keeps the figure drawing the realisation the simulation
+    actually wrote.
 
     Args:
         pilot: Whether the run is over the pilot box.
+        realisation_id: Which modelled earthquake this is.
 
     Returns:
         The output path, under ``temp/hazard/landslide/``.
     """
-    return WORK_DIR / (PILOT_OUT_NAME if pilot else OUT_NAME)
+    suffix = "-pilot" if pilot else ""
+    return WORK_DIR / f"{OUT_STEM}-r{realisation_id:03d}{suffix}.geoparquet"
 
 
 def resolve_extent(study_areas, *, pilot):
@@ -312,7 +322,12 @@ def build_terrain(grid, resolution, *, use_cache):
     )
     print(f"  {dem_path}")
 
-    dem = rioxarray.open_rasterio(dem_path, masked=True).squeeze(drop=True)
+    # Read through a context manager and load into memory. A lazily-opened
+    # GDAL handle is finalised during interpreter shutdown, which on Windows
+    # surfaces as a bare "Error in sys.excepthook" after an otherwise clean
+    # run -- and the array is small enough that holding it costs nothing.
+    with rioxarray.open_rasterio(dem_path, masked=True) as opened:
+        dem = opened.squeeze(drop=True).load()
 
     # Bilinear rather than nearest: elevation is a continuous surface, and
     # nearest neighbour would step it, putting a false cliff between every pair
@@ -657,18 +672,16 @@ def describe_result(polygons):
             )
 
 
-def main(*, pilot, seed, use_cached_dem):
-    """Draw one realisation of landslides and write it out.
+def main(*, pilot, realisation_ids, use_cached_dem):
+    """Draw a realisation of landslides per id and write each one out.
 
     Args:
         pilot: Whether to run over the small Wellington pilot box rather than
             the four territorial authorities.
-        seed: The random seed, so the realisation reproduces exactly.
+        realisation_ids: Which modelled earthquakes to draw.
         use_cached_dem: Whether to reuse an already-fetched elevation model for
             this extent.
     """
-    out_path = realisation_path(pilot=pilot)
-
     study_areas = get_study_areas(constants.DEFAULT_CRS)
     bbox, extent_name = resolve_extent(study_areas, pilot=pilot)
 
@@ -682,7 +695,35 @@ def main(*, pilot, seed, use_cached_dem):
 
     slope, azimuth = build_terrain(probability, resolution, use_cache=use_cached_dem)
 
-    rng = np.random.default_rng(seed)
+    for realisation_id in realisation_ids:
+        draw_realisation(
+            probability,
+            slope,
+            azimuth,
+            pilot=pilot,
+            realisation_id=realisation_id,
+        )
+
+
+def draw_realisation(probability, slope, azimuth, *, pilot, realisation_id):
+    """Draw one modelled earthquake's landslides and write them out.
+
+    The generator comes from the project seed and the realisation id rather than
+    from a seed of this step's own, so the landslides of realisation 3 belong to
+    the same earthquake as the shaking and liquefaction of realisation 3.
+
+    Args:
+        probability: The per-cell probability of slope failure.
+        slope: Slope in degrees, on the same grid.
+        azimuth: Downhill azimuth in degrees, on the same grid.
+        pilot: Whether the run is over the pilot box.
+        realisation_id: Which modelled earthquake this is.
+    """
+    out_path = realisation_path(pilot=pilot, realisation_id=realisation_id)
+    print(RULE)
+    print(f"Realisation {realisation_id}")
+
+    rng = realisation_seed(constants.BASE_SEED, realisation_id, RNG_STREAM)
     failures, drawn, without_terrain = build_failures(probability, slope, azimuth, rng)
 
     print(RULE)
@@ -722,14 +763,21 @@ def main(*, pilot, seed, use_cached_dem):
     describe_distribution(survivors["displacement_m"], "Displacement", "m")
 
     polygons = to_polygons(survivors)
+    polygons[REALISATION_ID_COLUMN] = realisation_id
     describe_result(polygons)
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     polygons.to_parquet(out_path)
-    print(RULE)
     print(f"Wrote {len(polygons):,} polygons to {out_path}")
-    print(f"Seed {seed}; re-run with the same seed to reproduce it exactly.")
+    print(
+        f"Seed {constants.BASE_SEED}, realisation {realisation_id}, stream "
+        f"{RNG_STREAM!r}; the same three reproduce it exactly."
+    )
 
 
 if __name__ == "__main__":
-    main(pilot=config.PILOT, seed=config.SEED, use_cached_dem=config.USE_CACHED_DEM)
+    main(
+        pilot=config.PILOT,
+        realisation_ids=config.REALISATION_IDS,
+        use_cached_dem=config.USE_CACHED_DEM,
+    )

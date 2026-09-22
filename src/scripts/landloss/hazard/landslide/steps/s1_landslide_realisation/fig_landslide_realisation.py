@@ -219,15 +219,16 @@ def build_figure(polygons):
     return fig
 
 
-def main(*, pilot):
+def main(*, pilot, realisation_id):
     """Draw the realisation the simulation wrote for this extent.
 
     Args:
         pilot: Whether to draw the pilot box realisation rather than the full
             study area one. Must match the setting the simulation was run with,
             which is why both read it from the same ``config.py``.
+        realisation_id: Which modelled earthquake to draw.
     """
-    realisation = realisation_path(pilot=pilot)
+    realisation = realisation_path(pilot=pilot, realisation_id=realisation_id)
     figure_path = FIG_DIR / f"{realisation.stem}.png"
 
     print(f"Reading the realisation from {realisation} ...")
@@ -248,4 +249,4 @@ def main(*, pilot):
 
 
 if __name__ == "__main__":
-    main(pilot=config.PILOT)
+    main(pilot=config.PILOT, realisation_id=config.REALISATION_IDS[0])

@@ -90,14 +90,13 @@ to choose against.
       distribution rather than its mean.
 - [ ] Run N realisations and carry a distribution of affected area per property
       per cause, instead of the single realisation this step produces.
-- [ ] Seed from `realisation_seed(BASE_SEED, realisation_id, "landslide")` rather
+- [x] Seed from `realisation_seed(BASE_SEED, realisation_id, "landslide")` rather
       than from this step's own `SEED`, and put the realisation id in the output
-      file name the way `gen_liq_ld_states.py` writes `ld-state-rNNN.tif`. A
-      realisation is one modelled earthquake across all three hazards, so a
-      landslide layer and a liquefaction layer can only be summed per address
-      once both carry the same `realisation_id`; today the landslide draw is
-      independent of it and the single output file cannot be paired with one.
-      The beta takes this step as it stands, so this lands with the item above.
+      file name the way `gen_liq_ld_states.py` writes `ld-state-rNNN.tif`. Done:
+      `config.REALISATION_IDS` replaces `SEED`, `draw_realisation()` draws one
+      earthquake per id, every polygon carries `realisation_id`, and the output
+      is `landslide-realisation-rNNN[-pilot].geoparquet`. A landslide layer can
+      now be paired with the liquefaction layer of the same realisation.
 - [ ] Check the proportion of landslides confined to a single property against
       the local expectation in `.agents/context/land-damage-mechanisms.md`: most
       confined to one property, with multi-property failures concentrated in

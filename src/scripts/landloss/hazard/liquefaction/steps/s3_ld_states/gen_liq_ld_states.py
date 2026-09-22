@@ -117,9 +117,11 @@ def read_probabilities(*, pilot):
     probabilities = {}
     for state in LD_STATES:
         path = beta_probability_path(state, pilot=pilot)
-        probabilities[state] = rioxarray.open_rasterio(path, masked=True).squeeze(
-            drop=True
-        )
+        # Loaded rather than left lazy: an open GDAL handle finalised during
+        # interpreter shutdown surfaces as a bare "Error in sys.excepthook"
+        # after an otherwise clean run.
+        with rioxarray.open_rasterio(path, masked=True) as opened:
+            probabilities[state] = opened.squeeze(drop=True).load()
 
     shapes = {state: grid.shape for state, grid in probabilities.items()}
     if len(set(shapes.values())) > 1:

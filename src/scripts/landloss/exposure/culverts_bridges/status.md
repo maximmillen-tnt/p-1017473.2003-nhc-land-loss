@@ -1,9 +1,9 @@
 # Culvert and bridge exposure: status
 
-**Status:** Approach agreed. Not implemented, and waiting on the insured
-accessway layer it is defined against.
+**Status:** Detection runs end to end; empty over the pilot box, which holds
+no named watercourse.
 
-**Updated:** 2026-09-21
+**Updated:** 2026-09-22
 
 ## Approach
 
@@ -52,6 +52,21 @@ structure, keyed to `claim_id` and carrying which structure it is. Culverts and
 bridges share the structure and differ only by that attribute.
 
 ## Where it is now
+
+`steps/s7_crossing_population/` runs end to end. It reads the driveway corridors
+step 5 now writes, intersects them against both LINZ river layers, and draws a
+culvert or a bridge at each crossing under the project realisation seed.
+
+**Over the pilot box it finds nothing**, and that is geography rather than a
+fault: neither river layer returns a feature there, the nearest named
+watercourse is about 2.8 km away, and central Wellington's streams are piped and
+carry no name in the LINZ data. The same readers return 9,233 lines and 37
+polygons over the four territorial authorities, so the step has not yet been
+exercised against a real crossing — only against synthetic geometry in its
+tests.
+
+The river name polygons layer is now pinned as
+`NZ_RIVER_NAME_POLYGONS_LAYER_ID` with a reader beside the lines one.
 
 Nothing is implemented. This file and `__init__.py` are the only things in the
 folder.

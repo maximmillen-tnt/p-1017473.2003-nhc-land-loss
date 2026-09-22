@@ -16,9 +16,13 @@ actually wrote.
 # over the full extent is a long fetch.
 PILOT = True
 
-# The random seed, so a realisation reproduces exactly. The project number,
-# chosen to be obviously arbitrary rather than tuned.
-SEED = 1017473
+# Which modelled earthquakes to draw. A realisation id is the whole event: the
+# same id in the shaking, liquefaction and landslide layers is the same
+# earthquake, which is what lets a property's causes be summed. The seed itself
+# is project-wide -- landloss.domain.constants.BASE_SEED -- and this step does
+# not carry one of its own, because two hazards seeded separately could not be
+# paired.
+REALISATION_IDS = [0]
 
 # Whether to reuse an already-fetched elevation model for this extent. Set False
 # to fetch it again.

@@ -1,9 +1,8 @@
 # Retaining wall exposure: status
 
-**Status:** Approach agreed. Input datasets being collected; nothing implemented
-in this repository.
+**Status:** A beta stand-in population runs; the real inference is not started.
 
-**Updated:** 2026-09-21
+**Updated:** 2026-09-22
 
 ## Approach
 
@@ -53,6 +52,20 @@ structure the beta has to emit however the population is produced.
 
 ## Where it is now
 
+`steps/s6_wall_population/` draws a **stand-in** population: at most one wall per
+insured property, prevalence and retained height ramped off slope alone, initial
+condition split evenly, and each wall placed as a line along the contour. Over
+the pilot box that is 758 walls over 4,764 properties, 15.9%, median retained
+height 1.8 m. The library behind it is `landloss.exposure.rw.beta_population`,
+whose every public name carries `beta` because it is deleted when the real
+inference lands.
+
+It is not evidence about Wellington. It exists so the vulnerability work has
+lines with a size class and an initial condition to read.
+
+The size thresholds are settled: small below 1 m, medium 1 to 2.5 m, large above
+2.5 m.
+
 Nothing is implemented. This file and `__init__.py` are the only things in the
 folder, and no script in the repository reads a retaining wall dataset.
 
@@ -64,8 +77,8 @@ folder, and no script in the repository reads a retaining wall dataset.
 
 ## Next
 
-1. Name the six wall classes. The height thresholds are set: small below 1 m,
-   medium 1 to 2.5 m, large above 2.5 m.
+1. Name the six wall classes, so a published fragility curve can attach to
+   each cell of the class, size and condition grid.
 2. Bring the collected input datasets into the repository, or record where they
    are held and how they are read, so the inputs are reproducible.
 3. Bring the manual mapping and the remote sensing pilot into the repository on

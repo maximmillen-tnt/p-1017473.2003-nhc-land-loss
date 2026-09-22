@@ -47,6 +47,11 @@
   beside the six output means and their total — `describe_extent()` and
   `describe_expansion()`. The expansion is checkable by arithmetic from those
   lines alone, which is what they are there for.
+- **A cell count well below the grid size is the expected state, not a gap.** The
+  National Liquefaction Model covers flat land only, and the Wellington pilot box
+  is mostly hill: over it, 239 of 522 cells carry a probability. Liquefaction is
+  a flat land process, so the hills having no value is the model saying so rather
+  than the clip having failed. Hill ground is the landslide module's concern.
 - The six grids are written to `temp/hazard/liquefaction/` at the paths
   `beta_probability_path()` returns —
   `beta-ld-probability-<state>-pilot.tif` when `PILOT` is set and without the

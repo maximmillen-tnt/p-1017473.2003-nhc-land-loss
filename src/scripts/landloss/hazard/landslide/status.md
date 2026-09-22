@@ -80,6 +80,14 @@ the inundated polygons to satisfy the contract would discard the
 `landslide_id` that depth hangs off, which is why the two questions are one
 question.
 
+The step now draws one realisation per id in `config.REALISATION_IDS`, seeded
+from the project-wide `BASE_SEED` through
+`landloss.hazard.realisation.realisation_seed`, and writes
+`landslide-realisation-rNNN[-pilot].geoparquet` with `realisation_id` on every
+polygon. A landslide layer and a liquefaction layer carrying the same
+`realisation_id` are the same modelled earthquake, so a property's causes can be
+summed.
+
 ## Where it is now
 
 `steps/s1_landslide_realisation/` holds a runnable first cut of the extend-ESNZ
