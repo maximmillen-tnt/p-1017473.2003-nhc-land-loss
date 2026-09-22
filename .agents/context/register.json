@@ -287,6 +287,70 @@
       "Phase": "2",
       "Source": "Wgtn Land Model 2026-09-21",
       "Status": "Open"
+    },
+    {
+      "ID": "T-37",
+      "Task": "Email Chris Ewens to request the NHC costing tool spreadsheet, which he will release once it is approved to leave the department.",
+      "Owner": "Virginie Lacrosse",
+      "Phase": "2",
+      "Source": "Costing tool demo 2026-09-21",
+      "Status": "Done"
+    },
+    {
+      "ID": "T-38",
+      "Task": "Extract the rates from the costing tool's lists sheet into this project's own rate table rather than building on top of the spreadsheet.",
+      "Owner": "Maxim Millen",
+      "Phase": "2",
+      "Source": "Costing tool demo 2026-09-21",
+      "Status": "Open"
+    },
+    {
+      "ID": "T-39",
+      "Task": "Check with Nick Peters how many bridges and culverts sit on residential property in the study area.",
+      "Owner": "Virginie Lacrosse",
+      "Phase": "2",
+      "Source": "Costing tool demo 2026-09-21",
+      "Status": "Open"
+    },
+    {
+      "ID": "T-40",
+      "Task": "Find an NHC engineering report carrying the access and easy, moderate and difficult ratings, so the team can see what the costing inputs look like on a real site.",
+      "Owner": "John Leeves",
+      "Phase": "2",
+      "Source": "Costing tool demo 2026-09-21",
+      "Status": "Open"
+    },
+    {
+      "ID": "T-41",
+      "Task": "Start a Teams chat with John Leeves, Virginie Lacrosse and Chris Ewens listing the outstanding costing questions in numbered form.",
+      "Owner": "Maxim Millen",
+      "Phase": "2",
+      "Source": "Costing tool demo 2026-09-21",
+      "Status": "Open"
+    },
+    {
+      "ID": "T-42",
+      "Task": "Follow up Mike Tyson on whether QV can lift the daily licence limit or supply a one-off dump of the land value dataset.",
+      "Owner": "Virginie Lacrosse",
+      "Phase": "1",
+      "Source": "Costing tool demo 2026-09-21",
+      "Status": "Open"
+    },
+    {
+      "ID": "T-43",
+      "Task": "Set up a meeting with John Leeves and Nick Peters to agree slope-angle rules for the landslide model.",
+      "Owner": "Maxim Millen",
+      "Phase": "2",
+      "Source": "Costing tool demo 2026-09-21",
+      "Status": "Open"
+    },
+    {
+      "ID": "T-44",
+      "Task": "Agree with John Leeves the rules for how far evacuated land regresses under imminent risk, starting from half a metre on average and a metre on slopes steeper than 30 degrees.",
+      "Owner": "Maxim Millen",
+      "Phase": "2",
+      "Source": "Costing tool demo 2026-09-21",
+      "Status": "Open"
     }
   ],
   "Limitations": [
@@ -485,6 +549,34 @@
       "Affects": "Phase 2 cost estimates",
       "Source": "Wgtn Land Model 2026-09-21",
       "Status": "Open"
+    },
+    {
+      "ID": "L-29",
+      "Limitation": "Enabling works and reinstatement are site-specific and priced from the assessor's judgement on the ground — what has to be cleared to get machinery in, traffic management, and occasionally helicopter access. The model can only approximate them from the easy, moderate and difficult bands.",
+      "Affects": "Phase 2 cost estimates",
+      "Source": "Costing tool demo 2026-09-21",
+      "Status": "Open"
+    },
+    {
+      "ID": "L-30",
+      "Limitation": "The costing tool's rates are quantity-surveyor derived and refreshed every four months, so any set extracted for this study is a point-in-time snapshot that will drift from the rates NHC assesses against.",
+      "Affects": "Phase 2 cost estimates",
+      "Source": "Costing tool demo 2026-09-21",
+      "Status": "Open"
+    },
+    {
+      "ID": "L-31",
+      "Limitation": "Partially damaged retaining walls that would be repaired rather than replaced are not modelled, so every damaged wall is costed as a replacement. John Leeves put partial repairs at about 1% of cases.",
+      "Affects": "Phase 2 cost estimates",
+      "Source": "Costing tool demo 2026-09-21",
+      "Status": "Open"
+    },
+    {
+      "ID": "L-32",
+      "Limitation": "Walls already tilted before the modelled event cannot be distinguished from walls tilted by it, so some replacements will be attributed to the event that were already owed.",
+      "Affects": "Phase 2 cost estimates",
+      "Source": "Costing tool demo 2026-09-21",
+      "Status": "Open"
     }
   ],
   "Improvements": [
@@ -583,6 +675,14 @@
       "Phase": "Future",
       "Source": "Land value model planning 2026-09-17",
       "Status": "Parked"
+    },
+    {
+      "ID": "I-13",
+      "Improvement": "Use the costing tool's detailed retaining wall build-up, pricing piles, lagging, anchors and drainage individually, in place of the simple square-metre rates.",
+      "Rationale": "The simple calculator was chosen because wall dimensions are guessed rather than measured. If remote sensing later resolves wall geometry, the detailed build-up would be able to use it.",
+      "Phase": "Future",
+      "Source": "Costing tool demo 2026-09-21",
+      "Status": "Parked"
     }
   ],
   "Questions": [
@@ -600,6 +700,30 @@
       "Asked of": "John Leeves / NHC",
       "Answer": "",
       "Source": "Wgtn Land Model follow-up 2026-09-22",
+      "Status": "Open"
+    },
+    {
+      "ID": "Q-03",
+      "Question": "Are the enabling works allowances for easy, moderate and difficult sites — nothing, about 15 and about 30 — dollar amounts in thousands or percentage multipliers on the base cost? Chris Ewens gave them as figures and then agreed they were multipliers, while John Leeves was discussing dollar amounts in the same exchange.",
+      "Asked of": "Chris Ewens",
+      "Answer": "",
+      "Source": "Costing tool demo 2026-09-21",
+      "Status": "Open"
+    },
+    {
+      "ID": "Q-04",
+      "Question": "What are the excess earthworks and constructability percentages for easy, moderate and difficult? Chris Ewens described 15% for each, giving 30% or 45% on the subtotal, then revised it to nearer 0%, 5% and 10%, and separately said individual line items cap at 30%.",
+      "Asked of": "Chris Ewens",
+      "Answer": "",
+      "Source": "Costing tool demo 2026-09-21",
+      "Status": "Open"
+    },
+    {
+      "ID": "Q-05",
+      "Question": "Does a replaced retaining wall always have to carry a council stormwater connection and a fall-from-height barrier to meet current legislation, and what do they add to the cost?",
+      "Asked of": "Chris Ewens",
+      "Answer": "",
+      "Source": "Costing tool demo 2026-09-21",
       "Status": "Open"
     }
   ]

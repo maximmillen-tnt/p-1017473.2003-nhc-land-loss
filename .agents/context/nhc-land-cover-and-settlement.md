@@ -39,8 +39,13 @@ matters for this study:
 
 - Under the **EQC Act**, walls were settled on an indemnity basis — the
   depreciated value of the wall.
-- Under the **NHC Act**, walls are settled on **replacement value, capped at
-  $25,000**.
+- Under the **NHC Act**, walls are settled on **undepreciated value — what it
+  would have cost to build the same wall new, with no deduction for age —
+  subject to a sub-cap of $50,000 + GST per dwelling.** An earlier draft of this
+  file quoted a flat $25,000; that was wrong. See `### The caps` below and
+  `nhi-act-land-cover-explainer.md` for how the sub-cap enters the settlement,
+  which is as the lesser of undepreciated value and the sub-cap rather than as a
+  ceiling on what is paid.
 
 The consequence is that the physical condition of a wall no longer affects the
 settlement. It still affects the probability of failure, and many walls in the
@@ -75,12 +80,21 @@ is not known (**Q-01**).
 
 | What | Sub-cap |
 | --- | --- |
-| Bridges and culverts | $25,000 |
-| Retaining walls | $50,000 per dwelling on the property |
+| Bridges and culverts | $25,000 + GST per dwelling |
+| Retaining walls | $50,000 + GST per dwelling |
 
-**Both are exclusive of GST, so GST has to be added to them.** Note the
-retaining wall cap is per dwelling rather than per wall, so a property with
-several walls and one dwelling shares one cap.
+**Both are exclusive of GST, so GST has to be added to them.**
+
+The multiplier is the **number of dwellings in the residential building** — not
+the number of walls, not the number of owners, and not the number of dwellings
+on the property. A property with several walls and one dwelling shares one cap;
+a site with two residential buildings has **two** caps, worked out separately.
+
+A sub-cap limits the structure's **contribution to the land cover cap**, not the
+settlement. The contribution is the *lesser* of the structure's undepreciated
+value and the sub-cap, so a modest wall worth less than $50,000 to rebuild
+contributes its undepreciated value and the sub-cap never binds. See
+`nhi-act-land-cover-explainer.md`, which works three examples.
 
 The **total cap** over the sub-caps should be carried as a variable of the
 study rather than a fixed number, since it is one of the policy settings under
@@ -90,6 +104,22 @@ known (**Q-02**).
 `nhi-act-land-cover-explainer.md` carries the fuller picture and came from
 Bridget Attwood at NHC, so it can be treated as the authoritative account
 rather than as working understanding.
+
+### Bridges and culverts
+
+Added from the "Costing tool demo" meeting, 21 September 2026.
+
+For a bridge to be covered at all, **the entire bridge including its abutments
+has to sit inside the property**. John Leeves was explicit that this is the
+property boundary, not the insured land: if one abutment falls outside the
+property, the bridge is not covered even where the span itself is inside.
+
+Damage states are **none or full replacement**, with no partial repair between
+them. John's reasoning was that almost every bridge caps out against the
+$25,000 sub-cap anyway, so resolving intermediate states would not change the
+answer, and there are few enough bridges that the choice barely moves the total.
+Bridges on residential property are unusual, and the team expected more culverts
+than the area appears to have, there being few large streams (**T-39**).
 
 ### Evacuated and inundated land are both damaged land
 
@@ -108,6 +138,24 @@ stops mattering.
 **Imminent risk is claimable**, and like the total cap it should be carried as a
 variable of the study rather than as a fixed rule. How it is represented is
 still being worked through (**T-35**).
+
+The "Costing tool demo" meeting on 21 September 2026 settled *why* it has to be
+separable. NHC are considering removing the imminent damage provision as part of
+moving to a land cap, so they will want to see what removing it does. John
+Leeves was clear the study has to carry it for the current scheme to be
+comparable with the new one. The conclusion on the call was to model it as its
+own line item entering the costing, both so its contribution can be reported and
+because the logic for costing it may differ, while starting from the baseline
+evacuated and inundated rates.
+
+There are three forms of it, all following the same principle as evacuated and
+inundated land: imminent damage of **evacuation**, of **inundation**, and of
+**re-inundation**. For evacuation, John expected the study to apply a general
+rule rather than model it — the working suggestion was that the scarp regresses
+another half a metre on average, or a metre on slopes steeper than 30 degrees,
+with the rules to be agreed (**T-44**). Maxim noted from an NHC report that a
+site under imminent risk had needed an excavator to peel back the head scarp,
+which suggests the cost is higher than for damage that has already occurred.
 
 The settlement logic as a whole is to be written out as pseudo-logic and run
 past John Leeves (**T-34**).

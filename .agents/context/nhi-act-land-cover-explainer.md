@@ -8,9 +8,10 @@ explainer\Land Cover NHI Act.docx`.
 This is the Act's own mechanics -- what NHCover insures, how the 8m/60m
 insured-land-area rules and land structure sub-caps work, and how a land cover
 cap is calculated -- rather than the team's working interpretation of it. See
-`nhc-land-cover-and-settlement.md` for that (and note it currently quotes a
-flat $25,000 retaining wall cap, which conflicts with the $50,000 + GST per
-dwelling sub-cap described here -- worth reconciling with NHC).
+`nhc-land-cover-and-settlement.md` for that. It previously quoted a flat
+$25,000 retaining wall cap, which conflicted with the $50,000 + GST per dwelling
+sub-cap described here; the figure here is the correct one and that file has
+been corrected.
 
 ## What NHCover insures
 - NHCover applies to residential buildings and residential land for physical loss or damage that is the direct result of a natural hazard.

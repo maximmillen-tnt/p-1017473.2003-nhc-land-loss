@@ -71,6 +71,9 @@ before making decisions about methodology, outputs, or what belongs in the tool:
 - `.agents/context/canterbury-land-claim-costs.md` — the Canterbury payout data the
   cost model is anchored on, what it excludes, and why its category numbers are
   damage types rather than severity levels.
+- `.agents/context/nhc-costing-tool.md` — how NHC prices the repair of damaged land
+  and land structures: the Land SOW build-up, the enabling works and
+  constructability multipliers, and the rate sheet the study's own rates come from.
 - `.agents/context/data-sources.md` — which dataset comes from where, and what is not
   obtainable.
 - `.agents/context/nhc-natural-hazards-portal.md` — why the public Natural Hazards
