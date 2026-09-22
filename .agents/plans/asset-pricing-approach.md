@@ -336,11 +336,12 @@ Ordered by how much is blocked behind them:
 2. **T-27** — whether the Canterbury land rates already include retaining wall,
    culvert and bridge damage. Decides whether the liquefaction column of the
    matrix stays empty, and whether modelling walls separately double counts.
-3. **The retaining wall cap.** `nhc-land-cover-and-settlement.md` says a flat
-   $25,000 in one place and $50,000 per dwelling in another. The explainer says
-   $50,000 + GST per dwelling and is authoritative, so **[proposed]** the
-   $25,000 line is stale and should be corrected. Worth reconciling with NHC,
-   as the explainer itself suggests.
+3. ~~**The retaining wall cap.**~~ — **settled.** It is **$50,000 + GST per
+   dwelling**, as the explainer states. The flat $25,000 figure in
+   `nhc-land-cover-and-settlement.md` was stale and has been corrected, along
+   with the explainer's note about the conflict. Remember the sub-cap is a limit
+   on the wall's *contribution to the cap*, not a ceiling on the settlement:
+   the contribution is the lesser of undepreciated value and the sub-cap.
 4. **T-32** — length or height for wall repair cost. Section 4.3 proposes face
    area, which contradicts `beta-build.md`.
 5. **Q-01** — whether a property can carry more than one claim. The whole

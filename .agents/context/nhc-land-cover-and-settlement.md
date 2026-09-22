@@ -39,8 +39,13 @@ matters for this study:
 
 - Under the **EQC Act**, walls were settled on an indemnity basis — the
   depreciated value of the wall.
-- Under the **NHC Act**, walls are settled on **replacement value, capped at
-  $25,000**.
+- Under the **NHC Act**, walls are settled on **undepreciated value — what it
+  would have cost to build the same wall new, with no deduction for age —
+  subject to a sub-cap of $50,000 + GST per dwelling.** An earlier draft of this
+  file quoted a flat $25,000; that was wrong. See `### The caps` below and
+  `nhi-act-land-cover-explainer.md` for how the sub-cap enters the settlement,
+  which is as the lesser of undepreciated value and the sub-cap rather than as a
+  ceiling on what is paid.
 
 The consequence is that the physical condition of a wall no longer affects the
 settlement. It still affects the probability of failure, and many walls in the
@@ -75,12 +80,21 @@ is not known (**Q-01**).
 
 | What | Sub-cap |
 | --- | --- |
-| Bridges and culverts | $25,000 |
-| Retaining walls | $50,000 per dwelling on the property |
+| Bridges and culverts | $25,000 + GST per dwelling |
+| Retaining walls | $50,000 + GST per dwelling |
 
-**Both are exclusive of GST, so GST has to be added to them.** Note the
-retaining wall cap is per dwelling rather than per wall, so a property with
-several walls and one dwelling shares one cap.
+**Both are exclusive of GST, so GST has to be added to them.**
+
+The multiplier is the **number of dwellings in the residential building** — not
+the number of walls, not the number of owners, and not the number of dwellings
+on the property. A property with several walls and one dwelling shares one cap;
+a site with two residential buildings has **two** caps, worked out separately.
+
+A sub-cap limits the structure's **contribution to the land cover cap**, not the
+settlement. The contribution is the *lesser* of the structure's undepreciated
+value and the sub-cap, so a modest wall worth less than $50,000 to rebuild
+contributes its undepreciated value and the sub-cap never binds. See
+`nhi-act-land-cover-explainer.md`, which works three examples.
 
 The **total cap** over the sub-caps should be carried as a variable of the
 study rather than a fixed number, since it is one of the policy settings under
