@@ -46,7 +46,7 @@ DRIVEWAY_HALF_WIDTH_M = 1.5
 # a real thing and this study's extent includes some.
 MAX_DRIVEWAY_LENGTH_M = 300.0
 
-ADDRESS_ID_COLUMN = "address_id"
+CLAIM_ID_COLUMN = "claim_id"
 DRIVEWAY_LENGTH_COLUMN = "driveway_length_m"
 
 
@@ -92,7 +92,7 @@ def generate_driveways(
     *,
     half_width_m: float = DRIVEWAY_HALF_WIDTH_M,
     max_length_m: float = MAX_DRIVEWAY_LENGTH_M,
-    id_column: str = ADDRESS_ID_COLUMN,
+    id_column: str = CLAIM_ID_COLUMN,
 ) -> gpd.GeoDataFrame:
     """Generate a driveway corridor per building.
 
@@ -158,7 +158,7 @@ def merge_driveways_into_extent(
     extent: gpd.GeoDataFrame,
     driveways: gpd.GeoDataFrame,
     *,
-    id_column: str = ADDRESS_ID_COLUMN,
+    id_column: str = CLAIM_ID_COLUMN,
 ) -> gpd.GeoDataFrame:
     """Add each property's driveways to its insured land polygon.
 
@@ -201,26 +201,28 @@ def merge_driveways_into_extent(
 
 def describe_driveways(
     driveways: gpd.GeoDataFrame,
-    buildings: int,
+    attached: int,
 ) -> pd.Series:
     """Return the driveway length distribution, for a run to print.
 
     Args:
         driveways: The generated corridors.
-        buildings: How many buildings they were generated from.
+        attached: How many attached outlines they were generated from. One
+            outline shared between several addresses is routed once per address,
+            so this is a count of building-address pairs and not of buildings.
 
     Returns:
-        The count, the share of buildings that reached a road, and the length
-        quartiles in metres.
+        The count, the share of attached outlines that reached a road, and the
+        length quartiles in metres.
     """
     lengths = driveways[DRIVEWAY_LENGTH_COLUMN].to_numpy(dtype=float)
     if lengths.size == 0:
-        return pd.Series({"driveways": 0, "share of buildings": 0.0})
+        return pd.Series({"driveways": 0, "share of attached outlines": 0.0})
     quartiles = np.percentile(lengths, [0, 25, 50, 75, 100])
     return pd.Series(
         {
             "driveways": len(lengths),
-            "share of buildings": len(lengths) / buildings if buildings else 0.0,
+            "share of attached outlines": len(lengths) / attached if attached else 0.0,
             "min length m": quartiles[0],
             "25% length m": quartiles[1],
             "median length m": quartiles[2],

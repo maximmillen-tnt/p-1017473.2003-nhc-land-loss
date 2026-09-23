@@ -1,10 +1,9 @@
-"""Build the insured land polygon for every address, from the building outlines.
+"""Build the insured land polygon for every claim, from the property boundaries.
 
-Up to here the land exposure is a point with a rate per square metre on it. A
-point cannot be intersected with a landslide, so nothing downstream can say how
-much of a property's land was lost. This script turns each address into the
-ground NHC cover actually attaches to -- an 8 metre buffer of the buildings on
-it -- and carries the rate onto that polygon:
+The claim is the **property**, not the address. This script reads the LINZ
+property boundaries, counts the address points standing inside each one to get
+its dwellings, buffers every building on it by 8 m, unions the driveways in and
+clips the result back to the property:
 
     uv run --frozen python src/scripts/landloss/exposure/land/steps/s5_insured_land_extent/gen_insured_land.py
 
@@ -12,26 +11,25 @@ What it runs over comes from ``config.py`` beside it, read at the bottom of this
 file and passed into :func:`main`. Change it there rather than passing flags, so
 that what a run did can be read off the source.
 
-Needs ``LINZ_API_KEY`` in ``.env`` for the building outline layer, and the land
-value output of step 2 on disk -- run
+Needs ``LINZ_API_KEY`` in ``.env`` for the property boundary, building outline
+and roadway layers, and the land value output of step 2 on disk -- run
 ``src/scripts/landloss/exposure/land/steps/s2_land_value/s4_estimate_land_value.py``
 first if it is not there.
 
-Three things are worth watching in the run output.
+Four things are worth watching in the run output.
 
-- **Addresses with no building.** They get no polygon and so carry no insured
-  land at all downstream. Vacant sections belong in that group; addresses whose
-  building the outline layer has not captured do not, and only the count makes
-  the second case visible.
-- **The insured area against the assumed lot size.** Step 2 divides a modelled
-  land value by a per-authority ``median_lot_size_m2`` to get its rate, so a
-  measured insured area far from that assumption says the rate and the area it
-  is multiplied by are describing different pieces of ground. That is register
-  task T-25.
-- **Shared ground.** The run says how much of the buffered area two properties
-  had between them, and confirms the extents no longer overlap after it was
-  split. Area is summed per address downstream, so an overlap here would be paid
-  for twice.
+- **Properties with no dwelling.** They carry no insured land, because cover
+  follows a residential building. A bare section belongs in that group; a
+  property whose address point LINZ placed outside its own boundary does not,
+  and only the count makes the second case visible.
+- **Buildings split across a boundary.** A terrace captured as one outline is
+  two buildings on two properties, and the run says how many were split.
+- **The insured area against the property area.** The 8 m buffer reaches the
+  boundary on a small section, so the two converge; where they do not, the
+  difference is the back of the section.
+- **Overlap.** The extents are clipped to their own properties, so they should
+  not overlap at all. The run measures it rather than assuming it, because area
+  is summed per claim downstream.
 """
 
 import sys
@@ -46,14 +44,25 @@ from landloss.exposure.land.driveways import (
 from landloss.exposure.land.extent import (
     ADDRESS_ID_COLUMN,
     AREA_COLUMN,
+    BOUNDARY_ROW_COLUMN,
     BUILDING_COUNT_COLUMN,
-    INSURED_LAND_BUFFER_M,
-    MAX_BUILDING_TO_ADDRESS_M,
-    attach_buildings_to_addresses,
-    buffer_buildings,
+    CLAIM_ID_COLUMN,
+    DWELLING_COUNT_COLUMN,
+    MIN_CROSSING_AREA_M2,
+    MIN_CROSSING_SHARE,
+    OUTLINE_ID_COLUMN,
+    PROPERTY_AREA_COLUMN,
+    TITLE_TYPE_COLUMN,
+    assign_buildings_to_properties,
+    build_claim_properties,
     build_insured_land_extent,
+    count_dwellings,
 )
-from landloss.io.readers import get_nz_address_roads, get_nz_building_outlines
+from landloss.io.readers import (
+    get_nz_address_roads,
+    get_nz_building_outlines,
+    get_nz_property_boundaries,
+)
 from scripts.landloss.exposure.land.steps.s5_insured_land_extent import config
 from scripts.landloss.paths import TEMP_DIR
 
@@ -65,7 +74,7 @@ if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 # temp/ is gitignored. This is a working layer, rebuildable from the land value
-# output and the building outlines, so it has no business in a diff.
+# output and the LINZ layers, so it has no business in a diff.
 WORK_DIR = TEMP_DIR / "exposure"
 
 # The step 2 output this reads, and the layer this writes. Separate names under
@@ -80,15 +89,13 @@ PILOT_OUT_NAME = "insured-land-pilot.geoparquet"
 RATE_COLUMN = "land_rate_nzd_per_m2"
 ASSUMED_LOT_SIZE_COLUMN = "assumed_lot_size_m2"
 
-# The building outlines are fetched over the addresses' own bounding box grown
-# by this much. A building belonging to an address just inside the box can stand
-# outside it, and so can the part of the buffer that reaches back in, so the
-# margin is the join distance plus the buffer.
-FETCH_MARGIN_M = MAX_BUILDING_TO_ADDRESS_M + INSURED_LAND_BUFFER_M
+# The LINZ layers are fetched over the addresses' own bounding box grown by this
+# much, so a property or a building belonging to an address just inside the box
+# is still in the read. A property boundary is the widest of the three, and a
+# rural rating unit can run a long way back from the address point on it.
+FETCH_MARGIN_M = 500.0
 
-# The quantiles the area distribution is described at. Deciles rather than a
-# mean and a standard deviation, because insured area is bounded below by the
-# building footprint and has a long tail of large properties.
+# The quantiles the area distributions are described at.
 DECILES = [0.0, 0.1, 0.25, 0.5, 0.75, 0.9, 1.0]
 
 HECTARE_M2 = 10_000.0
@@ -141,7 +148,7 @@ def insured_land_path(*, pilot):
 
 
 def fetch_extent(addresses):
-    """Return the bounding box to fetch building outlines over.
+    """Return the bounding box to fetch the LINZ layers over.
 
     Args:
         addresses: The valued addresses.
@@ -159,111 +166,126 @@ def fetch_extent(addresses):
     )
 
 
-def describe_inputs(addresses, buildings, bbox):
-    """Print what the extent is being built from."""
-    west, south, east, north = bbox
+def describe_properties(boundaries, properties):
+    """Print what the boundaries were reduced to, and what was dropped."""
+    print(RULE)
+    print(f"Property boundaries read: {len(boundaries):,}")
+    print(
+        f"  {len(boundaries) - len(properties):,} dropped as road and water "
+        "parcels, or dissolved as titles stacked on one footprint"
+    )
+    print(f"Claim properties: {len(properties):,}")
+
+    stacked = properties[properties[BOUNDARY_ROW_COLUMN] > 1]
+    print(
+        f"  {len(stacked):,} are a block of titles on one footprint, standing "
+        f"for {int(stacked[BOUNDARY_ROW_COLUMN].sum()):,} boundary rows between "
+        "them"
+    )
+    if TITLE_TYPE_COLUMN in properties.columns:
+        titles = properties[TITLE_TYPE_COLUMN].fillna("no title type").value_counts()
+        print("  by title type: " + ", ".join(f"{k} {v:,}" for k, v in titles.items()))
+
+    # Clipping makes the extents disjoint only if the properties themselves are.
+    # Exact duplicates are already dissolved; this is what is left.
+    summed = float(properties.geometry.area.sum())
+    distinct = properties.geometry.union_all().area
+    share = 100 * (summed - distinct) / summed if summed else 0.0
+    print(
+        f"  {summed / HECTARE_M2:,.1f} ha of property against "
+        f"{distinct / HECTARE_M2:,.1f} ha of distinct ground, "
+        f"{share:.2f}% still overlapping"
+    )
+
+
+def describe_dwellings(addresses, dwellings, properties):
+    """Print how the address points fell into the properties."""
     print(RULE)
     print(f"Addresses: {len(addresses):,}")
-    print(f"Building outlines: {len(buildings):,}")
-    print(f"  fetched over {west:,.0f} - {east:,.0f} E, {south:,.0f} - {north:,.0f} N")
+    outside = len(addresses) - len(dwellings)
     print(
-        f"  which is the addresses' own extent grown by {FETCH_MARGIN_M:,.0f} m, "
-        "so a building just outside it still reaches its address"
+        f"  {outside:,} stand outside every claim property, so they count "
+        "towards no dwelling"
+    )
+
+    counts = dwellings.groupby(CLAIM_ID_COLUMN).size()
+    print(f"Properties with at least one dwelling: {len(counts):,}")
+    print(
+        f"  {len(properties) - len(counts):,} have none, so they carry no "
+        "insured land: bare sections, and address points placed outside their "
+        "own boundary"
+    )
+    print(
+        f"  dwellings per property: median {counts.median():,.0f}, "
+        f"max {counts.max():,.0f}, {int(counts.sum()):,} in total"
     )
 
 
-def describe_coverage(addresses, attached, buildings, extent):
-    """Print which addresses and which buildings found each other.
-
-    An address with no building carries no insured land at all downstream, and a
-    building with no address is a structure the model has nowhere to put, so both
-    counts are worth seeing on every run.
-    """
+def describe_buildings(buildings, parts):
+    """Print how the building outlines were cut to the properties."""
     print(RULE)
-    print(f"Addresses with insured land: {len(extent):,} of {len(addresses):,}")
+    print(f"Building outlines: {len(buildings):,}")
 
-    # Two very different reasons an address carries no land, and reporting them
-    # together hides the one this count exists to surface. A building goes to
-    # exactly one address, so a block of flats with several address points on one
-    # outline leaves all but one of them empty even though a building is metres
-    # away -- that is the multi-unit case (T-23), not a gap in the outline layer.
-    missing = addresses[~addresses[ADDRESS_ID_COLUMN].isin(extent[ADDRESS_ID_COLUMN])]
-    if len(missing):
-        nearest = missing.geometry.apply(lambda point: buildings.distance(point).min())
-        lost_to_neighbour = int((nearest <= MAX_BUILDING_TO_ADDRESS_M).sum())
-        no_building = len(missing) - lost_to_neighbour
-        print(
-            f"  {no_building:,} have no building within "
-            f"{MAX_BUILDING_TO_ADDRESS_M:,.0f} m -- a gap in the outline layer"
-        )
-        print(
-            f"  {lost_to_neighbour:,} have a building near enough, but it went to a "
-            "closer address: several addresses on one outline (T-23)"
-        )
-
-    unattached = len(buildings) - len(attached)
+    per_outline = parts.groupby(OUTLINE_ID_COLUMN)[CLAIM_ID_COLUMN].nunique()
+    split = per_outline[per_outline > 1]
+    print(f"  {len(per_outline):,} stand on an occupied claim property")
     print(
-        f"Buildings attributed to an address: {len(attached):,} of {len(buildings):,}"
+        f"  {len(split):,} of those were split across {int(split.sum()):,} "
+        f"properties, being at least {MIN_CROSSING_AREA_M2:,.0f} m2 and "
+        f"{MIN_CROSSING_SHARE:.0%} on each -- semi detached and terraced houses "
+        "captured as one outline"
     )
-    print(f"  {unattached:,} had no address point near enough to attach to")
-
-    counts = extent[BUILDING_COUNT_COLUMN]
     print(
-        f"Buildings per address: median {counts.median():,.0f}, max {counts.max():,.0f}"
+        "  smaller overhangs were dropped as the outline and boundary layers "
+        "disagreeing along a shared edge"
     )
 
 
-def describe_shared_ground(attached, extent):
-    """Print how much ground neighbouring properties had between them.
-
-    The buffers are rebuilt here without the split, so the difference between
-    the two totals is the ground that two or more properties shared. It is the
-    one number that says how much the splitting rule is deciding, and summing
-    the unsplit areas per address is exactly the double count the split exists
-    to prevent.
-    """
-    unsplit = buffer_buildings(attached)
-    overlapped = float(unsplit.geometry.area.sum()) - float(extent[AREA_COLUMN].sum())
-
+def describe_extent(extent, occupied, addresses):
+    """Print the insured land, and confirm the extents do not overlap."""
     print(RULE)
     print(
         f"Insured land: {extent[AREA_COLUMN].sum() / HECTARE_M2:,.1f} ha over "
-        f"{len(extent):,} properties"
+        f"{len(extent):,} claims, {int(extent[DWELLING_COUNT_COLUMN].sum()):,} "
+        "dwellings"
     )
-    print(
-        f"  {overlapped / HECTARE_M2:,.1f} ha of that was within "
-        f"{INSURED_LAND_BUFFER_M:,.0f} m of two properties' buildings and has "
-        "been given to the nearer one"
-    )
+    print(f"  {len(occupied) - len(extent):,} occupied properties carry no building")
 
     # Confirmed rather than assumed, because everything downstream sums area per
-    # address and would double count silently if it were not true.
+    # claim and would double count silently if it were not true.
     dissolved = extent.geometry.union_all().area
     summed = float(extent[AREA_COLUMN].sum())
+    # Not asserted: clipping makes the extents disjoint only as far as the
+    # properties themselves are, and a handful of boundaries are near duplicates
+    # that the exact-equality dissolve does not catch. The residual is the
+    # honest number to print.
+    overlap = summed - dissolved
     print(
         f"  summed area {summed / HECTARE_M2:,.1f} ha against "
-        f"{dissolved / HECTARE_M2:,.1f} ha of distinct ground, so the extents do "
-        "not overlap"
+        f"{dissolved / HECTARE_M2:,.1f} ha of distinct ground, so "
+        f"{overlap / HECTARE_M2:,.2f} ha ({100 * overlap / summed:.2f}%) is "
+        "claimed by two properties that overlap each other"
     )
 
-
-def describe_areas(extent, addresses):
-    """Print the insured area distribution, against the lot size step 2 assumed."""
-    print(RULE)
     quantiles = extent[AREA_COLUMN].quantile(DECILES)
-    print("Insured area per property (m2):")
+    print("Insured area per claim (m2):")
     print(
         "  " + "  ".join(f"{int(q * 100):>3}%={v:,.0f}" for q, v in quantiles.items())
+    )
+    covered = extent[AREA_COLUMN] / extent[PROPERTY_AREA_COLUMN]
+    print(
+        f"  which is {covered.median():.0%} of the property at the median and "
+        f"{covered.quantile(0.9):.0%} at the 90th percentile -- the 8 m line "
+        "reaches the boundary on a small section and stops short on a large one"
     )
 
     if ASSUMED_LOT_SIZE_COLUMN not in addresses.columns:
         return
-
-    assumed = addresses[ASSUMED_LOT_SIZE_COLUMN].median()
-    measured = extent[AREA_COLUMN].median()
+    assumed = float(addresses[ASSUMED_LOT_SIZE_COLUMN].median())
+    measured = float(extent[AREA_COLUMN].median())
     print(
         f"  median {measured:,.0f} m2 against the {assumed:,.0f} m2 lot size "
-        f"step 2 assumed to build its rate -- {measured / assumed:.2f} times it"
+        f"step 2 assumed to build its rate -- {measured / assumed:,.2f} times it"
     )
     print(
         "  the rate per square metre is still built on the assumption, so the "
@@ -272,57 +294,82 @@ def describe_areas(extent, addresses):
 
 
 def main(*, pilot, use_cached_extent):
-    """Build the insured land extent for every valued address and write it out.
+    """Build the insured land extent per claim and write it out.
 
     Args:
-        pilot: Whether to run over the small Wellington pilot box rather than
-            the four territorial authorities.
-        use_cached_extent: Whether to reuse the already-clipped building
-            outlines for this extent.
+        pilot: Whether to run over the small Wellington pilot box.
+        use_cached_extent: Whether to reuse already-fetched LINZ layers.
     """
-    in_path = land_value_path(pilot=pilot)
     out_path = insured_land_path(pilot=pilot)
-
-    print(f"Reading the valued addresses from {in_path} ...", flush=True)
-    addresses = gpd.read_parquet(in_path).to_crs(constants.DEFAULT_CRS)
-
+    value_path = land_value_path(pilot=pilot)
+    print(f"Reading the valued addresses from {value_path} ...", flush=True)
+    addresses = gpd.read_parquet(value_path)
     bbox = fetch_extent(addresses)
+
+    print("Fetching the property boundaries ...", flush=True)
+    boundaries = get_nz_property_boundaries(
+        bbox=bbox, crs=constants.DEFAULT_CRS, use_cache=use_cached_extent
+    )
+    boundaries = boundaries.set_geometry(boundaries.geometry.make_valid())
     print("Fetching the building outlines ...", flush=True)
     buildings = get_nz_building_outlines(
         bbox=bbox, crs=constants.DEFAULT_CRS, use_cache=use_cached_extent
     )
-    describe_inputs(addresses, buildings, bbox)
+    buildings = buildings.set_geometry(buildings.geometry.make_valid())
 
-    attached = attach_buildings_to_addresses(buildings, addresses)
+    properties = build_claim_properties(boundaries)
+    describe_properties(boundaries, properties)
+
+    dwellings = count_dwellings(properties, addresses)
+    describe_dwellings(addresses, dwellings, properties)
+
+    occupied = properties[
+        properties[CLAIM_ID_COLUMN].isin(set(dwellings[CLAIM_ID_COLUMN]))
+    ]
+    parts = assign_buildings_to_properties(buildings, occupied)
+    describe_buildings(buildings, parts)
 
     # The insured land is the ground around the dwelling AND the driveway, so an
-    # extent of building buffers alone is short of NHC's own definition.
+    # extent of building buffers alone is short of NHC's own definition. Routed
+    # from the building parts, so a split terrace routes one driveway per half.
     print("Fetching the roads to route driveways to ...", flush=True)
     roads = get_nz_address_roads(
         bbox=bbox, crs=constants.DEFAULT_CRS, use_cache=use_cached_extent
     )
-    driveways = generate_driveways(attached, roads)
+    driveways = generate_driveways(parts, roads)
 
-    extent = build_insured_land_extent(addresses, buildings, driveways=driveways)
-
-    describe_coverage(addresses, attached, buildings, extent)
+    extent = build_insured_land_extent(
+        properties, buildings, dwellings, driveways=driveways
+    )
     print(RULE)
     print(f"Roads: {len(roads):,}")
-    print(describe_driveways(driveways, len(attached)).to_string())
-    describe_shared_ground(attached, extent)
-    describe_areas(extent, addresses)
+    print(describe_driveways(driveways, len(parts)).to_string())
+    describe_extent(extent, occupied, addresses)
 
     # The rate rides along with the polygon so that the vulnerability step reads
     # one layer rather than joining two. It is the same rate step 2 modelled;
-    # nothing here revalues anything.
-    rates = addresses[[ADDRESS_ID_COLUMN, RATE_COLUMN]]
-    insured = extent.merge(rates, on=ADDRESS_ID_COLUMN, how="left", validate="1:1")
+    # nothing here revalues anything. A property takes the mean of the rates of
+    # the addresses standing on it, which for a block of flats is the rate its
+    # units were each modelled at.
+    rates = (
+        dwellings.merge(
+            addresses[[ADDRESS_ID_COLUMN, RATE_COLUMN]], on=ADDRESS_ID_COLUMN
+        )
+        .groupby(CLAIM_ID_COLUMN)[RATE_COLUMN]
+        .mean()
+    )
+    insured = extent.assign(**{RATE_COLUMN: extent[CLAIM_ID_COLUMN].map(rates)})
     insured = insured[
         [
-            ADDRESS_ID_COLUMN,
+            CLAIM_ID_COLUMN,
             RATE_COLUMN,
             AREA_COLUMN,
+            PROPERTY_AREA_COLUMN,
             BUILDING_COUNT_COLUMN,
+            # The dwellings the claim covers. NHC's sub-caps and excess are per
+            # dwelling, so a block of flats settling as one claim still settles
+            # on several.
+            DWELLING_COUNT_COLUMN,
             insured.geometry.name,
         ]
     ]

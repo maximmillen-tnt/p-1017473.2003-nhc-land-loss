@@ -3,7 +3,7 @@
 **Status:** Detection runs end to end; empty over the pilot box, which holds
 no named watercourse.
 
-**Updated:** 2026-09-22
+**Updated:** 2026-09-23
 
 ## Approach
 
@@ -50,6 +50,18 @@ structures rather than the right numbers; see
 The culvert and bridge exposure the chain expects is **lines**, one per
 structure, keyed to `claim_id` and carrying which structure it is. Culverts and
 bridges share the structure and differ only by that attribute.
+
+## Loss contract
+
+What this module owes the culvert and bridge tables `loss` reads, as set in
+`.agents/plans/asset-pricing-approach.md` section 1.
+
+Marks: `[x]` done, `[~]` partly done, `[>]` next, `[ ]` planned.
+
+- [ ] Give every crossing an identifier, written out as `culvert_id` or
+  `bridge_id` by structure.
+- [x] Carry `claim_id` and the kind of structure.
+- [x] Carry coordinates, as the crossing geometry.
 
 ## Where it is now
 

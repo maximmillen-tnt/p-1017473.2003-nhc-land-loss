@@ -68,6 +68,7 @@ from landloss.common.utils.terrain import (
     slope_degrees,
 )
 from landloss.domain import constants
+from landloss.hazard.landslide.geometry import landslide_volume_m3, mean_depth_m
 from landloss.hazard.realisation import realisation_seed
 from landloss.io.area_of_interest import SMALL_WLG_PILOT, get_study_areas
 from landloss.io.readers import get_dem
@@ -102,23 +103,43 @@ REALISATION_ID_COLUMN = "realisation_id"
 # The limits are the range asked for -- a failure too small to be worth a claim
 # at one end, a whole hillside at the other.
 #
-# The exponent is the shape, and it is the shallowest value anybody has published
-# for rock like Wellington's: Massey et al. (2020) fit 2.1 to the Kaikoura source
-# polygons, which are largely Torlesse greywacke, and Malamud et al. (2004) give
-# 2.3 to 2.5 across inventories generally. Shallowest, because a shallower
-# exponent puts more mass on the large failures that drive the loss, so of the
-# published values this is the cautious one.
+# The exponent is calibrated to total area, not fitted to a size inventory, and
+# that is the single most important thing to know about this step.
 #
-# Two things it is not. It is not a fit to anything this study has done, and it
-# is being used two orders of magnitude below where it was fitted -- Massey's
-# 2.1 holds above about 500 m2, and it is applied here from 3 m2 up. Small
-# modified-slope failures are exactly where this study expects its losses and
-# exactly where no inventory constrains the shape, which is why fitting one is
-# phase 2 of the plan. At these limits the exponent gives a median near 6 m2, a
-# mean near 17 m2, and about one failure in 850 over 1000 m2.
+# The count of failures is set by the supplied grid and is faithful to it: over
+# the full study area the grid implies 66,644 and the model draws within one
+# binomial standard deviation, band by band across two orders of magnitude of
+# probability. The *area* is then whatever the size distribution makes it, and
+# nothing in the grid constrains that. At the published exponent of 2.1 the model
+# delivered 0.063% areal coverage, about sixteen times below the order of 1% that
+# Nowicki Jessee et al. (2018) give for strong shaking in steep terrain, because
+# a median source area of 5.7 m2 was being placed inside a 1,024 m2 cell.
+#
+# So the exponent is solved backwards from that cross-check: 1.19 puts the mean
+# source area at 258 m2 and the areal coverage at 0.99%. It is deliberately *not*
+# anchored to the other available reading -- that a failing 32 m cell fails
+# whole, which would need 1,028 m2 and an exponent near 0.5. That reading is
+# rejected on physical grounds: it would make 43% of modelled landslides larger
+# than 1,000 m2 and put the median at 791 m2, which is not a landslide population
+# any inventory resembles, and it would put areal coverage at 3.9%, four times
+# the literature.
+#
+# The cost is that 1.19 is far shallower than any published fit (Massey et al.
+# 2020 give 2.1 for the Kaikoura greywacke source polygons, Malamud et al. 2004
+# give 2.3 to 2.5 generally). That is not a disagreement with those fits: they
+# hold above a cutoff near 500 m2, and a single power law stretched two decades
+# below it cannot carry both a published slope and the right total area. Real
+# inventories roll over below the cutoff instead. The honest fix is two
+# populations -- small modified-slope failures and natural-slope landslides --
+# which is phase 2 of the plan; until then this exponent buys the right total
+# area at the price of the right shape, and a size distribution quoted from this
+# step should say so.
+#
+# At these limits: median 34 m2, mean 258 m2, about one failure in twelve over
+# 1,000 m2.
 MIN_SOURCE_AREA_M2 = 3.0
 MAX_SOURCE_AREA_M2 = 3000.0
-SIZE_EXPONENT = 2.1
+SIZE_EXPONENT = 1.19
 
 # How far the material travels, as a function of slope alone. A straight ramp:
 # MIN_DISPLACEMENT_M at or below MIN_DISPLACEMENT_SLOPE_DEG, MAX_DISPLACEMENT_M
@@ -137,6 +158,14 @@ MAX_DISPLACEMENT_SLOPE_DEG = 45.0
 EVACUATED = "evacuated land"
 INUNDATED = "inundated land"
 LAND_CLASS_COLUMN = "land_class"
+
+# How much material the failure involved, and how deep it lies over the polygon
+# that carries it. Both come from the volume-area power law rather than from the
+# simulation, which samples areas and nothing else. The vulnerability step needs
+# the depth because what a repair costs depends on how much has to be moved and
+# not only on the footprint.
+VOLUME_COLUMN = "volume_m3"
+DEPTH_COLUMN = "depth_m"
 
 # Quarter-circle segments in the buffered circles. 16 gives a 64 sided polygon,
 # within a tenth of a percent of a true circle -- and the radius is corrected
@@ -571,6 +600,17 @@ def to_polygons(failures):
     )
 
     both = pd.concat([evacuated, inundated], ignore_index=True)
+
+    # Volume is conserved through the runout -- the material that left the
+    # source is the material that lands -- so it is computed once from the
+    # source area and then spread over whichever footprint the row carries.
+    # In the beta the runout circle is rebuilt at the source radius, so the two
+    # footprints are equal and the two depths come out identical. That is a
+    # property of this geometry, not a bug.
+    both[VOLUME_COLUMN] = landslide_volume_m3(both["source_area_m2"].to_numpy())
+    both[DEPTH_COLUMN] = mean_depth_m(
+        both[VOLUME_COLUMN].to_numpy(), both.geometry.area.to_numpy()
+    )
     return both.sort_values(["landslide_id", LAND_CLASS_COLUMN]).reset_index(drop=True)
 
 
@@ -670,6 +710,14 @@ def describe_result(polygons):
                 f"  {share:.1f}% of that is runout polygons lying over one "
                 "another -- dissolve before summing"
             )
+
+    # Reported because the depth is what the vulnerability step multiplies, and
+    # it comes from a power law whose coefficient is still a placeholder. Seeing
+    # the numbers each run is the cheapest guard against that going unnoticed.
+    source = polygons[polygons[LAND_CLASS_COLUMN] == EVACUATED]
+    if not source.empty:
+        describe_distribution(source[VOLUME_COLUMN], "landslide volume", "m3")
+        describe_distribution(source[DEPTH_COLUMN], "mean depth", "m")
 
 
 def main(*, pilot, realisation_ids, use_cached_dem):

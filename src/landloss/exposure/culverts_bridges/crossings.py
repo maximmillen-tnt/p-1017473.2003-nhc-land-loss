@@ -41,7 +41,7 @@ CULVERT = "culvert"
 BRIDGE = "bridge"
 STRUCTURES = (CULVERT, BRIDGE)
 
-ADDRESS_ID_COLUMN = "address_id"
+CLAIM_ID_COLUMN = "claim_id"
 STRUCTURE_COLUMN = "structure"
 WATERCOURSE_SOURCE_COLUMN = "watercourse_source"
 
@@ -72,7 +72,7 @@ def detect_crossings(
     river_lines: gpd.GeoDataFrame,
     river_polygons: gpd.GeoDataFrame,
     *,
-    id_column: str = ADDRESS_ID_COLUMN,
+    id_column: str = CLAIM_ID_COLUMN,
 ) -> gpd.GeoDataFrame:
     """Find where the accessways cross a watercourse.
 

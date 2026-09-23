@@ -63,7 +63,9 @@ def describe(layer) -> str:
     return " | ".join(b for b in bits if b)
 
 
-def render(project, layer, extent, out_dir: Path, idx: int) -> Path:
+def render(
+    project, layer, extent, out_dir: Path, idx: int, *, size=(1600, 1100)
+) -> Path:
     """Draw one layer to a PNG, which is the only way to catch a blank map.
 
     Args:
@@ -72,6 +74,10 @@ def render(project, layer, extent, out_dir: Path, idx: int) -> Path:
         extent: ``(xmin, ymin, xmax, ymax)`` in the project CRS.
         out_dir: Where to write the PNG.
         idx: The layer's position, used in the file name.
+        size: Canvas size in pixels. The default is the size of a real QGIS
+            window, because a small render is its own kind of lie: at 500 px a
+            metre-scale feature is half a pixel and reads as a blank layer when
+            on screen it would be a visible speck.
 
     Returns:
         The path written.
@@ -79,7 +85,7 @@ def render(project, layer, extent, out_dir: Path, idx: int) -> Path:
     settings = QgsMapSettings()
     settings.setLayers([layer])
     settings.setExtent(QgsRectangle(*extent))
-    settings.setOutputSize(QSize(500, 400))
+    settings.setOutputSize(QSize(*size))
     settings.setDestinationCrs(project.crs())
     settings.setBackgroundColor(QColor(255, 255, 255))
     job = QgsMapRendererParallelJob(settings)
@@ -99,6 +105,16 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("project", type=Path)
     parser.add_argument("--render", type=Path, default=None, help="Directory for PNGs.")
+    parser.add_argument(
+        "--size",
+        type=int,
+        nargs=2,
+        metavar=("WIDTH", "HEIGHT"),
+        default=(1600, 1100),
+        help="Render size in pixels. Defaults to a real window; render smaller "
+        "and small features vanish for reasons that are about the render, not "
+        "the project.",
+    )
     parser.add_argument(
         "--extent",
         type=float,
@@ -148,7 +164,10 @@ def main() -> int:
                 layer.extent().xMaximum(),
                 layer.extent().yMaximum(),
             ]
-            print(f"        -> {render(project, layer, extent, args.render, idx)}")
+            out = render(
+                project, layer, extent, args.render, idx, size=tuple(args.size)
+            )
+            print(f"        -> {out}")
 
     app.exitQgis()
     if failures or not crs_ok:

@@ -23,7 +23,7 @@ def rng():
 def accessway(x=0.0, address="A-001"):
     """A driveway corridor running north-south through y = 0."""
     return gpd.GeoDataFrame(
-        {"address_id": [address]}, geometry=[box(x - 1.5, -20, x + 1.5, 20)], crs=CRS
+        {"claim_id": [address]}, geometry=[box(x - 1.5, -20, x + 1.5, 20)], crs=CRS
     )
 
 
@@ -59,7 +59,7 @@ def nothing(geometry="line"):
 def test_an_accessway_over_a_stream_is_a_crossing():
     found = detect_crossings(accessway(), stream(), nothing())
     assert len(found) == 1
-    assert found["address_id"].iloc[0] == "A-001"
+    assert found["claim_id"].iloc[0] == "A-001"
     assert found["watercourse_source"].iloc[0] == FROM_LINES
 
 
@@ -92,12 +92,12 @@ def test_the_crossing_is_the_part_on_the_water_not_the_whole_accessway():
 
 def test_each_property_keeps_its_own_crossing():
     ways = gpd.GeoDataFrame(
-        {"address_id": ["A-001", "A-002"]},
+        {"claim_id": ["A-001", "A-002"]},
         geometry=[box(-1.5, -20, 1.5, 20), box(8.5, -20, 11.5, 20)],
         crs=CRS,
     )
     found = detect_crossings(ways, stream(), nothing())
-    assert sorted(found["address_id"]) == ["A-001", "A-002"]
+    assert sorted(found["claim_id"]) == ["A-001", "A-002"]
 
 
 def test_a_crs_mismatch_is_refused():
@@ -106,8 +106,8 @@ def test_a_crs_mismatch_is_refused():
 
 
 def test_accessways_without_an_identifier_are_refused():
-    with pytest.raises(ValueError, match="address_id"):
-        detect_crossings(accessway().drop(columns=["address_id"]), stream(), nothing())
+    with pytest.raises(ValueError, match="claim_id"):
+        detect_crossings(accessway().drop(columns=["claim_id"]), stream(), nothing())
 
 
 # --- the structure draw ------------------------------------------------------
@@ -115,7 +115,7 @@ def test_accessways_without_an_identifier_are_refused():
 
 def test_every_crossing_takes_a_culvert_or_a_bridge():
     ways = gpd.GeoDataFrame(
-        {"address_id": [f"A-{i:03d}" for i in range(400)]},
+        {"claim_id": [f"A-{i:03d}" for i in range(400)]},
         geometry=[box(4 * i - 1.5, -20, 4 * i + 1.5, 20) for i in range(400)],
         crs=CRS,
     )
@@ -128,7 +128,7 @@ def test_every_crossing_takes_a_culvert_or_a_bridge():
 
 def test_the_split_tracks_the_culvert_probability():
     ways = gpd.GeoDataFrame(
-        {"address_id": [f"A-{i:04d}" for i in range(2000)]},
+        {"claim_id": [f"A-{i:04d}" for i in range(2000)]},
         geometry=[box(4 * i - 1.5, -20, 4 * i + 1.5, 20) for i in range(2000)],
         crs=CRS,
     )

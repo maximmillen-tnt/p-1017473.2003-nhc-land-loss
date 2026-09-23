@@ -43,6 +43,11 @@ PARQUET_SUFFIXES = frozenset({".parquet", ".geoparquet"})
 # explicit ``path``. See ../SKILL.md for which holds what.
 STORES = ("versioned", "source_material", "temp")
 
+# shapely's geometry type names against the ones the symbol builder uses. Only
+# lines differ, and that one difference is silent: a line layer handed a fill
+# symbol loads, reports valid, and draws nothing.
+GEOMETRY_NAMES = {"linestring": "line", "linearring": "line"}
+
 
 # -------------------------------------------------------------------------------------
 # Colour handling
@@ -192,6 +197,7 @@ def _categories(layer: dict[str, Any]) -> dict[str, Any]:
     named = {
         "land_class": colors.LAND_CLASS_COLOURS,
         "gwrc_severity": colors.GWRC_SEVERITY_COLOURS,
+        "land_damage_state": colors.LAND_DAMAGE_STATE_COLOURS,
     }
 
     categories = layer.get("categories")
@@ -259,6 +265,10 @@ def _raster_renderer(layer: dict[str, Any]) -> str:
 
     if style == "classes":
         classes = layer.get("classes")
+        if isinstance(classes, str):
+            # A named class set, so a classified raster and a vector of the same
+            # quantity cannot end up carrying different legends.
+            classes = _categories({**layer, "categories": classes})
         if not classes:
             msg = (
                 f"Layer {layer['name']!r} uses style 'classes' but gives no 'classes'."
@@ -302,22 +312,39 @@ def _raster_renderer(layer: dict[str, Any]) -> str:
 
 
 def _symbol_xml(
-    geometry: str, color: str, outline: str, width: float, size: float
+    name: str,
+    geometry: str,
+    *,
+    color: str,
+    outline: str,
+    width: float,
+    size: float,
+    centroid_marker: float | None = None,
 ) -> str:
     """Build one ``<symbol>`` element.
 
     Args:
+        name: The symbol's name, which a categorised renderer matches against the
+            ``symbol`` attribute of its category.
         geometry: ``polygon``, ``line`` or ``point``.
         color: The fill or line colour, as ``#rrggbb`` or ``#rrggbbaa``.
         outline: The outline colour.
         width: Line or outline width, in millimetres.
         size: Marker size, for point geometry.
+        centroid_marker: If set, the diameter in millimetres of a dot drawn at
+            each polygon's centroid on top of the fill. Real ground units shrink
+            with the map; this does not, so a feature smaller than a pixel stays
+            visible instead of disappearing. See :func:`_vector_renderer`.
 
     Returns:
         The symbol element, without its enclosing renderer.
     """
     fill, alpha = _split_color(color)
-    stroke, stroke_alpha = _split_color(outline)
+    # "match" outlines a feature in its own fill colour. For a feature a pixel or
+    # two across that is the difference between a smudge and a readable dot, and
+    # unlike a marker it claims no more ground than the polygon covers -- it is
+    # the polygon's own boundary.
+    stroke, stroke_alpha = _split_color(color if outline == "match" else outline)
     rgba = f"{int(fill[1:3], 16)},{int(fill[3:5], 16)},{int(fill[5:7], 16)},{alpha}"
     # The outline's own alpha, not a hardcoded 255. A polygon smaller than a pixel is
     # drawn as its outline alone, so an outline forced opaque turns every small feature
@@ -351,12 +378,34 @@ def _symbol_xml(
             f'<Option type="QString" name="style" value="solid"/>'
         )
 
+    # A dot at the centroid, sized in millimetres on the page rather than in metres
+    # on the ground, so it does not vanish when the feature is smaller than a pixel.
+    # The sub-symbol name has to be "@<parent name>@<layer index>" or QGIS drops it.
+    centroid = ""
+    if centroid_marker and symbol_type == "fill":
+        centroid = (
+            f'<layer class="CentroidFill" enabled="1" pass="0" locked="0">'
+            f'<Option type="Map">'
+            f'<Option type="QString" name="point_on_all_parts" value="1"/>'
+            f'<Option type="QString" name="point_on_surface" value="0"/>'
+            f"</Option>"
+            f'<symbol type="marker" name="@{name}@1" alpha="1" frame_rate="10" '
+            f'clip_to_extent="1">'
+            f'<layer class="SimpleMarker" enabled="1" pass="0" locked="0">'
+            f'<Option type="Map">'
+            f'<Option type="QString" name="color" value="{rgba}"/>'
+            f'<Option type="QString" name="name" value="circle"/>'
+            f'<Option type="QString" name="outline_style" value="no"/>'
+            f'<Option type="QString" name="size" value="{centroid_marker}"/>'
+            f"</Option></layer></symbol></layer>"
+        )
+
     return (
-        f'<symbol type="{symbol_type}" name="{{name}}" alpha="1" frame_rate="10" '
+        f'<symbol type="{symbol_type}" name="{name}" alpha="1" frame_rate="10" '
         f'clip_to_extent="1">'
         f'<layer class="{layer_class}" enabled="1" pass="0" locked="0">'
         f'<Option type="Map">{props}</Option>'
-        f"</layer></symbol>"
+        f"</layer>{centroid}</symbol>"
     )
 
 
@@ -380,11 +429,18 @@ def _vector_renderer(layer: dict[str, Any]) -> str:
     width = layer.get("width", 0.3)
     size = layer.get("size", 2)
     outline = layer.get("outline", "#232323")
+    marker = layer.get("centroid_marker")
 
     if not layer.get("categories"):
         symbol = _symbol_xml(
-            geometry, layer.get("color", "#5707b3"), outline, width, size
-        ).format(name="0")
+            "0",
+            geometry,
+            color=layer.get("color", "#5707b3"),
+            outline=outline,
+            width=width,
+            size=size,
+            centroid_marker=marker,
+        )
         return f"""<renderer-v2 type="singleSymbol" forceraster="0" symbollevels="0">
         <symbols>
           {symbol}
@@ -406,7 +462,15 @@ def _vector_renderer(layer: dict[str, Any]) -> str:
         for idx, (value, (_, label)) in enumerate(categories.items())
     )
     symbols = "\n          ".join(
-        _symbol_xml(geometry, color, outline, width, size).format(name=idx)
+        _symbol_xml(
+            str(idx),
+            geometry,
+            color=color,
+            outline=outline,
+            width=width,
+            size=size,
+            centroid_marker=marker,
+        )
         for idx, (color, _) in enumerate(categories.values())
     )
     return f"""<renderer-v2 type="categorizedSymbol" forceraster="0" symbollevels="0"
@@ -657,11 +721,22 @@ def _read_meta(path: Path, kind: str) -> dict[str, Any]:
         gpd.read_parquet if path.suffix.lower() in PARQUET_SUFFIXES else gpd.read_file
     )
     gdf = read(path)
-    geom_type = str(gdf.geom_type.iloc[0]).replace("Multi", "").lower()
+
+    # An empty layer is a real answer, not a broken file: a pilot box with no
+    # culverts in it has nothing to draw and should still appear in the legend,
+    # saying so. It has no extent and no geometry type to report, so both are
+    # left to the spec and the provider.
+    if gdf.empty:
+        return {"bounds": None, "authid": str(gdf.crs), "geometry": None}
+
+    # shapely says "LineString"; the symbol builder and the .qgs both want "line".
+    # Left untranslated, a line layer is given a fill symbol and draws nothing at
+    # all while still reporting valid, which is the hardest kind of wrong to spot.
+    geometry = str(gdf.geom_type.iloc[0]).replace("Multi", "").lower()
     return {
         "bounds": tuple(gdf.total_bounds),
         "authid": str(gdf.crs),
-        "geometry": geom_type,
+        "geometry": GEOMETRY_NAMES.get(geometry, geometry),
     }
 
 
@@ -697,9 +772,10 @@ def run(spec: dict[str, Any]) -> Path:
         layer.setdefault("name", Path(written).stem)
         if readable is not None:
             meta = _read_meta(readable, layer["kind"])
-            layer["bounds"] = meta["bounds"]
+            if meta["bounds"] is not None:
+                layer["bounds"] = meta["bounds"]
             layer.setdefault("crs", meta["authid"])
-            if layer["kind"] == "vector":
+            if layer["kind"] == "vector" and meta.get("geometry"):
                 layer.setdefault("geometry", meta["geometry"])
         else:
             unreadable.append(written)
@@ -708,17 +784,25 @@ def run(spec: dict[str, Any]) -> Path:
     authid = spec.get("crs") or next(
         (lyr["crs"] for lyr in layers if lyr.get("crs")), DEFAULT_CRS
     )
+    # The view the project opens on. Taken from the spec when it says, because the
+    # union of every layer is the wrong answer whenever one context layer is much
+    # wider than the study extent: a pilot project holding one region-wide grid
+    # opens twenty times too far out, and every pilot layer in it is then a
+    # sub-pixel smudge that reads as an empty project rather than a zoomed-out one.
+    # Always set `extent` on a project built for one area.
     bounds = [lyr["bounds"] for lyr in layers if lyr.get("bounds")]
-    extent = (
-        (
+    if spec.get("extent"):
+        west, south, east, north = (float(v) for v in spec["extent"])
+        extent = (west, south, east, north)
+    elif bounds:
+        extent = (
             min(b[0] for b in bounds),
             min(b[1] for b in bounds),
             max(b[2] for b in bounds),
             max(b[3] for b in bounds),
         )
-        if bounds
-        else WELLINGTON_EXTENT
-    )
+    else:
+        extent = WELLINGTON_EXTENT
 
     out = Path(spec["out"]).expanduser()
     out.parent.mkdir(parents=True, exist_ok=True)

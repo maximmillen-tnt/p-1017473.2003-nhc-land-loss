@@ -105,16 +105,19 @@ to choose against.
 
 ## Open questions
 
-- **What a failing cell means, which is the question that most moves the
-  answer.** The grid gives a probability per 32 m cell, which is 1024 m² of
-  ground, and this step responds by putting a single failure of a few square
-  metres somewhere in it. Over the full study area the probabilities sum to
-  66,644 failing cells — 6,824 ha if a failing cell meant the whole cell went —
-  while the sampled sizes turn that into 106 ha of source area, 1.6% of it.
-  Those are answers to two different questions and only the supplier can say
-  which one the grid asks. Until it is settled, no total area from this step
-  should be quoted, and the choice between them moves the loss by a factor of
-  sixty.
+- **What a failing cell means.** Half answered, and the half that is answered is
+  now baked into the model. The *rate* is faithful: the grid implies 66,644
+  failures, the run draws 66,431 (0.9 binomial standard deviations low) and the
+  observed failure fraction tracks the stated probability to within 2% in every
+  band from 0.004 to 0.49. The *area* was not, and the grid does not constrain
+  it, so `SIZE_EXPONENT` has been calibrated backwards from areal coverage to
+  1.19 — mean source area 259 m², delivered coverage 0.98%, against the order of
+  1% in Nowicki Jessee et al. (2018).
+  The reading that a failing 32 m cell fails whole is rejected: it needs a mean
+  of 1,028 m² and an exponent near 0.5, which would make 43% of modelled
+  landslides larger than 1,000 m² and put coverage at 3.9%, four times the
+  literature. If the supplier confirms that whole-cell reading anyway, this
+  calibration has to be revisited and the loss rises by about four times.
 - **What shaking level the grid is conditioned on.** Taken from the file name
   and unconfirmed. The step runs either way; the report cannot describe the
   result without it.

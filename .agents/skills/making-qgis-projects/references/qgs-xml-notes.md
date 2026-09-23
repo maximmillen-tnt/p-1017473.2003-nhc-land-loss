@@ -62,6 +62,17 @@ The `attr` is the column name and is matched case-sensitively against the field 
 file. A column that does not exist gives every feature the same symbol rather than an
 error.
 
+## A line layer given a fill symbol draws nothing
+
+`SimpleFill` on a line geometry loads, reports `valid=True`, keeps its renderer and
+paints no pixels. There is no warning anywhere. The trap is that shapely calls the
+geometry `LineString` while the symbol needs `line`, so a geometry type auto-detected
+from the file and passed straight through silently picks the wrong symbol class. The
+builder normalises through `GEOMETRY_NAMES`; anything hand-writing symbol XML has to do
+the same.
+
+This is the case `--render` exists for: every other check passes.
+
 ## Nodata
 
 `<noData><noDataList bandNo="1" useSrcNoData="1"/></noData>` makes QGIS honour the nodata

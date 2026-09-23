@@ -58,6 +58,7 @@ MIN_WINDOW_CELLS = 3
 # what it holds without the file name having to.
 SLOPE_NAME = "slope_degrees"
 TOPOGRAPHIC_POSITION_NAME = "topographic_position_m"
+LOCAL_RELIEF_NAME = "local_relief_m"
 DOWNHILL_AZIMUTH_NAME = "downhill_azimuth_degrees"
 
 # A full turn, in degrees. Named because it appears both as the modulus that
@@ -476,6 +477,53 @@ def topographic_position(
     # elevation units and the nodata marker do not describe a difference.
     result = dem - neighbourhood_mean
     result.name = TOPOGRAPHIC_POSITION_NAME
+    return result
+
+
+def local_relief(dem: xr.DataArray, resolution: float, window_m: float) -> xr.DataArray:
+    """Compute the elevation range within a neighbourhood of every cell.
+
+    The highest ground in the window minus the lowest, in metres. Where
+    :func:`topographic_position` says whether a cell stands above or below what
+    is around it, this says how much ground there is between the top and the
+    bottom of the neighbourhood at all -- which on a steep face is a reading of
+    how tall that face is.
+
+    It is a proxy for a measured toe-to-crest height, not a substitute for one.
+    A window wider than the face takes in ground beyond it and overstates the
+    height; a window narrower than the face never reaches the crest and
+    understates it. Choose the window for the feature being measured, and quote
+    it with the result.
+
+    Args:
+        dem: Ground elevation in metres, with dimensions :data:`RASTER_DIMS`.
+        resolution: The cell size of ``dem``, in metres.
+        window_m: The width of the neighbourhood, in metres. Converted to an odd
+            number of cells by :func:`window_in_cells`.
+
+    Returns:
+        The elevation range in metres, on the same grid as ``dem``, never
+        negative. The border half a window wide has no complete neighbourhood
+        and comes back as NaN.
+
+    Raises:
+        ValueError: If ``dem`` is not oriented (y, x), or if ``window_m`` is
+            narrower than :data:`MIN_WINDOW_CELLS` cells.
+    """
+    _check_dims(dem)
+
+    window_cells = window_in_cells(window_m, resolution)
+    highest = get_rolling_aggregation(
+        dem, aggregate_func="max", window_size=window_cells
+    )
+    lowest = get_rolling_aggregation(
+        dem, aggregate_func="min", window_size=window_cells
+    )
+
+    # Subtracting drops the DEM's attributes, which is right here: the elevation
+    # units and the nodata marker do not describe a range.
+    result = highest - lowest
+    result.name = LOCAL_RELIEF_NAME
     return result
 
 
