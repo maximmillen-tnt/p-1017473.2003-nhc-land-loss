@@ -19,6 +19,12 @@ code that the LINZ address layer does not carry.
 - [x] Cover the filtering with tests that do not touch the network
       (`tests/landloss/exposure/test_addresses.py`).
 
+## Phase 1a — Run settings in config.py (complete)
+
+- [x] Replace the command-line flags with `config.py` beside the script
+      (`PILOT`, `FRESH`, `OUT`), read in the `__main__` block and passed
+      into `main()` as keyword arguments.
+
 ## Phase 2 — Join LINZ parcels for land area (register task T-07)
 
 - [ ] Join a parcel layer to the spine, so land area comes from a measured

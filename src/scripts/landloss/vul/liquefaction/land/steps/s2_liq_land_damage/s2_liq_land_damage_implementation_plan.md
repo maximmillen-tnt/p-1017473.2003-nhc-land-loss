@@ -1,6 +1,6 @@
 # Step 2 — Liquefaction land damage: implementation plan
 
-**Status:** Phases 1 and 1a complete. Costs are the packaged Canterbury
+**Status:** Phases 1, 1a and 1b complete. Costs are the packaged Canterbury
 settlements.
 
 ## Phase 1 — A priced state on every property (complete)
@@ -24,6 +24,13 @@ settlements.
       retyping them.
 - [x] Leave the output without geometry; step 10 takes the coordinates from the
       insured land.
+
+## Phase 1b — Off the grid is no damage (complete)
+
+- [x] Write a property off the liquefaction grid as state 1, None, at no cost,
+      rather than as a missing state, and record `on_liq_grid` beside it.
+- [x] Carry the GST-inclusive land rate from the insured land rather than the
+      exclusive one.
 
 ## Phase 2 — Beyond the Canterbury lookup
 

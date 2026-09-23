@@ -13,9 +13,15 @@
   no insured land at all. The module docstring of
   `src/landloss/exposure/land/extent.py` sets out the reasoning and what each
   part of it costs.
-- The written layer carries `land_id`, `claim_id`, `land_rate_nzd_per_m2`,
-  `area_m2`, `property_area_m2`, `building_count`, `dwelling_count` and the
-  polygon, in that order.
+- The written layer carries `land_id`, `claim_id`,
+  `land_rate_excl_gst_nzd_per_m2`, `land_rate_incl_gst_nzd_per_m2`, `area_m2`,
+  `property_area_m2`, `building_count`, `dwelling_count` and the polygon, in
+  that order.
+- **The land rate is written both sides of GST.** Step 2's rate is taken as
+  excluding GST and grossed up by `landloss.domain.gst.add_gst`, at `GST_RATE`
+  of 15%, in `gen_insured_land.py`. Only the inclusive rate is handed to the
+  loss module, as the land table's `$/m2 market value`
+  (`landloss.vul.loss_input.build_land_table`).
 - **`land_id` is minted here**, in `gen_insured_land.py`, by
   `landloss.exposure.asset_ids.mint_asset_ids` with `LAND_ID_SUFFIX`. It has the
   form `<claim_id>-L01`, numbered from 1 within the claim over the frame already

@@ -98,6 +98,10 @@ AREA_COLUMN = "area_m2"
 PROPERTY_AREA_COLUMN = "property_area_m2"
 BUILDING_COUNT_COLUMN = "building_count"
 DWELLING_COUNT_COLUMN = "dwelling_count"
+# The land rate the insured land carries, both sides of GST. The loss module is
+# handed only the GST-inclusive one.
+LAND_RATE_EXCL_GST_COLUMN = "land_rate_excl_gst_nzd_per_m2"
+LAND_RATE_INCL_GST_COLUMN = "land_rate_incl_gst_nzd_per_m2"
 BOUNDARY_ROW_COLUMN = "boundary_rows"
 
 # Which outline a building part came from, kept because one outline can be split

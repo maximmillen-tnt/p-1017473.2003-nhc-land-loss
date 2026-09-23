@@ -49,7 +49,11 @@ from landloss.domain.loss_contract import (
     check_contract_columns,
 )
 from landloss.exposure.culverts_bridges.crossings import BRIDGE, CULVERT
-from landloss.exposure.land.extent import AREA_COLUMN, DWELLING_COUNT_COLUMN
+from landloss.exposure.land.extent import (
+    AREA_COLUMN,
+    DWELLING_COUNT_COLUMN,
+    LAND_RATE_INCL_GST_COLUMN,
+)
 from landloss.vul.landslide.land.damaged_area import (
     AREA_COLUMNS,
     DEPTH_COLUMNS,
@@ -62,7 +66,6 @@ from landloss.vul.shaking.fragility import DAMAGE_STATE_COLUMN, REPLACE
 LOSS_TABLES = ("land", "rw", "culverts", "bridges")
 
 # Exposure's column names for what the contract renames.
-LAND_RATE_COLUMN = "land_rate_nzd_per_m2"
 SIZE_CLASS_COLUMN = "size_class"
 LENGTH_COLUMN = "length_m"
 ASSET_COLUMN = "asset"
@@ -113,7 +116,8 @@ def build_land_table(
 
     Args:
         insured: The insured land, carrying ``land_id``, ``claim_id``, the land
-            rate, the polygon area and the dwelling count.
+            rate including GST, the polygon area and the dwelling count. Only
+            the GST-inclusive rate is handed on, as the market value.
         liquefaction: The liquefaction land damage state per ``land_id``. Land
             without a row keeps a missing state.
         landslide: The landslide land step's areas and inundated depth per
@@ -149,7 +153,7 @@ def build_land_table(
         {
             LAND_ID_COLUMN: land_ids,
             CLAIM_ID_COLUMN: insured[CLAIM_ID_COLUMN],
-            MARKET_VALUE_COLUMN: insured[LAND_RATE_COLUMN].astype("float64"),
+            MARKET_VALUE_COLUMN: insured[LAND_RATE_INCL_GST_COLUMN].astype("float64"),
             LIQ_LD_STATE_COLUMN: land_ids.map(states),
             TOTAL_INSURED_LAND_AREA_COLUMN: insured[AREA_COLUMN].astype("float64"),
             LANDSLIDE_AREA_COLUMN: from_slides(UNION_AREA_COLUMN, 0.0),

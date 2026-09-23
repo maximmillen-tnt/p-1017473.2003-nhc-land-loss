@@ -25,13 +25,16 @@
 - **Land**, one row per insured land polygon, spined on the insured land so a
   polygon no hazard reached still appears:
   - columns `land_id`, `claim_id`, `$/m2 market value` (the exposure land
-    rate), `Liq_LD_state`, `total_insured_land_area`,
+    rate including GST, `land_rate_incl_gst_nzd_per_m2`; the exclusive rate
+    stays in the exposure file), `Liq_LD_state`, `total_insured_land_area`,
     `land_slide_total_insured_land_area`, `inundated_insured_area`,
     `inundated_mean_depth` and `evacuated_area`;
   - `land_slide_total_insured_land_area` is the union of evacuated and
     inundated ground from vul step 3, not their sum;
   - landslide areas default to zero where no landslide reached the polygon,
-    and `Liq_LD_state` and `inundated_mean_depth` default to missing;
+    and `inundated_mean_depth` defaults to missing;
+  - `Liq_LD_state` is 1, None, on land off the liquefaction grid, as written by
+    vul step 2;
   - `dwelling_count` is carried as an extra column, pending Q-07.
 - **Retaining walls**, one row per insured wall: `rw_id`, `claim_id`,
   `rw_size`, `rw_length`, `is_damaged_by_shaking` (the shaking damage state is

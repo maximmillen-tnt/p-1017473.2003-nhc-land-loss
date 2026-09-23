@@ -3,7 +3,7 @@
 **Status:** Canterbury observed damage database built, and the cost rates now
 price a Wellington realisation end to end.
 
-**Updated:** 2026-09-23
+**Updated:** 2026-09-24
 
 ## Approach
 
@@ -35,7 +35,7 @@ What this module owes the land table `loss` reads, as set in
 Marks: `[x]` done, `[~]` partly done, `[>]` next, `[ ]` planned.
 
 - [x] Supply `Liq_LD_state` per insured land polygon, written as `ld_state`. A
-  property off the liquefaction grid carries none.
+  property off the liquefaction grid is state 1, None, at no cost.
 - [x] Carry `land_id`, `claim_id` and coordinates. The coordinates come from
   the insured-land geometry, on the s10 land table.
 
@@ -53,7 +53,8 @@ Marks: `[x]` done, `[~]` partly done, `[>]` next, `[ ]` planned.
   state at every insured property and looks a cost up against it, writing one
   priced row per property per realisation. Over the Wellington pilot, 2,721 of
   4,764 properties carry a state; the remainder sit outside the liquefaction
-  grid, which covers flat land as expected.
+  grid, which covers flat land as expected, and are written as state 1, None,
+  at no cost, with `on_liq_grid` recording which were sampled.
 - The percentile is a run-level scenario rather than a column, because
   `min(repair, cap)` is non-linear and a settlement computed from a median cost
   is not the median settlement.

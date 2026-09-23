@@ -81,6 +81,14 @@ dwellings of 8,591**, on 4,388 claims.
       `landloss.domain.loss_contract`, so the name is defined once.
 - [x] Keep `address_id` internal to this step; nothing downstream is keyed on it.
 
+## Phase 3b — GST on the land rate (complete)
+
+- [x] Write the rate both excluding and including GST, grossing it up with
+      `landloss.domain.gst.add_gst` rather than inline arithmetic.
+- [x] Hand only the GST-inclusive rate on to the loss module's land table.
+- [ ] Confirm that step 2's rating-valuation rate is exclusive of GST, which
+      this phase assumes.
+
 ## Phase 4 — Close the loop on land value
 
 - [ ] Feed the measured insured area back into step 2 in place of the

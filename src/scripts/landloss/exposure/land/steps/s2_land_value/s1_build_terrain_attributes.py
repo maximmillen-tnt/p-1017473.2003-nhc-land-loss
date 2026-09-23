@@ -5,7 +5,11 @@ two terrain attributes the land value model reads -- slope in degrees, and
 metres above the mean elevation of the neighbourhood around the address -- and
 writes one row per address.
 
-    uv run --frozen python src/scripts/landloss/exposure/land/steps/s2_land_value/s1_build_terrain_attributes.py --pilot
+    uv run --frozen python src/scripts/landloss/exposure/land/steps/s2_land_value/s1_build_terrain_attributes.py
+
+The run settings -- the pilot box or the full study area, whether to ignore the
+caches, the input and output paths and the window override -- come from
+config.py beside this script rather than from the command line.
 
 This is s1 of the land value step: terrain is the first of the four attributes
 the step attaches, and s4 is the valuation that reads them. The two are
@@ -16,7 +20,7 @@ the DEM entirely and still produce a land value.
 The DEM is the slow part. The pilot box took about 82 s to assemble from the
 source tiles, and the full study area is 59 x 54 km against the pilot's 2.9 x
 1.7 km -- so a full run is a long background job measured in tens of minutes,
-while --pilot finishes in a couple of them. Both cache, keyed on the extent, so
+while a pilot run finishes in a couple of them. Both cache, keyed on the extent, so
 a second run over the same extent skips the fetch entirely.
 
 The DEM is fetched over the spine's extent *buffered* by half the topographic
@@ -43,7 +47,6 @@ case rather than the normal one -- which is what the NaN reporting is for.
 Requires LINZ_API_KEY in .env if the address spine has to be rebuilt.
 """
 
-import argparse
 import sys
 import time
 from pathlib import Path
@@ -68,6 +71,7 @@ from landloss.exposure.land.land_value import (
 )
 from landloss.io.area_of_interest import SMALL_WLG_PILOT, get_study_areas
 from landloss.io.readers import get_dem
+from scripts.landloss.exposure.land.steps.s2_land_value import config
 from scripts.landloss.paths import REPO_ROOT, TEMP_DIR
 
 # Wellington suburb names are macronised -- Owhiro Bay, Pauatahanui -- which the
@@ -336,78 +340,36 @@ def describe_missing(sampled):
     return total
 
 
-def parse_args():
-    """Read the command line."""
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "--pilot",
-        action="store_true",
-        help="Use the small Wellington pilot box instead of the full study area.",
-    )
-    parser.add_argument(
-        "--fresh",
-        action="store_true",
-        help="Ignore the caches and re-fetch the DEM and the address spine.",
-    )
-    parser.add_argument(
-        "--spine",
-        type=Path,
-        default=None,
-        help=(
-            f"The address spine from step 1. Defaults to {WORK_DIR / SPINE_NAME}, "
-            f"or to {WORK_DIR / PILOT_SPINE_NAME} under --pilot. Rebuilt from "
-            "LINZ if it is not there."
-        ),
-    )
-    parser.add_argument(
-        "--out",
-        type=Path,
-        default=None,
-        help=(
-            f"Where to write the terrain attributes. Defaults to "
-            f"{WORK_DIR / OUT_NAME}, or to {WORK_DIR / PILOT_OUT_NAME} under "
-            "--pilot."
-        ),
-    )
-    parser.add_argument(
-        "--window",
-        type=float,
-        default=None,
-        help=(
-            "Override the topographic position neighbourhood width, in metres. "
-            f"Defaults to the {WINDOW_PARAMETER} row of the land value factors "
-            "asset. The elevated flat threshold in that same asset only means "
-            "anything against the window it was tuned at, so an override here is "
-            "for looking rather than for producing an input to the valuation."
-        ),
-    )
-    return parser.parse_args()
-
-
-def resolve_outputs(args):
+def resolve_outputs(*, pilot, spine, out):
     """Choose where the spine is read from and where the outputs are written.
 
-    Resolved here rather than as argparse defaults, so that a pilot run cannot
+    Resolved here rather than as config defaults, so that a pilot run cannot
     overwrite the full outputs with a few streets of Wellington and leave
     everything downstream reading them without noticing.
 
     Args:
-        args: The parsed command line.
+        pilot: Whether the run is over the pilot box.
+        spine: The address spine path from config.py, or None for the default.
+        out: The terrain attributes path from config.py, or None for the default.
 
     Returns:
         The spine path, the output path, and the two derivative raster paths.
     """
-    spine_path = args.spine or WORK_DIR / (
-        PILOT_SPINE_NAME if args.pilot else SPINE_NAME
+    spine_path = (
+        Path(spine)
+        if spine is not None
+        else WORK_DIR / (PILOT_SPINE_NAME if pilot else SPINE_NAME)
     )
-    out = args.out or WORK_DIR / (PILOT_OUT_NAME if args.pilot else OUT_NAME)
-    slope_raster = WORK_DIR / (
-        PILOT_SLOPE_RASTER_NAME if args.pilot else SLOPE_RASTER_NAME
+    out_path = (
+        Path(out)
+        if out is not None
+        else WORK_DIR / (PILOT_OUT_NAME if pilot else OUT_NAME)
     )
+    slope_raster = WORK_DIR / (PILOT_SLOPE_RASTER_NAME if pilot else SLOPE_RASTER_NAME)
     position_raster = WORK_DIR / (
-        PILOT_POSITION_RASTER_NAME if args.pilot else POSITION_RASTER_NAME
+        PILOT_POSITION_RASTER_NAME if pilot else POSITION_RASTER_NAME
     )
-    return spine_path, out, slope_raster, position_raster
+    return spine_path, out_path, slope_raster, position_raster
 
 
 def resolve_extent(study_areas, *, pilot):
@@ -485,28 +447,47 @@ def write_outputs(terrain, out):
     print(f"  CRS     : {terrain.crs.name} (EPSG:{epsg})")
 
 
-def main():
-    args = parse_args()
-    spine_path, out, slope_raster, position_raster = resolve_outputs(args)
+def main(*, pilot, fresh, spine, out, window):
+    """Sample slope and topographic position onto every address in the spine.
+
+    Args:
+        pilot: Use the small Wellington pilot box instead of the full study area.
+        fresh: Ignore the caches and re-fetch the DEM and the address spine.
+        spine: The address spine from step 1. None reads the standard location
+            under temp/exposure/, with a pilot name when ``pilot`` is True.
+            Rebuilt from LINZ if it is not there.
+        out: Where to write the terrain attributes. None writes to the standard
+            location under temp/exposure/, with a pilot name when ``pilot`` is
+            True.
+        window: Override for the topographic position neighbourhood width, in
+            metres. None takes the ``topographic_position_window_m`` row of the
+            land value factors asset.
+
+    Returns:
+        1 if the spine or the DEM could not be had, otherwise None.
+    """
+    spine_path, out, slope_raster, position_raster = resolve_outputs(
+        pilot=pilot, spine=spine, out=out
+    )
 
     factors = load_factors()
-    window_m = args.window if args.window is not None else factors[WINDOW_PARAMETER]
+    window_m = window if window is not None else factors[WINDOW_PARAMETER]
     resolution = constants.DEM_RESOLUTION_M
 
     study_areas = get_study_areas(constants.DEFAULT_CRS)
-    bbox, clip_to, extent_name = resolve_extent(study_areas, pilot=args.pilot)
+    bbox, clip_to, extent_name = resolve_extent(study_areas, pilot=pilot)
     describe_extent(extent_name, bbox)
 
-    spine = read_spine(spine_path, bbox, clip_to, use_cache=not args.fresh)
-    if spine is None:
+    addresses = read_spine(spine_path, bbox, clip_to, use_cache=not fresh)
+    if addresses is None:
         return 1
-    if spine.empty:
+    if addresses.empty:
         print("\nThe address spine is empty; there is no terrain to sample.")
         return 1
 
-    print(f"Addresses in the spine: {len(spine):,}")
+    print(f"Addresses in the spine: {len(addresses):,}")
 
-    fetch_bbox, buffer_m = dem_bbox(spine, window_m, resolution)
+    fetch_bbox, buffer_m = dem_bbox(addresses, window_m, resolution)
     print(
         f"The DEM extent is the spine's own extent buffered by {buffer_m:,.0f} m, "
         f"so that\nthe {window_m:,.0f} m window has an answer at the outermost "
@@ -514,7 +495,7 @@ def main():
     )
 
     try:
-        dem_path = fetch_dem(fetch_bbox, resolution, use_cache=not args.fresh)
+        dem_path = fetch_dem(fetch_bbox, resolution, use_cache=not fresh)
     except (OSError, ValueError, requests.exceptions.RequestException) as exc:
         print(f"\nCould not fetch the elevation model: {exc}")
         return 1
@@ -529,7 +510,7 @@ def main():
         dem, resolution, window_m, slope_raster, position_raster
     )
 
-    sampled = spine.copy().reset_index(drop=True)
+    sampled = addresses.copy().reset_index(drop=True)
     sampled[SLOPE_COLUMN] = sample_at_points(slope_path, sampled.geometry)
     sampled[TOPOGRAPHIC_POSITION_COLUMN] = sample_at_points(
         position_path, sampled.geometry
@@ -544,10 +525,14 @@ def main():
     describe_missing(sampled)
 
     write_outputs(sampled[[*OUT_COLUMNS, sampled.geometry.name]], out)
-    return 0
+    return None
 
 
 if __name__ == "__main__":
-    status = main()
-    if status:
-        raise SystemExit(status)
+    main(
+        pilot=config.PILOT,
+        fresh=config.FRESH,
+        spine=config.SPINE,
+        out=config.TERRAIN,
+        window=config.WINDOW_M,
+    )

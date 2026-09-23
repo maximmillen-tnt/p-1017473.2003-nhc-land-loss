@@ -26,7 +26,8 @@ def insured():
         {
             "land_id": ["1-L01", "2-L01"],
             "claim_id": [1, 2],
-            "land_rate_nzd_per_m2": [500.0, 700.0],
+            "land_rate_excl_gst_nzd_per_m2": [500.0, 700.0],
+            "land_rate_incl_gst_nzd_per_m2": [575.0, 805.0],
             "area_m2": [400.0, 900.0],
             "dwelling_count": [1, 2],
         },
@@ -103,7 +104,8 @@ def test_the_land_table_carries_the_contract_columns_and_the_extras():
     assert list(land.columns) == [*LAND_COLUMNS, "dwelling_count", "geometry"]
     assert land.crs == CRS
     assert land["Liq_LD_state"].tolist() == [3, 1]
-    assert land["$/m2 market value"].tolist() == [500.0, 700.0]
+    # Only the GST-inclusive rate is handed on.
+    assert land["$/m2 market value"].tolist() == [575.0, 805.0]
     assert land["total_insured_land_area"].tolist() == [400.0, 900.0]
 
 

@@ -38,6 +38,11 @@ to choose against.
 - [x] Draw the realisation — where, close up, how big, how far — in
       `fig_landslide_realisation.py`.
 
+## Phase 1a — An empty realisation is still written (complete)
+
+- [x] Write an empty layer with the full schema when nothing fails, so the
+      vulnerability steps do not stop on a missing file.
+
 ## Phase 2 — Fit the size distribution to an inventory
 
 - [ ] Fit the exponent and the bounds to the Kaikōura v3 source polygons

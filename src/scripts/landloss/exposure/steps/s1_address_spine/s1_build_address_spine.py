@@ -20,13 +20,14 @@ for evidence of how much of the study area is multi-unit, cross-lease or shared
 land, and the gap between addresses and rating units is the first cheap
 measurement of it.
 
-Pass --pilot to work over the small Wellington box instead, which is the quick
-way to exercise the script end to end.
+The run settings -- whether to use the small Wellington pilot box, which is the
+quick way to exercise the script end to end, whether to ignore the cache, and
+where to write -- come from config.py beside this script rather than from the
+command line.
 
 Requires LINZ_API_KEY in .env.
 """
 
-import argparse
 import sys
 from pathlib import Path
 
@@ -35,6 +36,7 @@ import requests
 from landloss.domain import constants
 from landloss.exposure.addresses import get_addresses
 from landloss.io.area_of_interest import SMALL_WLG_PILOT, get_study_areas
+from scripts.landloss.exposure.steps.s1_address_spine import config
 from scripts.landloss.paths import REPO_ROOT, TEMP_DIR
 
 # Wellington suburb names are macronised -- Ōwhiro Bay, Pāuatahanui -- which the
@@ -136,37 +138,42 @@ def describe_suburbs(spine, limit=10):
         print(f"  {suburb!s:<32}{count:>9,}")
 
 
-def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "--pilot",
-        action="store_true",
-        help="Use the small Wellington pilot box instead of the full study area.",
-    )
-    parser.add_argument(
-        "--fresh",
-        action="store_true",
-        help="Ignore the extent cache and re-read from the source layer.",
-    )
-    parser.add_argument(
-        "--out",
-        type=Path,
-        default=None,
-        help=(
-            f"Where to write the spine. Defaults to {OUT_DIR / OUT_NAME}, or to "
-            f"{OUT_DIR / PILOT_OUT_NAME} under --pilot."
-        ),
-    )
-    args = parser.parse_args()
+def resolve_out(out, *, pilot):
+    """Choose where the spine is written.
 
-    # Resolved here rather than as an argparse default, so that a pilot run
-    # cannot overwrite the full spine with a few streets of Wellington and leave
-    # every later step reading it without noticing.
-    out = args.out or OUT_DIR / (PILOT_OUT_NAME if args.pilot else OUT_NAME)
+    Resolved here rather than as a config default, so that a pilot run cannot
+    overwrite the full spine with a few streets of Wellington and leave every
+    later step reading it without noticing.
+
+    Args:
+        out: The path from config.py, or None for the standard location.
+        pilot: Whether the run is over the pilot box.
+
+    Returns:
+        The path to write the spine to.
+    """
+    if out is not None:
+        return Path(out)
+    return OUT_DIR / (PILOT_OUT_NAME if pilot else OUT_NAME)
+
+
+def main(*, pilot, fresh, out):
+    """Build the address spine and write it out.
+
+    Args:
+        pilot: Use the small Wellington pilot box instead of the full study area.
+        fresh: Ignore the extent cache and re-read from the source layer.
+        out: Where to write the spine. None writes it to the standard location
+            under temp/exposure/, with a pilot name when ``pilot`` is True.
+
+    Returns:
+        1 if the spine could not be built, otherwise None.
+    """
+    out = resolve_out(out, pilot=pilot)
 
     study_areas = get_study_areas(constants.DEFAULT_CRS)
 
-    if args.pilot:
+    if pilot:
         bbox = SMALL_WLG_PILOT.bbox(constants.DEFAULT_CRS)
         clip_to = None
         describe_extent(SMALL_WLG_PILOT.name, bbox)
@@ -181,7 +188,7 @@ def main():
             bbox=bbox,
             crs=constants.DEFAULT_CRS,
             clip_to=clip_to,
-            use_cache=not args.fresh,
+            use_cache=not fresh,
         )
     except ValueError as exc:
         # Raised by resolve_api_key when LINZ_API_KEY is missing.
@@ -201,7 +208,7 @@ def main():
         print("\nNo addresses found within the extent.")
         return 1
 
-    describe_counts(spine, pilot=args.pilot)
+    describe_counts(spine, pilot=pilot)
     describe_suburbs(spine)
 
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -212,10 +219,8 @@ def main():
     print(f"  Rows    : {len(spine):,}")
     print(f"  Columns : {', '.join(spine.columns)}")
     print(f"  CRS     : {spine.crs}")
-    return 0
+    return None
 
 
 if __name__ == "__main__":
-    status = main()
-    if status:
-        raise SystemExit(status)
+    main(pilot=config.PILOT, fresh=config.FRESH, out=config.OUT)

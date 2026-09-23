@@ -80,6 +80,13 @@ and amenity, so the remaining gap is deliberate rather than missing.
   is no second path to consolidate and the change would only move working
   code.
 
+## Phase 2a — Run settings in config.py (complete)
+
+- [x] Replace the command-line flags of `s1_build_terrain_attributes.py` and
+      `s4_estimate_land_value.py` with one shared `config.py` in this folder,
+      read in each `__main__` block and passed into `main()` as keyword
+      arguments. The figure scripts keep their own arguments for now.
+
 ## Phase 3 — Accessibility
 
 - [ ] Give each address a gravity decay to the main centres,
