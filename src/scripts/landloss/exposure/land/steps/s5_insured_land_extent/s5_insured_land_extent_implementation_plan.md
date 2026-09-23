@@ -1,6 +1,6 @@
 # Step 5 — Insured land extent: implementation plan
 
-**Status:** Phases 1 to 3 complete. The claim is the property, the extent is
+**Status:** Phases 1 to 3a complete. The claim is the property, the extent is
 clipped to it, and buildings that straddle a boundary are split. Phase 4 is the
 land value loop, which waits on the District Valuation Roll data.
 
@@ -71,6 +71,15 @@ dwellings of 8,591**, on 4,388 claims.
 - [ ] Check what a rating unit that aggregates several titles does to the claim.
       One pilot property takes 205 addresses, and a large rural rating unit can
       swallow a row of houses.
+
+## Phase 3a — land_id for the loss contract (complete)
+
+- [x] Mint a `land_id` per insured land polygon, `<claim_id>-L01`, with
+      `landloss.exposure.asset_ids.mint_asset_ids`, and write it first on
+      `insured-land.geoparquet` (`gen_insured_land.py`).
+- [x] Take `CLAIM_ID_COLUMN` in `extent.py` and `driveways.py` from the shared
+      `landloss.domain.loss_contract`, so the name is defined once.
+- [x] Keep `address_id` internal to this step; nothing downstream is keyed on it.
 
 ## Phase 4 — Close the loop on land value
 

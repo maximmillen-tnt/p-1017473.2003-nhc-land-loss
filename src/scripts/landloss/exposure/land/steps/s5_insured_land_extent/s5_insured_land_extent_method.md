@@ -13,8 +13,21 @@
   no insured land at all. The module docstring of
   `src/landloss/exposure/land/extent.py` sets out the reasoning and what each
   part of it costs.
-- The written layer carries `claim_id`, `land_rate_nzd_per_m2`, `area_m2`,
-  `property_area_m2`, `building_count`, `dwelling_count` and the polygon.
+- The written layer carries `land_id`, `claim_id`, `land_rate_nzd_per_m2`,
+  `area_m2`, `property_area_m2`, `building_count`, `dwelling_count` and the
+  polygon, in that order.
+- **`land_id` is minted here**, in `gen_insured_land.py`, by
+  `landloss.exposure.asset_ids.mint_asset_ids` with `LAND_ID_SUFFIX`. It has the
+  form `<claim_id>-L01`, numbered from 1 within the claim over the frame already
+  sorted by `claim_id`. There is one polygon per claim today, so every id ends
+  `-L01`; the id is kept separate so a claim split into several polygons later
+  still gives the loss contract's land table one row per polygon. The column
+  names come from `landloss.domain.loss_contract`, which `extent.py` and
+  `driveways.py` also import `CLAIM_ID_COLUMN` from.
+- **`address_id` stops here.** It is used only inside this step, to carry the
+  step 2 rate onto a property through the address-to-claim rows. Nothing
+  downstream of this step is keyed on `address_id`; every later exposure and
+  vulnerability output is keyed on `claim_id` and the asset's own id.
 - **Claim properties** come from `build_claim_properties`, which reads the LINZ
   NZ Property Boundaries layer through
   `landloss.io.readers.get_nz_property_boundaries` against

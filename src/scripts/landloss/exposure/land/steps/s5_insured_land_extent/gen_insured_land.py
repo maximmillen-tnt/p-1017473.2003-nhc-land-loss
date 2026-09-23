@@ -37,6 +37,8 @@ import sys
 import geopandas as gpd
 
 from landloss.domain import constants
+from landloss.domain.loss_contract import LAND_ID_COLUMN
+from landloss.exposure.asset_ids import LAND_ID_SUFFIX, mint_asset_ids
 from landloss.exposure.land.driveways import (
     describe_driveways,
     generate_driveways,
@@ -359,8 +361,13 @@ def main(*, pilot, use_cached_extent):
         .mean()
     )
     insured = extent.assign(**{RATE_COLUMN: extent[CLAIM_ID_COLUMN].map(rates)})
+    # One polygon per claim today, so every land_id is <claim_id>-L01. The id is
+    # kept separate from the claim so that a claim split into several polygons
+    # later still gives the loss contract one row per polygon.
+    insured[LAND_ID_COLUMN] = mint_asset_ids(insured[CLAIM_ID_COLUMN], LAND_ID_SUFFIX)
     insured = insured[
         [
+            LAND_ID_COLUMN,
             CLAIM_ID_COLUMN,
             RATE_COLUMN,
             AREA_COLUMN,

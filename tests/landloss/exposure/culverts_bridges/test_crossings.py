@@ -2,8 +2,10 @@ import geopandas as gpd
 import pytest
 from shapely.geometry import LineString, box
 
+from landloss.exposure.coverage import keep_crossings_within_insured_land
 from landloss.exposure.culverts_bridges.crossings import (
     CULVERT_PROBABILITY,
+    FROM_BOTH,
     FROM_LINES,
     FROM_POLYGONS,
     STRUCTURES,
@@ -100,6 +102,58 @@ def test_each_property_keeps_its_own_crossing():
     assert sorted(found["claim_id"]) == ["A-001", "A-002"]
 
 
+def test_a_crossing_past_the_property_boundary_is_dropped_by_the_coverage_filter():
+    # A-002's accessway runs south past its property boundary to the road, so
+    # the stream it crosses there is on the road reserve rather than the claim.
+    accessways = gpd.GeoDataFrame(
+        {"claim_id": ["A-001", "A-002"]},
+        geometry=[box(-1.5, -20, 1.5, 20), box(8.5, -20, 11.5, 20)],
+        crs=CRS,
+    )
+    insured = gpd.GeoDataFrame(
+        {"claim_id": ["A-001", "A-002"]},
+        geometry=[box(-5, -30, 5, 30), box(5, 5, 15, 30)],
+        crs=CRS,
+    )
+    found = detect_crossings(accessways, stream(), river(y=10.0, half_width=2.0))
+    assert set(found.geom_type) == {"LineString", "Polygon"}
+
+    kept = keep_crossings_within_insured_land(found, insured)
+    assert list(kept.columns) == list(found.columns)
+    assert sorted(zip(kept["claim_id"], kept["watercourse_source"], strict=False)) == [
+        ("A-001", FROM_LINES),
+        ("A-001", FROM_POLYGONS),
+        ("A-002", FROM_POLYGONS),
+    ]
+
+
+def test_a_river_on_both_layers_is_one_crossing():
+    # A named river polygon with its centreline running through it: one
+    # physical crossing, so one row and later one structure.
+    way = gpd.GeoDataFrame(
+        {"claim_id": ["A-001"]}, geometry=[box(0, 0, 10, 3)], crs=CRS
+    )
+    line = gpd.GeoDataFrame(geometry=[LineString([(5, -10), (5, 10)])], crs=CRS)
+    polygon = gpd.GeoDataFrame(geometry=[box(4, -10, 6, 10)], crs=CRS)
+    found = detect_crossings(way, line, polygon)
+    assert len(found) == 1
+    assert found["watercourse_source"].iloc[0] == FROM_BOTH
+    assert found.geometry.iloc[0].area == pytest.approx(6.0)
+    assert list(found.columns) == ["claim_id", "geometry", "watercourse_source"]
+
+
+def test_the_same_river_on_two_claims_stays_two_crossings():
+    # Neighbouring corridors that touch are still separate claims' crossings.
+    ways = gpd.GeoDataFrame(
+        {"claim_id": ["A-001", "A-002"]},
+        geometry=[box(-1.5, -20, 1.5, 20), box(1.5, -20, 4.5, 20)],
+        crs=CRS,
+    )
+    found = detect_crossings(ways, stream(), river(half_width=2.0))
+    assert sorted(found["claim_id"]) == ["A-001", "A-002"]
+    assert set(found["watercourse_source"]) == {FROM_BOTH}
+
+
 def test_a_crs_mismatch_is_refused():
     with pytest.raises(ValueError, match="accessways are"):
         detect_crossings(accessway(), stream().to_crs("EPSG:4326"), nothing())
@@ -163,3 +217,4 @@ def test_the_summary_counts_both_structures_and_both_layers():
     assert summary["crossings found"] == 2
     assert summary["found on lines"] == 1
     assert summary["found on polygons"] == 1
+    assert summary["found on both"] == 0

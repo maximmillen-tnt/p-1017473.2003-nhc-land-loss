@@ -23,13 +23,18 @@ failures running into the same gully floor both land on it. Ground buried twice
 is buried once, so **inundated area is measured on the union** rather than
 summed across landslides. Doing otherwise would charge a property twice for the
 same square metre.
+
+The two kinds are also measured together, on their union, because the loss
+contract's ``land_slide_total_insured_land_area`` is the ground taken by either
+kind: ground that is both evacuated and inundated counts once there too.
 """
 
 import geopandas as gpd
 import numpy as np
 import pandas as pd
 
-CLAIM_ID_COLUMN = "claim_id"
+from landloss.domain.loss_contract import CLAIM_ID_COLUMN
+
 LAND_CLASS_COLUMN = "land_class"
 DEPTH_COLUMN = "depth_m"
 
@@ -46,6 +51,10 @@ DEPTH_COLUMNS = {
     EVACUATED: "evacuated_depth_m",
     INUNDATED: "inundated_depth_m",
 }
+# The insured ground taken by either class, measured on the union so ground that
+# is both evacuated and inundated counts once. This is what the contract's
+# land_slide_total_insured_land_area is.
+UNION_AREA_COLUMN = "landslide_area_m2"
 
 
 def _overlay(
@@ -106,13 +115,38 @@ def _accumulate_class(
         )
 
 
+def _union_area(
+    insured: gpd.GeoDataFrame, landslides: gpd.GeoDataFrame, id_column: str
+) -> pd.Series:
+    """Return the ground either kind of landslide takes on each property.
+
+    Args:
+        insured: The insured land polygons.
+        landslides: Every landslide polygon of every kind.
+        id_column: The property identifier.
+
+    Returns:
+        The area of the union of every piece on the property, indexed by
+        ``id_column``; empty when no landslide touches the insured land.
+    """
+    slides = landslides[landslides[LAND_CLASS_COLUMN].isin(AREA_COLUMNS)]
+    if slides.empty:
+        return pd.Series(dtype=float)
+    pieces = _overlay(insured, slides[[slides.geometry.name]], id_column)
+    if pieces.empty:
+        return pd.Series(dtype=float)
+    return pieces.groupby(id_column).geometry.apply(
+        lambda group: group.union_all().area
+    )
+
+
 def damaged_area_per_property(
     insured: gpd.GeoDataFrame,
     landslides: gpd.GeoDataFrame,
     *,
     id_column: str = CLAIM_ID_COLUMN,
 ) -> pd.DataFrame:
-    """Return the evacuated and inundated area on each property.
+    """Return the evacuated, inundated and combined area on each property.
 
     Args:
         insured: One insured land polygon per property, carrying ``id_column``.
@@ -125,8 +159,11 @@ def damaged_area_per_property(
 
     Returns:
         One row per property that any landslide touched, carrying the area of
-        each kind of ground and its mean depth weighted by area. A property no
-        landslide reached is absent rather than present with zeros.
+        each kind of ground, the area of their union as
+        :data:`UNION_AREA_COLUMN`, and each kind's mean depth weighted by area.
+        The union counts ground that is both evacuated and inundated once, so it
+        is at least the larger of the two areas and at most their sum. A
+        property no landslide reached is absent rather than present with zeros.
 
     Raises:
         ValueError: If the frames disagree on their coordinate reference system,
@@ -139,13 +176,18 @@ def damaged_area_per_property(
         msg = f"insured land is {insured.crs} and landslides are {landslides.crs}"
         raise ValueError(msg)
 
+    order = [
+        id_column,
+        *AREA_COLUMNS.values(),
+        UNION_AREA_COLUMN,
+        *DEPTH_COLUMNS.values(),
+    ]
     rows: dict[str, dict] = {}
     for land_class in AREA_COLUMNS:
         _accumulate_class(rows, insured, landslides, land_class, id_column)
 
     if not rows:
-        columns = [id_column, *AREA_COLUMNS.values(), *DEPTH_COLUMNS.values()]
-        return pd.DataFrame({column: [] for column in columns})
+        return pd.DataFrame({column: [] for column in order})
 
     damaged = pd.DataFrame(list(rows.values()))
     for column in (*AREA_COLUMNS.values(), *DEPTH_COLUMNS.values()):
@@ -154,7 +196,8 @@ def damaged_area_per_property(
     # An untouched kind of ground is zero area, not unknown area.
     for column in AREA_COLUMNS.values():
         damaged[column] = damaged[column].fillna(0.0)
-    order = [id_column, *AREA_COLUMNS.values(), *DEPTH_COLUMNS.values()]
+    union = _union_area(insured, landslides, id_column)
+    damaged[UNION_AREA_COLUMN] = damaged[id_column].map(union).fillna(0.0)
     return damaged[order].sort_values(id_column, kind="stable").reset_index(drop=True)
 
 
@@ -169,7 +212,9 @@ def check_within_insured_area(
 
     Evacuated and inundated ground may legitimately overlap each other, so the
     two summed can pass a property's own area without anything being wrong. What
-    cannot happen is either one alone exceeding it.
+    cannot happen is either one alone, or their union, exceeding it. A union
+    smaller than the larger of the two kinds is flagged as well, since the union
+    contains both.
 
     Args:
         damaged: The per-property areas.
@@ -178,7 +223,8 @@ def check_within_insured_area(
         area_column: The insured area on ``insured``.
 
     Returns:
-        The offending rows, empty when every property is within its own land.
+        The offending rows, empty when every property is within its own land and
+        every union is consistent with its two kinds.
     """
     merged = damaged.merge(
         insured[[id_column, area_column]], on=id_column, how="left", validate="1:1"
@@ -186,6 +232,8 @@ def check_within_insured_area(
     # A rounding tolerance, not a modelling one: these are polygon areas.
     tolerance = 1e-6
     over = pd.Series(np.zeros(len(merged), dtype=bool), index=merged.index)
-    for column in AREA_COLUMNS.values():
+    for column in (*AREA_COLUMNS.values(), UNION_AREA_COLUMN):
         over |= merged[column] > merged[area_column] * (1 + tolerance)
+    largest_class = merged[list(AREA_COLUMNS.values())].max(axis=1)
+    over |= merged[UNION_AREA_COLUMN] < largest_class - tolerance
     return merged[over]

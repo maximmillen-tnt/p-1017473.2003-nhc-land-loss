@@ -70,6 +70,8 @@ import numpy as np
 import pandas as pd
 import pyproj
 
+from landloss.domain.loss_contract import CLAIM_ID_COLUMN
+
 # The insured land definition: metres from the building outline. Not a tuning
 # parameter -- it is NHC's own line, so it belongs here rather than in a step's
 # config.py. It applies to appurtenant structures as well as to the dwelling.
@@ -91,7 +93,6 @@ NON_CLAIM_SOURCES = (
     "NZ Primary Parcels - Hydro",
 )
 
-CLAIM_ID_COLUMN = "claim_id"
 ADDRESS_ID_COLUMN = "address_id"
 AREA_COLUMN = "area_m2"
 PROPERTY_AREA_COLUMN = "property_area_m2"

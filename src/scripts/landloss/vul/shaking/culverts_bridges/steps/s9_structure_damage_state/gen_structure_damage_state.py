@@ -31,6 +31,11 @@ import pandas as pd
 
 from landloss.common.utils.terrain import sample_at_points
 from landloss.domain import constants
+from landloss.domain.loss_contract import (
+    CLAIM_ID_COLUMN,
+    CROSSING_ID_COLUMN,
+    REALISATION_ID_COLUMN,
+)
 from landloss.hazard.realisation import realisation_seed
 from landloss.vul.shaking.fragility import (
     BETA_FAILURE_PROBABILITY,
@@ -65,13 +70,24 @@ STRUCTURE_COLUMN = "structure"
 PGA_COLUMN = "pga_g"
 FAILURE_PROBABILITY_COLUMN = "failure_probability"
 
+OUT_COLUMNS = [
+    REALISATION_ID_COLUMN,
+    CROSSING_ID_COLUMN,
+    CLAIM_ID_COLUMN,
+    ASSET_COLUMN,
+    PGA_COLUMN,
+    FAILURE_PROBABILITY_COLUMN,
+    DAMAGE_STATE_COLUMN,
+    "geometry",
+]
+
 RULE = "-" * 72
 
 
 def structure_damage_state_path(realisation_id, *, pilot):
     """Return the file a run writes one realisation's structure states to."""
     suffix = "-pilot" if pilot else ""
-    return WORK_DIR / f"{OUT_STEM}-r{realisation_id:03d}{suffix}.parquet"
+    return WORK_DIR / f"{OUT_STEM}-r{realisation_id:03d}{suffix}.geoparquet"
 
 
 def describe_states(states):
@@ -118,22 +134,29 @@ def main(*, pilot, realisation_ids):
         rng = realisation_seed(constants.BASE_SEED, realisation_id, RNG_STREAM)
         probability = beta_failure_probability(len(crossings))
 
-        states = pd.DataFrame(
+        # PGA is read at a point guaranteed to lie on the structure. A crossing
+        # kept by the coverage filter can be a polygon or a collection, on
+        # which interpolating along a line is not defined.
+        pga = (
+            sample_at_points(raster, crossings.geometry.representative_point())
+            if len(crossings)
+            else pd.Series(dtype=float)
+        )
+        states = gpd.GeoDataFrame(
             {
-                "realisation_id": realisation_id,
-                "claim_id": crossings["claim_id"].to_numpy(),
+                REALISATION_ID_COLUMN: realisation_id,
+                CROSSING_ID_COLUMN: crossings[CROSSING_ID_COLUMN].to_numpy(),
+                CLAIM_ID_COLUMN: crossings[CLAIM_ID_COLUMN].to_numpy(),
                 # The kind of structure is the asset, because a culvert and a
                 # bridge are priced differently even though they share a sub-cap.
                 ASSET_COLUMN: crossings[STRUCTURE_COLUMN].to_numpy(),
-                PGA_COLUMN: sample_at_points(
-                    raster, crossings.geometry.interpolate(0.5, normalized=True)
-                ).to_numpy()
-                if len(crossings)
-                else [],
+                PGA_COLUMN: pga.to_numpy(),
                 FAILURE_PROBABILITY_COLUMN: probability,
                 DAMAGE_STATE_COLUMN: draw_damage_states(probability, rng),
-            }
-        )
+            },
+            geometry=crossings.geometry.to_numpy(),
+            crs=crossings.crs,
+        )[OUT_COLUMNS]
         describe_states(states)
 
         out_path = structure_damage_state_path(realisation_id, pilot=pilot)

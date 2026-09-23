@@ -12,8 +12,9 @@ code that applies it, as
 """
 
 # Whether to run over the small Wellington pilot box rather than the four
-# territorial authorities. Must match the run of step 5 whose driveways this
-# reads: the crossings are detected against those accessways.
+# territorial authorities. Must match the run of step 5 whose driveways and
+# insured land this reads: the crossings are detected against those accessways
+# and kept only where they lie wholly inside that insured land.
 PILOT = True
 
 # Which modelled earthquakes to draw a population for. Which structure sits at a

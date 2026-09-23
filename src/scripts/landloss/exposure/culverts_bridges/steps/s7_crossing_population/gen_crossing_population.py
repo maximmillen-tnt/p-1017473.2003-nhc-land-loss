@@ -1,7 +1,8 @@
 """Find where insured accessways cross water, and put a culvert or bridge there.
 
 Reads the driveway corridors step 5 wrote, intersects them against both LINZ
-river layers, and draws a culvert or a bridge at each crossing found.
+river layers, keeps the crossings lying wholly inside their claim's insured
+land, and draws a culvert or a bridge at each one kept.
 
     uv run --frozen python src/scripts/landloss/exposure/culverts_bridges/steps/s7_crossing_population/gen_crossing_population.py
 
@@ -29,6 +30,13 @@ import sys
 import geopandas as gpd
 
 from landloss.domain import constants
+from landloss.domain.loss_contract import CLAIM_ID_COLUMN, CROSSING_ID_COLUMN
+from landloss.exposure.asset_ids import (
+    CROSSING_ID_SUFFIX,
+    mint_asset_ids,
+    sort_by_location,
+)
+from landloss.exposure.coverage import keep_crossings_within_insured_land
 from landloss.exposure.culverts_bridges.crossings import (
     describe_crossings,
     detect_crossings,
@@ -41,6 +49,7 @@ from scripts.landloss.exposure.culverts_bridges.steps.s7_crossing_population imp
 )
 from scripts.landloss.exposure.land.steps.s5_insured_land_extent.gen_insured_land import (
     driveway_path,
+    insured_land_path,
 )
 from scripts.landloss.paths import TEMP_DIR
 
@@ -109,6 +118,27 @@ def describe_inputs(accessways, lines, polygons):
         )
 
 
+def describe_coverage(detected, kept):
+    """Print how many crossings the insured land filter kept and dropped.
+
+    Args:
+        detected: How many crossings were detected on the accessways.
+        kept: How many lie wholly inside their claim's insured land.
+    """
+    dropped = detected - kept
+    share = f" ({dropped / detected:.0%})" if detected else ""
+    print(RULE)
+    print(f"Crossings detected: {detected:,}")
+    print(f"Kept, wholly inside the claim's insured land: {kept:,}")
+    print(f"Dropped: {dropped:,}{share}")
+    if dropped:
+        print(
+            "  A dropped crossing lies partly outside the insured land, for "
+            "example on the road reserve, because the driveways are not "
+            "clipped to the property."
+        )
+
+
 def main(*, pilot, realisation_ids, use_cached_extent):
     """Draw a crossing population per realisation and write each one out.
 
@@ -120,6 +150,9 @@ def main(*, pilot, realisation_ids, use_cached_extent):
     in_path = driveway_path(pilot=pilot)
     print(f"Reading the accessways from {in_path} ...", flush=True)
     accessways = gpd.read_parquet(in_path)
+    insured_path = insured_land_path(pilot=pilot)
+    print(f"Reading the insured land from {insured_path} ...", flush=True)
+    insured = gpd.read_parquet(insured_path)
 
     bbox = fetch_extent(accessways)
     print("Fetching the river layers ...", flush=True)
@@ -132,12 +165,21 @@ def main(*, pilot, realisation_ids, use_cached_extent):
     describe_inputs(accessways, lines, polygons)
 
     crossings = detect_crossings(accessways, lines, polygons)
+    kept = keep_crossings_within_insured_land(crossings, insured)
+    describe_coverage(len(crossings), len(kept))
+
+    # The id is minted once, before any draw, so a crossing keeps the same id
+    # in every realisation whichever structure it is given.
+    kept = sort_by_location(kept)
+    kept.insert(
+        0, CROSSING_ID_COLUMN, mint_asset_ids(kept[CLAIM_ID_COLUMN], CROSSING_ID_SUFFIX)
+    )
 
     for realisation_id in realisation_ids:
         print(RULE)
         print(f"Realisation {realisation_id}, stream {RNG_STREAM!r}")
         rng = realisation_seed(constants.BASE_SEED, realisation_id, RNG_STREAM)
-        drawn = sample_structures(crossings, rng)
+        drawn = sample_structures(kept, rng)
         print(describe_crossings(drawn, len(accessways)).to_string())
 
         out_path = crossing_population_path(realisation_id, pilot=pilot)

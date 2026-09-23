@@ -30,10 +30,14 @@ What it runs over comes from ``config.py`` beside it.
 import sys
 
 import geopandas as gpd
-import pandas as pd
 
 from landloss.common.utils.terrain import sample_at_points
 from landloss.domain import constants
+from landloss.domain.loss_contract import (
+    CLAIM_ID_COLUMN,
+    REALISATION_ID_COLUMN,
+    RW_ID_COLUMN,
+)
 from landloss.hazard.realisation import realisation_seed
 from landloss.vul.shaking.fragility import (
     BETA_FAILURE_PROBABILITY,
@@ -72,7 +76,7 @@ RULE = "-" * 72
 def wall_damage_state_path(realisation_id, *, pilot):
     """Return the file a run writes one realisation's wall states to."""
     suffix = "-pilot" if pilot else ""
-    return WORK_DIR / f"{OUT_STEM}-r{realisation_id:03d}{suffix}.parquet"
+    return WORK_DIR / f"{OUT_STEM}-r{realisation_id:03d}{suffix}.geoparquet"
 
 
 def describe_states(states):
@@ -99,7 +103,7 @@ def describe_states(states):
 
     replaced = states[states[DAMAGE_STATE_COLUMN] == REPLACE]
     print(
-        f"  {replaced['claim_id'].nunique():,} properties carry at least one "
+        f"  {replaced[CLAIM_ID_COLUMN].nunique():,} properties carry at least one "
         "wall to replace"
     )
 
@@ -111,13 +115,16 @@ def main(*, pilot, realisation_ids):
         raster = pga_path(realisation_id, pilot=pilot)
         print(f"Reading the PGA field from {raster} ...", flush=True)
 
+        # Rows stay in population order, which step 6 sorts by claim and
+        # location, so each wall's draw is tied to its rw_id.
         rng = realisation_seed(constants.BASE_SEED, realisation_id, RNG_STREAM)
         probability = beta_failure_probability(len(walls))
 
-        states = pd.DataFrame(
+        states = gpd.GeoDataFrame(
             {
-                "realisation_id": realisation_id,
-                "claim_id": walls["claim_id"].to_numpy(),
+                REALISATION_ID_COLUMN: realisation_id,
+                RW_ID_COLUMN: walls[RW_ID_COLUMN].to_numpy(),
+                CLAIM_ID_COLUMN: walls[CLAIM_ID_COLUMN].to_numpy(),
                 ASSET_COLUMN: ASSET,
                 "size_class": walls["size_class"].to_numpy(),
                 "initial_condition": walls["initial_condition"].to_numpy(),
@@ -131,7 +138,10 @@ def main(*, pilot, realisation_ids):
                 ).to_numpy(),
                 FAILURE_PROBABILITY_COLUMN: probability,
                 DAMAGE_STATE_COLUMN: draw_damage_states(probability, rng),
-            }
+            },
+            # The wall line rides through so the loss table carries coordinates.
+            geometry=walls.geometry.to_numpy(),
+            crs=walls.crs,
         )
         describe_states(states)
 

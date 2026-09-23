@@ -31,14 +31,28 @@
 - The draw is seeded by `realisation_seed(BASE_SEED, realisation_id,
   "exposure")`, so the walls of realisation 3 belong to the same modelled
   earthquake as its hazards, and a rerun reproduces.
+- **Only walls on insured land are passed on.** After the draw,
+  `landloss.exposure.coverage.keep_walls_on_insured_land` keeps a wall only if
+  its line intersects its own claim's insured land polygon buffered by
+  `RW_COVERAGE_BUFFER_M` (2 m), because a wall can support the insured land from
+  just outside it. The test is against the step 5 polygons, not the
+  representative points the slope was sampled at, and lying on another claim's
+  land does not count. It runs after the draw, so the random stream is unchanged.
+  `describe_coverage` prints the walls drawn, kept and dropped; under the beta
+  each wall is centred inside its own polygon, so nearly all are kept.
+- **Each kept wall gets an `rw_id`** of the form `<claim_id>-RW<nn>`, numbered
+  from 01 within its claim, by `landloss.exposure.asset_ids.mint_asset_ids` with
+  `RW_ID_SUFFIX`. It is minted after the coverage filter, on walls ordered by
+  `sort_by_location` (claim, then the x and y of the line's representative
+  point), so it is stable within a realisation and does not depend on row order.
 - The output is `temp/exposure/beta-wall-population-rNNN[-pilot].geoparquet`
-  from `wall_population_path()`, carrying `address_id`, `size_class`,
+  from `wall_population_path()`, carrying `rw_id`, `claim_id`, `size_class`,
   `initial_condition`, `height_m`, `length_m` and the line.
 - The run prints the slope distribution it drew against, the share of properties
   that took a wall, and the counts by size class and initial condition, so the
   draw can be checked against the prevalence it came from. It ends by saying
   plainly that the population is not evidence about Wellington.
-- Over the pilot box it draws 758 walls over 4,764 properties, 15.9%, with a
+- Before the coverage filter was added, over the pilot box it drew 758 walls over 4,764 properties, 15.9%, with a
   median retained height of 1.8 m.
 
 Potential future improvements: see `s6_wall_population_implementation_plan.md`.

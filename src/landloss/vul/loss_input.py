@@ -1,0 +1,254 @@
+"""The four tables the vulnerability module hands to the loss module.
+
+Per realisation, vul hands loss one table each for land, retaining walls,
+culverts and bridges, with the columns set out in section 1 of
+``.agents/plans/asset-pricing-approach.md`` and named in
+:mod:`landloss.domain.loss_contract`. This module only assembles them: every
+number in them was worked out by an earlier vul step and is carried here keyed
+on the asset id minted in exposure.
+
+- **Land** is spined on the insured land, one row per polygon, so land no hazard
+  reached still appears, with zero damaged area.
+- **Retaining walls** take their shaking damage state from the shaking step and
+  their landslide flags from the wall landslide step.
+- **Culverts and bridges** are detected together as crossings and split here by
+  structure kind, the crossing id becoming the culvert or bridge id.
+
+Every builder returns the full schema, with boolean flags and the input's CRS,
+even when there are no rows, and checks the contract columns before returning.
+"""
+
+import geopandas as gpd
+import pandas as pd
+import pyproj
+
+from landloss.domain.loss_contract import (
+    BRIDGE_COLUMNS,
+    BRIDGE_ID_COLUMN,
+    CLAIM_ID_COLUMN,
+    CROSSING_ID_COLUMN,
+    CULVERT_COLUMNS,
+    CULVERT_ID_COLUMN,
+    EVACUATED_AREA_COLUMN,
+    INUNDATED_AREA_COLUMN,
+    INUNDATED_MEAN_DEPTH_COLUMN,
+    IS_DAMAGED_BY_SHAKING_COLUMN,
+    IS_DAMAGED_COLUMN,
+    IS_EVACUATED_COLUMN,
+    IS_INUNDATED_COLUMN,
+    LAND_COLUMNS,
+    LAND_ID_COLUMN,
+    LANDSLIDE_AREA_COLUMN,
+    LIQ_LD_STATE_COLUMN,
+    MARKET_VALUE_COLUMN,
+    RW_COLUMNS,
+    RW_ID_COLUMN,
+    RW_LENGTH_COLUMN,
+    RW_SIZE_COLUMN,
+    TOTAL_INSURED_LAND_AREA_COLUMN,
+    check_contract_columns,
+)
+from landloss.exposure.culverts_bridges.crossings import BRIDGE, CULVERT
+from landloss.exposure.land.extent import AREA_COLUMN, DWELLING_COUNT_COLUMN
+from landloss.vul.landslide.land.damaged_area import (
+    AREA_COLUMNS,
+    DEPTH_COLUMNS,
+    EVACUATED,
+    INUNDATED,
+    UNION_AREA_COLUMN,
+)
+from landloss.vul.shaking.fragility import DAMAGE_STATE_COLUMN, REPLACE
+
+LOSS_TABLES = ("land", "rw", "culverts", "bridges")
+
+# Exposure's column names for what the contract renames.
+LAND_RATE_COLUMN = "land_rate_nzd_per_m2"
+SIZE_CLASS_COLUMN = "size_class"
+LENGTH_COLUMN = "length_m"
+ASSET_COLUMN = "asset"
+
+FLAG_COLUMNS = (IS_EVACUATED_COLUMN, IS_INUNDATED_COLUMN)
+
+
+def _geo(
+    frame: pd.DataFrame, columns: list[str], crs: pyproj.CRS | None
+) -> gpd.GeoDataFrame:
+    """Return ``columns`` plus the geometry as a GeoDataFrame in ``crs``."""
+    return gpd.GeoDataFrame(
+        frame[[*columns, "geometry"]].reset_index(drop=True),
+        geometry="geometry",
+        crs=crs,
+    )
+
+
+def _merge_flags(
+    assets: gpd.GeoDataFrame, flags: pd.DataFrame, id_column: str, *, table: str
+) -> pd.DataFrame:
+    """Attach the landslide flags to each asset, refusing any without them."""
+    flags = flags[[id_column, *FLAG_COLUMNS]]
+    merged = assets.merge(
+        flags, on=id_column, how="left", validate="one_to_one", indicator=True
+    )
+    unflagged = merged.loc[merged["_merge"] == "left_only", id_column]
+    if len(unflagged):
+        msg = (
+            f"{len(unflagged)} {table} assets have no landslide flags, "
+            f"for example {unflagged.iloc[0]!r}"
+        )
+        raise ValueError(msg)
+    merged = merged.drop(columns="_merge")
+    for column in FLAG_COLUMNS:
+        merged[column] = merged[column].astype(bool)
+    return merged
+
+
+def build_land_table(
+    insured: gpd.GeoDataFrame,
+    liquefaction: pd.DataFrame,
+    landslide: pd.DataFrame,
+    *,
+    ld_state_column: str = "ld_state",
+) -> gpd.GeoDataFrame:
+    """Assemble the land table, one row per insured land polygon.
+
+    Args:
+        insured: The insured land, carrying ``land_id``, ``claim_id``, the land
+            rate, the polygon area and the dwelling count.
+        liquefaction: The liquefaction land damage state per ``land_id``. Land
+            without a row keeps a missing state.
+        landslide: The landslide land step's areas and inundated depth per
+            ``land_id``. Land without a row has no damaged area.
+        ld_state_column: The damage state's column in ``liquefaction``.
+
+    Returns:
+        :data:`~landloss.domain.loss_contract.LAND_COLUMNS`, then the dwelling
+        count as an extra column (pending Q-07), then the geometry, in the order
+        and CRS of ``insured``.
+
+    Raises:
+        ValueError: If ``land_id`` is duplicated in ``insured``, or a contract
+            column is missing.
+    """
+    duplicated = insured[LAND_ID_COLUMN].duplicated()
+    if duplicated.any():
+        msg = (
+            f"{int(duplicated.sum())} land ids are duplicated in the insured "
+            f"land, for example {insured.loc[duplicated, LAND_ID_COLUMN].iloc[0]!r}"
+        )
+        raise ValueError(msg)
+
+    land_ids = insured[LAND_ID_COLUMN]
+    states = liquefaction.set_index(LAND_ID_COLUMN)[ld_state_column]
+    slides = landslide.set_index(LAND_ID_COLUMN)
+
+    def from_slides(column: str, fill: float | None) -> pd.Series:
+        values = land_ids.map(slides[column]).astype("float64")
+        return values if fill is None else values.fillna(fill)
+
+    table = pd.DataFrame(
+        {
+            LAND_ID_COLUMN: land_ids,
+            CLAIM_ID_COLUMN: insured[CLAIM_ID_COLUMN],
+            MARKET_VALUE_COLUMN: insured[LAND_RATE_COLUMN].astype("float64"),
+            LIQ_LD_STATE_COLUMN: land_ids.map(states),
+            TOTAL_INSURED_LAND_AREA_COLUMN: insured[AREA_COLUMN].astype("float64"),
+            LANDSLIDE_AREA_COLUMN: from_slides(UNION_AREA_COLUMN, 0.0),
+            INUNDATED_AREA_COLUMN: from_slides(AREA_COLUMNS[INUNDATED], 0.0),
+            INUNDATED_MEAN_DEPTH_COLUMN: from_slides(DEPTH_COLUMNS[INUNDATED], None),
+            EVACUATED_AREA_COLUMN: from_slides(AREA_COLUMNS[EVACUATED], 0.0),
+            DWELLING_COUNT_COLUMN: insured[DWELLING_COUNT_COLUMN],
+            "geometry": insured.geometry,
+        },
+        index=insured.index,
+    )
+    land = _geo(table, [*LAND_COLUMNS, DWELLING_COUNT_COLUMN], insured.crs)
+    check_contract_columns(land.columns, LAND_COLUMNS, table="land")
+    return land
+
+
+def build_rw_table(walls: gpd.GeoDataFrame, flags: pd.DataFrame) -> gpd.GeoDataFrame:
+    """Assemble the retaining wall table, one row per insured wall.
+
+    Args:
+        walls: The walls with their shaking damage state, carrying ``rw_id``,
+            ``claim_id``, ``size_class``, ``length_m`` and ``damage_state``.
+        flags: The wall landslide step's ``is_evacuated`` and ``is_inundated``
+            per ``rw_id``.
+
+    Returns:
+        :data:`~landloss.domain.loss_contract.RW_COLUMNS` then the geometry, in
+        the order and CRS of ``walls``. A wall is damaged by shaking when its
+        damage state is replace.
+
+    Raises:
+        ValueError: If any wall has no flags row, or a contract column is
+            missing.
+    """
+    table = pd.DataFrame(
+        {
+            RW_ID_COLUMN: walls[RW_ID_COLUMN],
+            CLAIM_ID_COLUMN: walls[CLAIM_ID_COLUMN],
+            RW_SIZE_COLUMN: walls[SIZE_CLASS_COLUMN],
+            RW_LENGTH_COLUMN: walls[LENGTH_COLUMN].astype("float64"),
+            IS_DAMAGED_BY_SHAKING_COLUMN: (
+                walls[DAMAGE_STATE_COLUMN] == REPLACE
+            ).astype(bool),
+            "geometry": walls.geometry,
+        },
+        index=walls.index,
+    )
+    merged = _merge_flags(table, flags, RW_ID_COLUMN, table="rw")
+    rw = _geo(merged, list(RW_COLUMNS), walls.crs)
+    check_contract_columns(rw.columns, RW_COLUMNS, table="rw")
+    return rw
+
+
+def build_crossing_tables(
+    crossings: gpd.GeoDataFrame, flags: pd.DataFrame
+) -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame]:
+    """Split the crossings into the culvert and bridge tables.
+
+    Args:
+        crossings: The crossings with their shaking damage state, carrying
+            ``crossing_id``, ``claim_id``, ``asset`` (culvert or bridge) and
+            ``damage_state``.
+        flags: The crossing landslide step's ``is_evacuated`` and
+            ``is_inundated`` per ``crossing_id``.
+
+    Returns:
+        The culvert table, :data:`~landloss.domain.loss_contract.CULVERT_COLUMNS`
+        then ``is_evacuated`` as an extra column (pending Q-09) then the
+        geometry, and the bridge table,
+        :data:`~landloss.domain.loss_contract.BRIDGE_COLUMNS` then the geometry.
+        The crossing id becomes the culvert or bridge id. A culvert is damaged
+        when its shaking damage state is replace; a bridge's shaking damage is
+        reported as ``is_damaged_by_shaking``. Both keep the CRS of
+        ``crossings``.
+
+    Raises:
+        ValueError: If any crossing has no flags row, or a contract column is
+            missing.
+    """
+    if crossings.geometry.name != "geometry":
+        crossings = crossings.rename_geometry("geometry")
+    merged = _merge_flags(crossings, flags, CROSSING_ID_COLUMN, table="crossing")
+    replaced = (merged[DAMAGE_STATE_COLUMN] == REPLACE).astype(bool)
+
+    is_culvert = merged[ASSET_COLUMN] == CULVERT
+    culverts = merged.loc[is_culvert].rename(
+        columns={CROSSING_ID_COLUMN: CULVERT_ID_COLUMN}
+    )
+    culverts[IS_DAMAGED_COLUMN] = replaced[is_culvert]
+    culvert_table = _geo(
+        culverts, [*CULVERT_COLUMNS, IS_EVACUATED_COLUMN], crossings.crs
+    )
+    check_contract_columns(culvert_table.columns, CULVERT_COLUMNS, table="culverts")
+
+    is_bridge = merged[ASSET_COLUMN] == BRIDGE
+    bridges = merged.loc[is_bridge].rename(
+        columns={CROSSING_ID_COLUMN: BRIDGE_ID_COLUMN}
+    )
+    bridges[IS_DAMAGED_BY_SHAKING_COLUMN] = replaced[is_bridge]
+    bridge_table = _geo(bridges, list(BRIDGE_COLUMNS), crossings.crs)
+    check_contract_columns(bridge_table.columns, BRIDGE_COLUMNS, table="bridges")
+    return culvert_table, bridge_table

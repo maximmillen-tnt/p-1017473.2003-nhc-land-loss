@@ -31,6 +31,7 @@ import pandas as pd
 
 from landloss.common.utils.terrain import sample_at_points
 from landloss.domain import constants
+from landloss.domain.loss_contract import CLAIM_ID_COLUMN, LAND_ID_COLUMN
 from landloss.vul.liquefaction.costs import (
     COST_YEAR,
     RATE_BASIS,
@@ -79,7 +80,7 @@ def describe_damage(damage, properties, percentile):
     counts = (
         damage.loc[known]
         .groupby([STATE_COLUMN, "state_name"])
-        .agg(properties=("claim_id", "size"), cost_nzd=("cost_nzd", "first"))
+        .agg(properties=(CLAIM_ID_COLUMN, "size"), cost_nzd=("cost_nzd", "first"))
     )
     print(f"By land damage state, at the {percentile}th percentile of settled cost:")
     print(counts.to_string())
@@ -103,7 +104,8 @@ def main(*, pilot, realisation_ids, cost_percentile):
         damage = pd.DataFrame(
             {
                 "realisation_id": realisation_id,
-                "claim_id": insured["claim_id"].to_numpy(),
+                LAND_ID_COLUMN: insured[LAND_ID_COLUMN].to_numpy(),
+                CLAIM_ID_COLUMN: insured[CLAIM_ID_COLUMN].to_numpy(),
                 "cause": CAUSE,
                 STATE_COLUMN: states,
                 "state_name": pd.Series(states).map(names).to_numpy(),

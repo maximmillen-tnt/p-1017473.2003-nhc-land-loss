@@ -66,10 +66,10 @@ Four consequences, in the order they bite:
   and the cap that is valued, and a pre-multiplied market value would have
   thrown away the area the cap needs.
 - **Damage is decomposed by mechanism, in named columns rather than rows per
-  cause.** Whether `land_slide_total_insured_land_area` is already the union of
+  cause.** `vul` supplies `land_slide_total_insured_land_area` as the union of
   the evacuated and inundated footprints, as
-  `.agents/context/nhc-land-cover-and-settlement.md` requires, or whether `loss`
-  must take that union itself, is **Q-06**.
+  `.agents/context/nhc-land-cover-and-settlement.md` requires (vul step 3,
+  `landslide_area_m2`), so `loss` need not take that union itself (**Q-06**).
 
 Four things the contract does not carry, each of which `loss` needs:
 
@@ -465,10 +465,11 @@ flagged placeholder can stand in for until it lands.
   nothing upstream produces one. Either the address spine gains the attribute or
   the model assumes one dwelling per building and says so. This touches every
   cap in the study.
-- **The claim key.** `beta-build.md` defers minting `claim_id` to the `loss`
-  boundary. Claim = address = residential building is a workable placeholder,
-  but it has to be one named function rather than an assumption spread across
-  the module, because **Q-01** may change it.
+- **The claim key.** `claim_id` is the LINZ property, set by
+  `build_claim_properties` in exposure step 5 and carried unchanged through
+  exposure and `vul` (see `beta-build.md`, *The identifier*). It is one named
+  function rather than an assumption spread across the modules, because
+  **Q-01** may still change what a claim is.
 - **Whether landslide drives wall and structure damage** — sections 4.4 and
   4.6. This is `vul`'s output to emit, not `loss`'s to infer, so it has to be
   decided before `vul` is built rather than bolted on after.

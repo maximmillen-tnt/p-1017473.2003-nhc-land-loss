@@ -1,16 +1,28 @@
 # Step 9 — Culvert and bridge damage state: implementation plan
 
-**Status:** Phase 1 complete, but unexercised — the pilot holds no crossings.
+**Status:** Phases 1 and 1a complete, but unexercised — the pilot holds no crossings.
 
 ## Phase 1 — A damage state on every structure (complete)
 
 - [x] Read the crossing population and the realisation's PGA field.
-- [x] Sample PGA at each structure's midpoint and carry it onto the output.
+- [x] Sample PGA at each structure and carry it onto the output.
 - [x] Draw no damage or replace against a failure probability.
 - [x] Carry the kind of structure through as the asset, so the loss module can
       price a culvert and a bridge differently under their shared sub-cap.
 - [x] Seed the draw from the realisation's vulnerability stream.
 - [x] Report an empty population as a coverage fact rather than a blank table.
+
+## Phase 1a — Ids and geometry for the loss contract (complete)
+
+- [x] Carry `crossing_id` and `claim_id` from step 7 on every row, so vul
+      step 10 can split the table into culverts and bridges by id.
+- [x] Carry each structure's geometry and write GeoParquet, so the loss tables
+      get their coordinates.
+- [x] Sample PGA at `representative_point()` rather than the line midpoint,
+      because the coverage filter can pass polygons and geometry collections.
+- [x] Write an empty GeoDataFrame with the full columns and CRS when the
+      population is empty.
+- [ ] Re-run over real data after exposure steps 5 and 7 are re-run.
 
 ## Phase 2 — A population worth running over
 

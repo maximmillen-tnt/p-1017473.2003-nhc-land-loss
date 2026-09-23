@@ -3,7 +3,7 @@
 **Status:** A damage state is drawn on every structure, but the pilot holds
 none, so nothing has run against real rows.
 
-**Updated:** 2026-09-23
+**Updated:** 2026-09-24
 
 ## Approach
 
@@ -25,21 +25,23 @@ What this module owes the culvert and bridge tables `loss` reads, as set in
 
 Marks: `[x]` done, `[~]` partly done, `[>]` next, `[ ]` planned.
 
-- [ ] Carry `culvert_id` and `bridge_id` through from the exposure module.
-- [ ] Write culverts and bridges as two tables. They share one today, told
-  apart by `asset`.
+- [x] Carry `culvert_id` and `bridge_id` through from the exposure module.
+  Carried as `crossing_id` and split into the two by `asset` at vul step 10.
+- [x] Write culverts and bridges as two tables, at vul step 10.
 - [~] Supply `is_damaged` for culverts and `is_damaged_by_shaking` for bridges,
   from `damage_state`. Drawn on a flat 70%; the pilot has no rows.
-- [ ] Carry coordinates.
-- [ ] Supply `is_inundated` for both and `is_evacuated` for bridges. Nothing
-  intersects crossings with the landslide polygons yet (plan section 4.6).
-- Whether culverts deliberately carry no `is_evacuated` is **Q-09**.
+- [x] Carry coordinates, as each structure's geometry in EPSG 2193.
+- [x] Supply `is_inundated` for both and `is_evacuated` for bridges, from
+  `vul/landslide/culverts_bridges` step 11.
+- Whether culverts deliberately carry no `is_evacuated` is **Q-09**. Until it
+  is settled, culverts also carry `is_evacuated` as an extra column.
 
 ## Where it is now
 
 - `steps/s9_structure_damage_state/` reads the crossing population and the
   realisation's PGA field, draws a state per structure and writes it with the
-  structure kind and sampled PGA.
+  `crossing_id`, `claim_id`, structure kind, geometry and PGA sampled at the
+  structure's representative point.
 - The fragility is the same `BETA_FAILURE_PROBABILITY = 0.7` the walls use, and
   it does not yet distinguish a culvert from a bridge.
 - **The Wellington pilot produces no rows.** The crossing population follows

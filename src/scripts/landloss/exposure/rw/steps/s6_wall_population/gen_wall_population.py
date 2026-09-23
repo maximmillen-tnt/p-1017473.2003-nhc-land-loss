@@ -2,9 +2,10 @@
 
 Reads the insured land extent step 5 wrote, samples the slope and downhill
 direction at each property off the LINZ elevation model, and draws at most one
-wall per property against a slope-driven prevalence. Each wall is written as a
-line lying along the contour, carrying the property it belongs to, its size
-class and its initial condition.
+wall per property against a slope-driven prevalence. Each wall is drawn as a
+line lying along the contour, carrying the claim it belongs to, its size class
+and its initial condition. Only the walls that touch their own claim's insured
+land, buffered by 2 m, are kept, and each kept wall is given an ``rw_id``.
 
     uv run --frozen python src/scripts/landloss/exposure/rw/steps/s6_wall_population/gen_wall_population.py
 
@@ -40,6 +41,9 @@ from landloss.common.utils.terrain import (
     write_raster,
 )
 from landloss.domain import constants
+from landloss.domain.loss_contract import CLAIM_ID_COLUMN, RW_ID_COLUMN
+from landloss.exposure.asset_ids import RW_ID_SUFFIX, mint_asset_ids, sort_by_location
+from landloss.exposure.coverage import RW_COVERAGE_BUFFER_M, keep_walls_on_insured_land
 from landloss.exposure.rw.beta_population import (
     beta_wall_population,
     beta_wall_prevalence,
@@ -185,6 +189,25 @@ def describe_walls(walls, properties):
     )
 
 
+def describe_coverage(before, after):
+    """Print how many walls the insured land coverage filter kept."""
+    print(RULE)
+    dropped = len(before) - len(after)
+    share = len(after) / len(before) if len(before) else 0.0
+    print(
+        f"Coverage: {len(before):,} walls drawn, {len(after):,} kept, "
+        f"{dropped:,} dropped ({share:.1%} kept)"
+    )
+    print(
+        "  a wall is kept if it touches its own claim's insured land buffered "
+        f"by {RW_COVERAGE_BUFFER_M:g} m"
+    )
+    print(
+        "  under the beta each wall is centred inside its own polygon, so nearly "
+        "all are kept"
+    )
+
+
 def main(*, pilot, realisation_ids, use_cached_dem):
     """Draw a wall population per realisation and write each one out.
 
@@ -212,10 +235,19 @@ def main(*, pilot, realisation_ids, use_cached_dem):
         )
         describe_walls(walls, attached)
 
+        # Filtered against the polygons rather than the representative points
+        # the slope was sampled at, and after the draw so the stream is unchanged.
+        kept = keep_walls_on_insured_land(walls, properties)
+        describe_coverage(walls, kept)
+        kept = sort_by_location(kept)
+        kept.insert(
+            0, RW_ID_COLUMN, mint_asset_ids(kept[CLAIM_ID_COLUMN], RW_ID_SUFFIX)
+        )
+
         out_path = wall_population_path(realisation_id, pilot=pilot)
         out_path.parent.mkdir(parents=True, exist_ok=True)
-        walls.to_parquet(out_path)
-        print(f"Wrote {len(walls):,} walls to {out_path}")
+        kept.to_parquet(out_path)
+        print(f"Wrote {len(kept):,} walls to {out_path}")
 
     print(RULE)
     print(

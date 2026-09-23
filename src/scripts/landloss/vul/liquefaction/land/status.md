@@ -36,7 +36,8 @@ Marks: `[x]` done, `[~]` partly done, `[>]` next, `[ ]` planned.
 
 - [x] Supply `Liq_LD_state` per insured land polygon, written as `ld_state`. A
   property off the liquefaction grid carries none.
-- [~] Carry `claim_id` and coordinates. `claim_id` rides; coordinates do not.
+- [x] Carry `land_id`, `claim_id` and coordinates. The coordinates come from
+  the insured-land geometry, on the s10 land table.
 
 ## Where it is now
 

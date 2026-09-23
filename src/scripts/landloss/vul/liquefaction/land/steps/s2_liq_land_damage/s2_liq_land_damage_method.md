@@ -33,7 +33,13 @@
 - The money is **2011 dollars excluding GST**, recorded in `cost_year` on every
   row because land values are indexed to a different date and the loss module
   compares the two.
-- Output is `temp/vul/liq-land-damage-r<nnn>[-pilot].parquet`.
+- **Each row is keyed on `land_id` and `claim_id`**, both read from the insured
+  land. `land_id` is minted at exposure step 5 and follows `realisation_id` as
+  the first column; the names are imported from `landloss.domain.loss_contract`.
+- Output is `temp/vul/liq-land-damage-r<nnn>[-pilot].parquet`, a plain parquet
+  with **no geometry**. The coordinates on the land table are supplied at
+  `vul/steps/s10_property_damage` from the insured-land geometry, joined on
+  `land_id`.
 
 Potential future improvements see
 `s2_liq_land_damage_implementation_plan.md`.

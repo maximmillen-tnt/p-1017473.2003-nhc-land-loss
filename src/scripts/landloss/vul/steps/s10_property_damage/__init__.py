@@ -1,1 +1,1 @@
-"""Step 10: one damage row per property, joined across the hazards."""
+"""Step 10: the four tables vul hands to loss, per realisation."""

@@ -36,6 +36,8 @@ import pandas as pd
 from shapely.geometry import LineString
 from shapely.ops import nearest_points
 
+from landloss.domain.loss_contract import CLAIM_ID_COLUMN
+
 # Half the width of the driveway corridor, in metres. A driveway wide enough for
 # one car is about 3 m, so the line is buffered by half that to give the strip of
 # ground the insured extent covers.
@@ -46,7 +48,6 @@ DRIVEWAY_HALF_WIDTH_M = 1.5
 # a real thing and this study's extent includes some.
 MAX_DRIVEWAY_LENGTH_M = 300.0
 
-CLAIM_ID_COLUMN = "claim_id"
 DRIVEWAY_LENGTH_COLUMN = "driveway_length_m"
 
 
