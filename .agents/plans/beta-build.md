@@ -64,16 +64,29 @@ across the hazards, so a claim's causes can be summed within a realisation.
 
 ### The identifier
 
-`address_id` throughout. `claim_id` exists in no Python today; renaming happens
-at the `loss` boundary when a real claim key arrives.
+`address_id` through exposure and the hazards. **`claim_id` is carried by `vul`
+and arrives on every table it hands to `loss`**, so the key is not minted at the
+`loss` boundary as this file previously assumed. `claim_id` exists in no Python
+today; where `vul` gets it from is still to be settled.
 
 ### What `loss` receives
 
-- **Land** — several rows per address: `cause`, `area_m2`, `land_rate_nzd_per_m2`,
-  plus `rate_basis` and `cost_year`. Multiple areas, each with its own rate and
-  its own hazard.
-- **Retaining walls, culverts and bridges** — a **damage state** only, no repair
-  cost and no repair state. `loss` receives `no damage` or `replace`.
+`vul` hands over **four tables**, each carrying `claim_id` and coordinates. The
+full column list, and what the contract leaves out, is
+`.agents/plans/asset-pricing-approach.md` section 1; in outline:
+
+- **Land** — one row per non-overlapping insured land polygon: `land_id`, a
+  `$/m2` market value, `Liq_LD_state`, and the damaged areas by mechanism —
+  total insured, landslide, inundated with a mean depth, and evacuated.
+- **Retaining walls** — one row per insured wall: `rw_id`, `rw_size`,
+  `rw_length`, and a damage flag for each of shaking, evacuation and
+  inundation.
+- **Culverts** — `culvert_id`, `is_inundated`, `is_damaged`.
+- **Bridges** — `bridge_id`, and a damage flag for each of shaking, evacuation
+  and inundation.
+
+Structures still arrive as a **verdict, not a price**, and still settle
+none-or-replace, so any flag being true means one replacement.
 
 ## Module betas
 
