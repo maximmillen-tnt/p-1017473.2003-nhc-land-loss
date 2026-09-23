@@ -1,0 +1,112 @@
+import geopandas as gpd
+import pytest
+from shapely.geometry import box
+
+from landloss.vul.landslide.land.damaged_area import (
+    EVACUATED,
+    INUNDATED,
+    check_within_insured_area,
+    damaged_area_per_property,
+)
+
+CRS = "EPSG:2193"
+
+
+def insured(*bounds_and_ids):
+    ids, geoms = [], []
+    for address, bounds in bounds_and_ids:
+        ids.append(address)
+        geoms.append(box(*bounds))
+    frame = gpd.GeoDataFrame({"address_id": ids}, geometry=geoms, crs=CRS)
+    frame["area_m2"] = frame.geometry.area
+    return frame
+
+
+def slides(*specs):
+    classes, depths, geoms = [], [], []
+    for land_class, depth, bounds in specs:
+        classes.append(land_class)
+        depths.append(depth)
+        geoms.append(box(*bounds))
+    return gpd.GeoDataFrame(
+        {"land_class": classes, "depth_m": depths}, geometry=geoms, crs=CRS
+    )
+
+
+def test_the_overlap_with_a_property_is_the_damaged_area():
+    land = insured(("A-001", (0, 0, 20, 20)))
+    hazard = slides((EVACUATED, 1.0, (10, 0, 30, 20)))
+    damaged = damaged_area_per_property(land, hazard)
+    assert damaged["evacuated_area_m2"].iloc[0] == pytest.approx(200.0)
+
+
+def test_the_two_kinds_of_ground_are_kept_apart():
+    land = insured(("A-001", (0, 0, 20, 20)))
+    hazard = slides((EVACUATED, 1.0, (0, 0, 10, 20)), (INUNDATED, 0.5, (10, 0, 20, 20)))
+    damaged = damaged_area_per_property(land, hazard)
+    assert damaged["evacuated_area_m2"].iloc[0] == pytest.approx(200.0)
+    assert damaged["inundated_area_m2"].iloc[0] == pytest.approx(200.0)
+
+
+def test_two_landslides_burying_the_same_ground_are_counted_once():
+    # Inundated polygons may overlap; ground buried twice is buried once.
+    land = insured(("A-001", (0, 0, 20, 20)))
+    hazard = slides(
+        (INUNDATED, 1.0, (0, 0, 20, 20)),
+        (INUNDATED, 2.0, (0, 0, 20, 20)),
+    )
+    damaged = damaged_area_per_property(land, hazard)
+    assert damaged["inundated_area_m2"].iloc[0] == pytest.approx(400.0)
+
+
+def test_depth_is_weighted_by_how_much_each_landslide_contributed():
+    land = insured(("A-001", (0, 0, 20, 20)))
+    hazard = slides(
+        (EVACUATED, 1.0, (0, 0, 15, 20)),  # 300 m2 of the property
+        (EVACUATED, 3.0, (15, 0, 20, 20)),  # 100 m2 of it
+    )
+    damaged = damaged_area_per_property(land, hazard)
+    assert damaged["evacuated_depth_m"].iloc[0] == pytest.approx(1.5)
+
+
+def test_a_property_no_landslide_reached_is_absent():
+    land = insured(("A-001", (0, 0, 20, 20)), ("A-002", (100, 100, 120, 120)))
+    hazard = slides((EVACUATED, 1.0, (0, 0, 20, 20)))
+    damaged = damaged_area_per_property(land, hazard)
+    assert damaged["address_id"].tolist() == ["A-001"]
+
+
+def test_an_untouched_kind_of_ground_is_zero_not_unknown():
+    land = insured(("A-001", (0, 0, 20, 20)))
+    hazard = slides((EVACUATED, 1.0, (0, 0, 20, 20)))
+    damaged = damaged_area_per_property(land, hazard)
+    assert damaged["inundated_area_m2"].iloc[0] == 0.0
+
+
+def test_no_landslides_damages_nothing():
+    land = insured(("A-001", (0, 0, 20, 20)))
+    empty = gpd.GeoDataFrame(
+        {"land_class": [], "depth_m": []}, geometry=gpd.GeoSeries([], crs=CRS), crs=CRS
+    )
+    assert damaged_area_per_property(land, empty).empty
+
+
+def test_damage_never_exceeds_the_property_it_sits_on():
+    land = insured(("A-001", (0, 0, 20, 20)))
+    hazard = slides((EVACUATED, 1.0, (-50, -50, 50, 50)))
+    damaged = damaged_area_per_property(land, hazard)
+    assert check_within_insured_area(damaged, land).empty
+
+
+def test_a_crs_mismatch_is_refused():
+    land = insured(("A-001", (0, 0, 20, 20)))
+    hazard = slides((EVACUATED, 1.0, (0, 0, 20, 20))).to_crs("EPSG:4326")
+    with pytest.raises(ValueError, match="insured land is"):
+        damaged_area_per_property(land, hazard)
+
+
+def test_landslides_without_a_land_class_are_refused():
+    land = insured(("A-001", (0, 0, 20, 20)))
+    hazard = slides((EVACUATED, 1.0, (0, 0, 20, 20))).drop(columns=["land_class"])
+    with pytest.raises(ValueError, match="land_class"):
+        damaged_area_per_property(land, hazard)

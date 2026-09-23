@@ -34,6 +34,28 @@ LAND_CLASS_COLOURS: dict[str, tuple[str, str]] = {
     INUNDATED_LAND: ("#f46d43", "Inundated land (runout)"),
 }
 
+# The six land damage states, keyed by the state codes in
+# ``gen_observed_damage_db.DAMAGE_STATES``. A green to red ramp; states 1, 3, 4
+# and 6 keep the National Liquefaction Model's own colours so a panel from this
+# study reads against one from that one, and 2 and 5 fill the ramp in between.
+#
+# These are damage *states* -- a severity scale from none observed to very
+# severe -- and not the NHC land damage *categories*, which are payout types.
+# The two are different things and the labels here say which.
+#
+# Mirrors ``STATE_COLOURS`` in
+# ``src/scripts/landloss/vul/liquefaction/land/report/fig_land_damage_maps.py``,
+# which predates this module. Point that script here next time it is touched,
+# rather than leaving two copies to drift.
+LAND_DAMAGE_STATE_COLOURS: dict[int, tuple[str, str]] = {
+    1: ("#3AB04A", "1 None observed"),
+    2: ("#A6D96A", "2 Minor"),
+    3: ("#FEE900", "3 Moderate"),
+    4: ("#F8951D", "4 Major"),
+    5: ("#D7301F", "5 Severe"),
+    6: ("#9D1C1F", "6 Very severe"),
+}
+
 # Greater Wellington's earthquake-induced slope failure zonation, keyed by the
 # integer rank in ``landloss.domain.constants.GWRC_SEVERITY_RANKS``. Green
 # through yellow to red, one colour per class. Discrete rather than a continuous

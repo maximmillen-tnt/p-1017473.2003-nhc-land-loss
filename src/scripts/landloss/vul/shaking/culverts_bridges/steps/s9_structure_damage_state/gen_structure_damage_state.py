@@ -1,0 +1,152 @@
+"""Decide which culverts and bridges the shaking wrote off.
+
+Reads the crossing population and the realisation's PGA field, and draws a
+damage state per structure against its probability of failure.
+
+    uv run --frozen python src/scripts/landloss/vul/shaking/culverts_bridges/steps/s9_structure_damage_state/gen_structure_damage_state.py
+
+Two damage states only, **no damage** and **replace**, the same pair the
+retaining walls use and for the same reason: a failed crossing is rebuilt rather
+than patched. The fragility returns a **probability of failure at the ground
+motion the structure saw**, and the state is a draw against it. The beta draws both kinds of structure against one flat
+probability, so nothing here yet distinguishes a culvert from a bridge except
+the label it carries into the loss module -- where they matter, because they
+share a sub-cap but not a cost.
+
+**Expect nothing over the Wellington pilot.** The crossing population is built
+from named watercourses, the nearest of which is some kilometres away, so this
+step legitimately writes zero rows there. That is the population's coverage, not
+a failure of this step, and the run says so rather than printing an empty table.
+
+**No cost is attached.** The loss module prices a written-off structure from its
+undepreciated value, so what this writes is the state, not the money.
+
+What it runs over comes from ``config.py`` beside it.
+"""
+
+import sys
+
+import geopandas as gpd
+import pandas as pd
+
+from landloss.common.utils.terrain import sample_at_points
+from landloss.domain import constants
+from landloss.hazard.realisation import realisation_seed
+from landloss.vul.shaking.fragility import (
+    BETA_FAILURE_PROBABILITY,
+    DAMAGE_STATE_COLUMN,
+    REPLACE,
+    beta_failure_probability,
+    draw_damage_states,
+)
+from scripts.landloss.exposure.culverts_bridges.steps.s7_crossing_population.gen_crossing_population import (
+    crossing_population_path,
+)
+from scripts.landloss.hazard.shaking.steps.s1_pga_realisation.gen_pga_realisations import (
+    pga_path,
+)
+from scripts.landloss.paths import TEMP_DIR
+from scripts.landloss.vul.shaking.culverts_bridges.steps.s9_structure_damage_state import (
+    config,
+)
+
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
+WORK_DIR = TEMP_DIR / "vul"
+OUT_STEM = "structure-damage-state"
+
+# The same stream the walls draw from: one per module, so that adding an asset
+# class does not shift the draws of the ones already there.
+RNG_STREAM = "vulnerability"
+
+ASSET_COLUMN = "asset"
+STRUCTURE_COLUMN = "structure"
+PGA_COLUMN = "pga_g"
+FAILURE_PROBABILITY_COLUMN = "failure_probability"
+
+RULE = "-" * 72
+
+
+def structure_damage_state_path(realisation_id, *, pilot):
+    """Return the file a run writes one realisation's structure states to."""
+    suffix = "-pilot" if pilot else ""
+    return WORK_DIR / f"{OUT_STEM}-r{realisation_id:03d}{suffix}.parquet"
+
+
+def describe_states(states):
+    """Print how the population split, by kind of structure."""
+    print(RULE)
+    print(f"Culverts and bridges: {len(states):,}")
+    if states.empty:
+        print(
+            "  none over this extent. The crossing population follows named "
+            "watercourses, and the pilot box contains none."
+        )
+        return
+
+    split = pd.crosstab(states[ASSET_COLUMN], states[DAMAGE_STATE_COLUMN])
+    print(split.to_string())
+    print(
+        f"  drawn against a flat {BETA_FAILURE_PROBABILITY:.0%} chance of failure, "
+        "which is the beta's stand-in for a fragility curve"
+    )
+
+    pga = states[PGA_COLUMN]
+    outside = int(pga.isna().sum())
+    if outside:
+        print(f"  {outside:,} structures fall outside the PGA field")
+    if pga.notna().any():
+        print(f"  PGA {pga.min():.3f} to {pga.max():.3f} g over the population")
+
+    replaced = states[states[DAMAGE_STATE_COLUMN] == REPLACE]
+    print(
+        f"  {replaced['address_id'].nunique():,} properties carry at least one "
+        "structure to replace"
+    )
+
+
+def main(*, pilot, realisation_ids):
+    """Write a damage state per culvert and bridge, per realisation."""
+    for realisation_id in realisation_ids:
+        crossings = gpd.read_parquet(
+            crossing_population_path(realisation_id, pilot=pilot)
+        )
+        raster = pga_path(realisation_id, pilot=pilot)
+        print(f"Reading the PGA field from {raster} ...", flush=True)
+
+        rng = realisation_seed(constants.BASE_SEED, realisation_id, RNG_STREAM)
+        probability = beta_failure_probability(len(crossings))
+
+        states = pd.DataFrame(
+            {
+                "realisation_id": realisation_id,
+                "address_id": crossings["address_id"].to_numpy(),
+                # The kind of structure is the asset, because a culvert and a
+                # bridge are priced differently even though they share a sub-cap.
+                ASSET_COLUMN: crossings[STRUCTURE_COLUMN].to_numpy(),
+                PGA_COLUMN: sample_at_points(
+                    raster, crossings.geometry.interpolate(0.5, normalized=True)
+                ).to_numpy()
+                if len(crossings)
+                else [],
+                FAILURE_PROBABILITY_COLUMN: probability,
+                DAMAGE_STATE_COLUMN: draw_damage_states(probability, rng),
+            }
+        )
+        describe_states(states)
+
+        out_path = structure_damage_state_path(realisation_id, pilot=pilot)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        states.to_parquet(out_path)
+        print(f"Wrote {len(states):,} rows to {out_path}")
+
+    print(RULE)
+    print(
+        "States only. A written-off structure is priced from its undepreciated "
+        "value in the loss module, which is not built yet."
+    )
+
+
+if __name__ == "__main__":
+    main(pilot=config.PILOT, realisation_ids=config.REALISATION_IDS)

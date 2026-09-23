@@ -258,6 +258,67 @@ def get_nz_building_outlines(
     )
 
 
+def get_nz_property_boundaries(
+    bbox: tuple[float, float, float, float] | None = None,
+    crs: int | str = constants.DEFAULT_CRS,
+    *,
+    use_cache: bool = True,
+) -> gpd.GeoDataFrame:
+    """Load the LINZ NZ Property Boundaries layer for an extent.
+
+    The property polygons at
+    https://data.linz.govt.nz/layer/122657-nz-property-boundaries/, LINZ's best
+    available representation of a property. It is built from rating units where
+    they exist, then spatialised titles, then primary parcels, so one polygon is
+    one rateable property rather than one parcel or one title.
+
+    The field this study reads it for is ``title_type``, which is the only
+    statement anywhere in the exposure data of **how a property is held**:
+    freehold, unit title, cross-lease, leasehold. That is what decides whether
+    several addresses on one building outline own separate land or share it, and
+    so whether the insured land around a block is one extent or several. Nothing
+    else available distinguishes those.
+
+    Each polygon also carries ``valuation_reference``, ``legal_description``,
+    ``title_no``, the territorial authority, the rated ``area`` and the
+    identifiers of the unit of property, parcel and untitled land it came from.
+
+    Licence:
+        Creative Commons Attribution 4.0 International (CC BY 4.0),
+        https://data.linz.govt.nz/license/attribution-4-0-international/. The
+        data may be shared and adapted, including commercially, provided Land
+        Information New Zealand is credited as the source, a link to the licence
+        is given, and any changes made are indicated. So any figure, table or
+        layer published from these boundaries has to carry that attribution.
+
+    Source:
+        Land Information New Zealand. No DOI is published for the layer, which
+        is rebuilt weekly, so a result taken from it should record the date it
+        was read.
+
+    The layer covers the whole country at 2.7 million properties, so passing a
+    bounding box is strongly preferred; the first call for a given extent
+    downloads and clips the layer, and later calls for the same extent are
+    served from the cache.
+
+    Args:
+        bbox: The extent to clip to (minx, miny, maxx, maxy) in ``crs``. Omitting
+            it returns every property boundary in New Zealand.
+        crs: The coordinate reference system to return the boundaries in.
+        use_cache: Whether to read and write the clipped extent cache.
+
+    Returns:
+        A GeoDataFrame of property boundary polygons.
+    """
+    return get_koordinates_layer_extent(
+        layer=constants.NZ_PROPERTY_BOUNDARIES_LAYER_ID,
+        crs=crs,
+        bbox=bbox,
+        domain=constants.LINZ_DOMAIN,
+        use_cache=use_cache,
+    )
+
+
 def get_nz_address_roads(
     bbox: tuple[float, float, float, float] | None = None,
     crs: int | str = constants.DEFAULT_CRS,
@@ -483,6 +544,117 @@ def get_gwrc_slope_failure(
         )
 
     return zones
+
+
+def get_wcc_cut_areas(
+    bbox: tuple[float, float, float, float] | None = None,
+    crs: int | str = constants.DEFAULT_CRS,
+    *,
+    use_cache: bool = True,
+) -> gpd.GeoDataFrame:
+    """Load Wellington City Council's mapped earthworks cut areas.
+
+    "WCC Earthmoving - Cut Areas" at
+    https://ttgroup.koordinates.com/layer/125307-wcc-earthmoving-cut-areas/,
+    mirrored onto the T+T instance for this study. 203 polygons covering 2.8
+    km2, all of them in Wellington City's hill suburbs between Karori and
+    Churton Park; nothing in Porirua, Lower Hutt or Upper Hutt, and nothing on
+    the south coast or the eastern suburbs.
+
+    This is an index of the earthworks records the council holds, not a terrain
+    model. Every attribute is a pointer back to an archived plan --
+    ``CW_file_number``, ``SR_Number``, ``Aussies_drawer_number``,
+    ``Archives_Online_Link``, ``TroveID`` -- with ``Comments`` naming the streets
+    and usually the years the work was consented. So the layer says *that this
+    ground was cut* and where the drawings are, and says nothing about how deep
+    the cut is, how high the face is or what angle it stands at. A model needing
+    cut height or cut angle has to derive them from the DEM inside these
+    polygons; the layer only says where to look.
+
+    Licence:
+        Creative Commons Attribution-NoDerivatives 4.0 International
+        (CC BY-ND 4.0), as recorded on the layer's own metadata. Attribution to
+        Wellington City Council is required, and **publishing a modified version
+        is not permitted** -- which catches anything derived from it, including a
+        susceptibility layer that uses it as an input. Confirm the position with
+        the council before any derived layer, figure or table leaves the
+        project; the sister fill layer records no licence at all, which suggests
+        the tagging on the mirror may not reflect what the council intended.
+
+    Source:
+        Wellington City Council, mirrored to the T+T Koordinates instance in the
+        "NHC WTGN Land Damage Model" group, September 2026. No DOI.
+
+    Args:
+        bbox: The extent to clip to (minx, miny, maxx, maxy) in ``crs``. Omitting
+            it returns every mapped cut area.
+        crs: The coordinate reference system to return the areas in.
+        use_cache: Whether to read and write the clipped extent cache.
+
+    Returns:
+        A GeoDataFrame of cut area polygons carrying the council's archive
+        references.
+    """
+    return get_koordinates_layer_extent(
+        layer=constants.WCC_CUT_AREAS_LAYER_ID,
+        crs=crs,
+        bbox=bbox,
+        domain=constants.TTGROUP_DOMAIN,
+        use_cache=use_cache,
+    )
+
+
+def get_wcc_fill_areas(
+    bbox: tuple[float, float, float, float] | None = None,
+    crs: int | str = constants.DEFAULT_CRS,
+    *,
+    use_cache: bool = True,
+) -> gpd.GeoDataFrame:
+    """Load Wellington City Council's mapped earthworks fill areas.
+
+    "WCC Earthmoving - Fill Areas" at
+    https://ttgroup.koordinates.com/layer/125311-wcc-earthmoving-fill-areas/,
+    the companion to :func:`get_wcc_cut_areas` and carrying the same attributes.
+    250 polygons covering 3.5 km2, over the same Wellington City hill suburbs
+    and with the same absence of coverage elsewhere in the study area. The
+    council describes it as the earthworks fill locations in Wellington City,
+    predominantly carried out for subdivision purposes.
+
+    Fill is read separately from cut because the two fail differently under
+    shaking. A cut face loses support from below; a sidling fill slides on the
+    contact it was placed on, which is the failure Kingsbury (1995) scored at
+    the top of the slope modification factor. Nothing in the layer says how deep
+    the fill is or how steep the ground beneath it was, so a thickness has to
+    come from the DEM or from the archived plans the attributes point at.
+
+    Licence:
+        **None is recorded on the layer.** Its companion cut layer is tagged
+        CC BY-ND 4.0, so the safe assumption until the council confirms
+        otherwise is that the same terms apply: attribute Wellington City
+        Council, and publish nothing derived from it. Treat the missing tag as
+        an open question rather than as permission.
+
+    Source:
+        Wellington City Council, mirrored to the T+T Koordinates instance in the
+        "NHC WTGN Land Damage Model" group, September 2026. No DOI.
+
+    Args:
+        bbox: The extent to clip to (minx, miny, maxx, maxy) in ``crs``. Omitting
+            it returns every mapped fill area.
+        crs: The coordinate reference system to return the areas in.
+        use_cache: Whether to read and write the clipped extent cache.
+
+    Returns:
+        A GeoDataFrame of fill area polygons carrying the council's archive
+        references.
+    """
+    return get_koordinates_layer_extent(
+        layer=constants.WCC_FILL_AREAS_LAYER_ID,
+        crs=crs,
+        bbox=bbox,
+        domain=constants.TTGROUP_DOMAIN,
+        use_cache=use_cache,
+    )
 
 
 def get_nz_land_cover(

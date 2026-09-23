@@ -127,6 +127,21 @@ recur, add the map to `colors.py` and register it in the builder's `_ramp_dict` 
 leave the rest for them to switch on. The landslide realisation is 132,000 polygons at
 full extent and is slow to draw.
 
+**Render the true geometry. Do not substitute a fixed-size marker for a polygon whose
+size is a model output.** A landslide polygon carries its sampled area; a dot drawn at
+its centroid is a different size from the thing it stands for, and someone reading the
+map cannot tell which they are looking at. The project lead ruled this out directly. The
+builder has a `centroid_marker` option and it should stay unused for any layer whose
+extent is a result — it exists for a point-like feature that has no meaningful footprint.
+
+When a real polygon is hard to see, fix the view rather than the geometry: set `extent`
+so the project opens on the study area, and give the layer `"outline": "match"` with a
+thin `width`, which outlines each feature in its own fill colour. That is the polygon's
+own boundary, so it claims no ground the feature does not cover, and it is enough to make
+a one-pixel circle read. The landslide sources are a median 2.8 m across, which is about
+1.6 px on a 1600 px canvas over the pilot box — small, but present and correctly scaled,
+and the big ones are visibly bigger, which is the whole point.
+
 ## 4. Build
 
 Write a spec JSON to the scratchpad and run the builder with the repo venv:
@@ -163,7 +178,13 @@ uv run --frozen python .agents/skills/making-qgis-projects/scripts/build_qgis_pr
 ```
 
 Top-level keys: `title`, `out`, `source`, `crs` (overrides the CRS taken from the first
-readable layer), `layers`. Per-layer: `store` + `fname` (+ `sub_dirs`), or
+readable layer), `extent`, `layers`.
+
+**Always set `extent` on a project built for one area.** Without it the canvas opens on
+the union of every layer, and one region-wide context layer then drags the view twenty
+times too far out — a pilot project holding the ESNZ grid opened at 61 x 50 km instead of
+2.9 x 1.7 km, which made every pilot layer in it a sub-pixel smudge and read as an empty
+project. The pilot box is `[1748323, 5423605, 1751191, 5425337]`. Per-layer: `store` + `fname` (+ `sub_dirs`), or
 `relative_path` for source material, or `path` for anything else; then `name`, `checked`,
 and the styling keys above.
 
@@ -184,9 +205,24 @@ ls -d "/c/Program Files/QGIS"*/bin/python-qgis.bat
 
 It prints the project CRS and, per layer, validity, CRS, tick state and the renderer with
 its ramp or class entries. Add `--render <dir> --extent <xmin> <ymin> <xmax> <ymax>` to
-write a PNG per layer and look at them — the full study area is too coarse to judge, so
-use a town-sized box (central Wellington: `1746000 5423000 1754000 5429000`). This catches
-the case where everything reports valid but the map draws blank.
+write a PNG per layer and look at them. This catches the case where everything reports
+valid but the map draws blank.
+
+**Render at the extent the project actually opens at**, not at a convenient one. The two
+faults this has caught so far — a line layer given a fill symbol, and features too small
+to be worth a pixel — were both invisible to every other check, and the second only shows
+at the opening view. Measuring the share of non-white pixels per render is a quick way to
+find a blank layer among twenty:
+
+```python
+a = np.asarray(Image.open(png).convert("RGB"))
+(a < 250).any(axis=2).mean()
+```
+
+Anything under about 0.1% is effectively blank on screen. Decide whether that is right
+(an empty layer) or wrong (a styling fault, or features needing a `centroid_marker`)
+before handing the project over — do not hand over a layer you have measured as blank and
+explain it away in the covering note.
 
 If QGIS is not installed on the machine, say plainly that the project is unverified beyond
 its XML rather than implying it has been opened.

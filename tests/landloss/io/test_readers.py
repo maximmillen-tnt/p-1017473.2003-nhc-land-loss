@@ -15,6 +15,8 @@ from landloss.io.readers import (
     get_nz_addresses,
     get_nz_land_cover,
     get_nz_river_name_lines,
+    get_wcc_cut_areas,
+    get_wcc_fill_areas,
     resolve_api_key,
 )
 
@@ -565,3 +567,48 @@ def test_nz_land_cover_layer_id_matches_lris() -> None:
 def test_lris_has_its_own_api_key_variable() -> None:
     """LRIS is a separate Koordinates account, so it needs its own key."""
     assert constants.API_KEY_ENV_VARS[constants.LRIS_DOMAIN] == "LRIS_API_KEY"
+
+
+# --- WCC earthmoving ---------------------------------------------------------
+
+
+def test_get_wcc_cut_areas_requests_the_ttgroup_layer(
+    fake_koordinates: dict[str, object],
+) -> None:
+    """The mirror lives on the T+T instance, so the T+T key is the one used."""
+    get_wcc_cut_areas(bbox=BBOX)
+
+    assert fake_koordinates["layer_id"] == constants.WCC_CUT_AREAS_LAYER_ID
+    assert fake_koordinates["conn"].domain == constants.TTGROUP_DOMAIN
+    assert fake_koordinates["conn"].api_key == "tnt-key"
+
+
+def test_get_wcc_fill_areas_requests_the_ttgroup_layer(
+    fake_koordinates: dict[str, object],
+) -> None:
+    """The fill mirror is on the same instance and read the same way."""
+    get_wcc_fill_areas(bbox=BBOX)
+
+    assert fake_koordinates["layer_id"] == constants.WCC_FILL_AREAS_LAYER_ID
+    assert fake_koordinates["conn"].domain == constants.TTGROUP_DOMAIN
+    assert fake_koordinates["conn"].api_key == "tnt-key"
+
+
+def test_wcc_cut_and_fill_are_separate_layers() -> None:
+    """Cut and fill fail differently under shaking and must not be merged."""
+    assert constants.WCC_CUT_AREAS_LAYER_ID != constants.WCC_FILL_AREAS_LAYER_ID
+
+
+def test_wcc_layer_ids_match_koordinates() -> None:
+    """Guards the layer IDs against an accidental edit."""
+    assert constants.WCC_CUT_AREAS_LAYER_ID == 125307
+    assert constants.WCC_FILL_AREAS_LAYER_ID == 125311
+
+
+def test_get_wcc_cut_areas_applies_the_bbox(
+    fake_koordinates: dict[str, object],
+) -> None:
+    """The extent is passed through, rather than all of Wellington returned."""
+    result = get_wcc_cut_areas(bbox=BBOX)
+
+    assert "outside" not in set(result["name"])

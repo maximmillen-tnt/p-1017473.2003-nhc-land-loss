@@ -76,6 +76,16 @@ GWRC_SEVERITY_RANKS = {
     "5 High": 5,
 }
 
+# https://ttgroup.koordinates.com/layer/125307-wcc-earthmoving-cut-areas/
+# https://ttgroup.koordinates.com/layer/125311-wcc-earthmoving-fill-areas/
+# Wellington City Council's record of where subdivision earthworks cut into and
+# filled over the natural ground, mirrored onto the T+T instance for this study.
+# Two layers rather than one because a cut and a fill on the same site behave
+# differently in an earthquake: a cut face fails by losing support from below, a
+# sidling fill by sliding on the contact it was placed on.
+WCC_CUT_AREAS_LAYER_ID = 125307
+WCC_FILL_AREAS_LAYER_ID = 125311
+
 # The supplied earthquake-induced landslide probability grid, below the
 # project's SourceMaterial folder on T:. Read by
 # landloss.io.source_material.get_eil_landslide_probability; forward slashes so
@@ -105,6 +115,15 @@ NZ_ADDRESS_ROADS_LAYER_ID = 123110
 # settles on the land around the dwelling rather than the whole parcel, so the
 # building is what the extent is measured from.
 NZ_BUILDING_OUTLINES_LAYER_ID = 101290
+
+# https://data.linz.govt.nz/layer/122657-nz-property-boundaries/
+# LINZ's best available representation of a property, built from rating units
+# first, then spatialised titles, then primary parcels. It is the only layer in
+# the study that says what kind of title a property is held under
+# (``title_type``), which is what separates a freehold section from a unit title
+# or a cross-lease -- and therefore what says whether the addresses sharing one
+# building outline are separately owned land or a share of the same land.
+NZ_PROPERTY_BOUNDARIES_LAYER_ID = 122657
 
 # The National Liquefaction Model's flatland model, mirrored on the T+T
 # Koordinates instance. This is the flat versus sloping land split the study

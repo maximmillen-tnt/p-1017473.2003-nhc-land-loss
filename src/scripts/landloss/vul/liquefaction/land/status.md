@@ -1,9 +1,9 @@
 # Liquefaction vulnerability, land: status
 
-**Status:** Canterbury observed damage database built. The cost rates are
-packaged; nothing reads them yet.
+**Status:** Canterbury observed damage database built, and the cost rates now
+price a Wellington realisation end to end.
 
-**Updated:** 2026-09-21
+**Updated:** 2026-09-22
 
 ## Approach
 
@@ -35,21 +35,28 @@ packaged; nothing reads them yet.
   folder.
 - `report/fig_land_damage_maps.py` maps the observed land damage.
 - The category cost rates are packaged as a committed asset with a README
-  recording their source, units and limitations. No code reads the file, and the
-  join from a state to a cost is not implemented.
-- Nothing in the module produces a Wellington result yet; everything built so
-  far is the Canterbury evidence the Wellington relationship will be fitted to.
+  recording their source, units and limitations, and
+  `landloss.vul.liquefaction.costs` reads them.
+- `steps/s2_liq_land_damage/` samples the hazard module's realised land damage
+  state at every insured property and looks a cost up against it, writing one
+  priced row per property per realisation. Over the Wellington pilot, 2,721 of
+  4,764 properties carry a state; the remainder sit outside the liquefaction
+  grid, which covers flat land as expected.
+- The percentile is a run-level scenario rather than a column, because
+  `min(repair, cap)` is non-linear and a settlement computed from a median cost
+  is not the median settlement.
 
 ## Next
 
-1. Read the packaged cost rates and join them to the observed damage states.
-2. Check the resulting costs against the settled losses already in the observed
+1. Check the modelled costs against the settled losses already in the observed
    damage database, which is the test of whether the 2016 rates reproduce what
    was actually paid.
-3. Escalate the 2010/2011 rates to the study's valuation basis, holding the
-   index as a named constant rather than in the asset.
-4. Carry the 15th, 50th and 85th percentiles through rather than collapsing to
-   the median, so the uncertainty reaches the loss module.
+2. Escalate the 2010/2011 rates to the study's valuation basis, holding the
+   index as a named constant rather than in the asset. `cost_year` rides on
+   every row until that lands.
+3. Gross the rates up for GST at the loss boundary. They arrive excluding it
+   and the Act compares on a GST-inclusive basis.
+4. Run all three percentiles and report the portfolio total as a band.
 
 ## Validation
 

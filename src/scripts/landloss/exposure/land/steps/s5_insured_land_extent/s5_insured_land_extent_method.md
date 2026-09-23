@@ -7,8 +7,8 @@
   `temp/exposure/insured-land.geoparquet`. Both take a `-pilot` suffix when
   `config.PILOT` is set, so a pilot run cannot overwrite the full outputs.
 - The written layer carries `address_id`, `land_rate_nzd_per_m2`, `area_m2`,
-  `building_count` and the polygon. The rate is step 2's, merged on
-  `address_id` and not recomputed here.
+  `building_count`, `dwelling_count` and the polygon. The rate is step 2's,
+  merged on `address_id` and not recomputed here.
 - Building outlines come from the LINZ NZ Building Outlines layer through
   `landloss.io.readers.get_nz_building_outlines`, whose docstring carries the
   CC BY 4.0 licence and what attribution it obliges anything published from this
@@ -26,17 +26,32 @@
   docstring of `src/landloss/exposure/land/extent.py` says so and says what it
   costs: driveways are where most retaining walls sit, and a property whose
   driveway runs past the 8 metre line has that part of its insured land missing.
+- **Addresses on the same coordinate are one property carrying several
+  dwellings.** LINZ gives each unit of a block its own address and places
+  several of them on one point, which nothing geometric can separate, so
+  `landloss.exposure.land.extent.collapse_coincident_addresses` reduces them to
+  the lowest identifier with a `dwelling_count`. That is the number NHC's
+  per-dwelling sub-caps and excess multiply. Over the Wellington pilot 8,591
+  addresses sit on 6,351 distinct locations. The cost is that only the
+  representative identifier reaches the extent, so a downstream join on address
+  will not find the others.
 - Each building is attached to the nearest address point by
   `landloss.exposure.land.extent.attach_buildings_to_addresses`, a nearest join
-  capped at `MAX_BUILDING_TO_ADDRESS_M`. The two cases the rule gets wrong — a
-  rear building nearer the neighbour's frontage point, and a block of flats split
-  between its own address points — are written out in the module docstring, the
-  second being register task T-23.
+  capped at `MAX_BUILDING_TO_ADDRESS_M`. A **second pass then shares an outline
+  with any further address whose own point stands on it**, within
+  `MAX_SHARED_BUILDING_TO_ADDRESS_M` of one metre, which is what a block of
+  flats or a cross-lease looks like and is register task T-23. Without it, an
+  outline went to exactly one address and every other unit on it carried no
+  insured land at all — 3,827 addresses of 8,591 over the pilot.
+- The one metre tolerance is deliberately tight. An address point standing on an
+  outline is a unit in that building; a point several metres off it is as likely
+  a vacant section beside it, and attaching that would hand the section insured
+  land it does not have.
 - An address with no building inside that distance gets no row, so it carries no
   insured land and contributes zero area downstream rather than a polygon nobody
   can defend. `describe_coverage()` in `gen_insured_land.py` prints how many
-  addresses that is, which is the only visible sign of a building the outline
-  layer has not captured.
+  properties that is and how far their points stand from the nearest outline,
+  which is what separates a vacant section from a gap in the outline layer.
 - A property's buildings are buffered and then merged into a single polygon by
   `landloss.exposure.land.extent.buffer_buildings`, so a house and a garage give
   one piece of insured land and one `building_count` of two.
@@ -50,6 +65,12 @@
   and rebuilt into faces so that the cells are disjoint by construction, then
   clipped back to each address's own buffer. Only extents that touch another are
   rebuilt; the rest pass through untouched.
+- **Where one outline serves several addresses, the outline cannot break the
+  tie**, so each point along it is labelled with the nearest of the addresses on
+  it (`landloss.exposure.land.extent._label_by_nearest_address`) and the
+  partition falls out of the same diagram. Each unit takes the ground outside
+  its own part of the block, and the shares of one building sum to that
+  building's buffer and no more.
 - `describe_shared_ground()` in `gen_insured_land.py` prints how much ground was
   shared and re-measures the result against its own dissolve, so a run states
   rather than assumes that the extents do not overlap.

@@ -47,11 +47,15 @@ from landloss.exposure.land.extent import (
     ADDRESS_ID_COLUMN,
     AREA_COLUMN,
     BUILDING_COUNT_COLUMN,
+    DWELLING_COUNT_COLUMN,
     INSURED_LAND_BUFFER_M,
     MAX_BUILDING_TO_ADDRESS_M,
+    MAX_SHARED_BUILDING_TO_ADDRESS_M,
+    OUTLINE_ID_COLUMN,
     attach_buildings_to_addresses,
     buffer_buildings,
     build_insured_land_extent,
+    collapse_coincident_addresses,
 )
 from landloss.io.readers import get_nz_address_roads, get_nz_building_outlines
 from scripts.landloss.exposure.land.steps.s5_insured_land_extent import config
@@ -178,34 +182,57 @@ def describe_coverage(addresses, attached, buildings, extent):
     An address with no building carries no insured land at all downstream, and a
     building with no address is a structure the model has nowhere to put, so both
     counts are worth seeing on every run.
-    """
-    print(RULE)
-    print(f"Addresses with insured land: {len(extent):,} of {len(addresses):,}")
 
-    # Two very different reasons an address carries no land, and reporting them
-    # together hides the one this count exists to surface. A building goes to
-    # exactly one address, so a block of flats with several address points on one
-    # outline leaves all but one of them empty even though a building is metres
-    # away -- that is the multi-unit case (T-23), not a gap in the outline layer.
-    missing = addresses[~addresses[ADDRESS_ID_COLUMN].isin(extent[ADDRESS_ID_COLUMN])]
+    ``attached`` carries one row per building per address, so a block of flats
+    appears once for each unit on it. The counts below are taken over distinct
+    outlines where that is what is meant.
+    """
+    dwellings = int(extent[DWELLING_COUNT_COLUMN].sum())
+    properties = collapse_coincident_addresses(addresses)
+
+    print(RULE)
+    print(
+        f"Addresses: {len(addresses):,}, on {len(properties):,} distinct locations. "
+        "Units of one block share a coordinate and become one property carrying a "
+        "dwelling count."
+    )
+    print(
+        f"Properties with insured land: {len(extent):,} of {len(properties):,}, "
+        f"covering {dwellings:,} dwellings"
+    )
+
+    # Where an address carries no land, the distance from its point to the
+    # nearest outline is the whole diagnosis. Inside the sharing tolerance it is
+    # a unit the partition could not separate from another on the same block;
+    # outside it, the point does not stand on a building at all, and it is a
+    # vacant section, a gap in the outline layer or an address point placed off
+    # its dwelling. The three are not distinguishable here and should not be
+    # reported as though they were.
+    missing = properties[~properties[ADDRESS_ID_COLUMN].isin(extent[ADDRESS_ID_COLUMN])]
     if len(missing):
         nearest = missing.geometry.apply(lambda point: buildings.distance(point).min())
-        lost_to_neighbour = int((nearest <= MAX_BUILDING_TO_ADDRESS_M).sum())
-        no_building = len(missing) - lost_to_neighbour
+        unseparated = int((nearest <= MAX_SHARED_BUILDING_TO_ADDRESS_M).sum())
+        off_building = len(missing) - unseparated
         print(
-            f"  {no_building:,} have no building within "
-            f"{MAX_BUILDING_TO_ADDRESS_M:,.0f} m -- a gap in the outline layer"
+            f"  {off_building:,} stand more than "
+            f"{MAX_SHARED_BUILDING_TO_ADDRESS_M:,.0f} m from any outline: a vacant "
+            "section, a gap in the outline layer, or a point placed off its "
+            "dwelling (T-23)"
         )
-        print(
-            f"  {lost_to_neighbour:,} have a building near enough, but it went to a "
-            "closer address: several addresses on one outline (T-23)"
-        )
+        if unseparated:
+            print(f"  {unseparated:,} stand on an outline but took no share of it")
 
-    unattached = len(buildings) - len(attached)
+    outlines = attached[OUTLINE_ID_COLUMN].nunique()
+    per_outline = attached.groupby(OUTLINE_ID_COLUMN)[ADDRESS_ID_COLUMN].nunique()
+    multi = per_outline[per_outline > 1]
+    print(f"Outlines attributed to an address: {outlines:,} of {len(buildings):,}")
     print(
-        f"Buildings attributed to an address: {len(attached):,} of {len(buildings):,}"
+        f"  {len(buildings) - outlines:,} had no address point near enough to attach to"
     )
-    print(f"  {unattached:,} had no address point near enough to attach to")
+    print(
+        f"  {len(multi):,} carry more than one address -- flats and cross-leases "
+        f"-- covering {int(multi.sum()):,} addresses between them (T-23)"
+    )
 
     counts = extent[BUILDING_COUNT_COLUMN]
     print(
@@ -323,6 +350,10 @@ def main(*, pilot, use_cached_extent):
             RATE_COLUMN,
             AREA_COLUMN,
             BUILDING_COUNT_COLUMN,
+            # The dwellings this one row stands for. NHC's sub-caps and excess
+            # are per dwelling, so a block of flats settling as one property
+            # still settles on several.
+            DWELLING_COUNT_COLUMN,
             insured.geometry.name,
         ]
     ]

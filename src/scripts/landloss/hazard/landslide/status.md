@@ -7,178 +7,110 @@ not formally chosen.
 
 ## Approach
 
-The route is not yet formally chosen — see `## Open decisions` — but the
-cheapest of the three has now been built end to end, so that there is something
-concrete to choose against rather than three descriptions. No progress marks
-against the module as a whole until the decision is made; the step that exists
-carries its own marked plan under `steps/`.
+The route is not yet formally chosen — see `## Open decisions
 
-**The starting point.** ESNZ's probabilistic landslide model is in hand: a 32 m
-grid carrying failure probability at discrete shaking levels. Three gaps in it
-matter for this study.
+Everything here is a decision somebody has to make, not a task somebody has to
+do. The tasks and limitations that follow from them live in the register; these
+stay here because they are choices about what the model *means*, and the step
+cannot be signed off while they are open.
 
-- **No spatial correlation factor.** Cell probabilities are independent, so
-  aggregating them across the portfolio misses the clustering that decides how
-  many claims one event produces.
-- **No smaller landslides.** Much of the loss here is expected from small
-  failures on modified slopes; the register carries this as **I-08**.
-- **No runout.** Loss of support and runout are settled differently, so a model
-  without runout cannot answer the policy question.
+### About the supplied grid
 
-**The three routes.** The first keeps the ESNZ model as the primary model; the
-others replace or extend it.
+- **What a cell's probability is a probability of.** The grid gives a number per
+  32 m cell. Either it means *this cell contains a failure somewhere in it*, and
+  the size of that failure is ours to choose; or it means *this whole 1,024 m²
+  cell fails*, and the size is already decided. The model takes the first
+  reading. The second would need a mean source area of about 1,028 m² against
+  the 259 m² now used, would put landslides over 3.9% of the graded area against
+  the order of 1% the literature gives, and would raise the loss about fourfold.
+  Only the supplier can settle it, and nothing else on this list moves the answer
+  as much.
+- **What shaking level the grid is conditioned on.** Read from the file name
+  (`EILProb_PGA2g.tif`) and unconfirmed, as is whether the probabilities are
+  conditional on that shaking or already carry a rate per year. The step runs
+  either way; no result can be written up until this is known.
+- **L-08 against using ESNZ as the primary model.** The ESNZ model is confirmed
+  to be the same GNS slope failure model held in PRUE that **L-08** restricts to
+  cross-comparison only. The team may still adopt it as the primary model, so
+  that register entry needs revisiting if the extend route is chosen.
+- **Build new against extend ESNZ.** Undecided, and the decision the rest of the
+  module waits on. The extend route now exists in runnable form, which changes
+  what the comparison costs but not what it is.
 
-- **Validate or recalibrate the ESNZ model** and keep it as the primary model.
-  The cheapest route: check it against observed failures and the Greater
-  Wellington zonation, and recalibrate the rate where it disagrees, rather than
-  changing its structure. It leaves the three gaps above unclosed, so it only
-  stands if they matter less than the calibration does.
-- **Build a new model and compare it against ESNZ.** Drafted in full in
-  `.agents/plans/estimating-eq-landslide-extent-wellington.md` — explicit source
-  and runout polygons, Newmark displacement, an absolute rate calibrated against
-  Nowicki Jessee (2018), and discrete failures sampled from a Kaikōura v3 size
-  distribution. That plan has not been reviewed or agreed with the project team.
-  ESNZ becomes the cross-comparison rather than an input.
-- **Extend the ESNZ model.** Keep the 32 m probability grid as the base rate and
-  add correlation, small failures and runout on top of it. Cheaper, and starts
-  from a model that has already been through review, but inherits its 32 m
-  resolution and its discrete shaking levels.
+### About the landslides the model draws
 
+- **The footprint is a circle, and it should not be.** A real source area is
+  elongated down the slope; the model places a circle of the right area at the
+  cell centre. Area is right, shape is wrong, and the error shows up wherever the
+  answer depends on how a failure is oriented against a property boundary rather
+  than on how much ground it covers — which is most of the per-property work.
+  The decision is what replaces it: an ellipse oriented downslope is cheap and
+  closes most of the gap; growing the source across the slope facet is the fuller
+  answer and needs the terrain work that phase 4 carries.
+- **The size-frequency distribution is calibrated to area, not fitted to an
+  inventory.** This is a separate thing from the footprint. The exponent controls
+  how many small failures there are against large ones, and it has been solved
+  backwards to make the total area match the literature, giving 1.19 — far
+  shallower than the 2.1 to 2.5 that published inventories report. Those fits
+  hold only above about 500 m² and real inventories roll over below that, so one
+  power law stretched from 3 m² cannot carry both a published slope and the right
+  total area. The decision is whether to accept a distribution that gets the area
+  right and the proportions wrong, or to move to two populations — small
+  modified-slope failures and natural-slope landslides fitted separately.
+- **The 3,000 m² upper bound is now a calibration parameter.** With a shallow
+  exponent most of the area sits in the largest failures, so the cap decides the
+  answer: holding the exponent, a 1,000 m² cap gives 0.44% areal coverage, 3,000
+  gives 0.98% and 10,000 gives 2.42%. Both bounds were given as a range to model
+  rather than derived from anything. The decision is what the largest credible
+  single failure in Wellington actually is.
+- **Failures are sampled independently, so the model has no clustering.** Real
+  failures share a hillside, a geology and a shaking level. Independent sampling
+  gets the average right and the spread wrong — too few very bad events and too
+  few very quiet ones — and the portfolio question NHC is asking is a question
+  about the spread. The decision is how much correlation structure to buy, given
+  the grid supplies none.
 
-## Beta build
+### About what happens after a failure
 
-A first end-to-end run is being assembled that produces the right data
-structures rather than the right numbers; see
-`.agents/plans/beta-build.md` for the whole chain.
+- **Runout is a rigid translation, so debris neither spreads nor follows a
+  gully.** The displaced polygon is the source circle moved downhill, keeping its
+  area and shape. The decision is whether the loss model needs debris that
+  widens, thins and routes down the steepest path, or whether a translated
+  footprint is close enough for a settlement question.
+- **Displacement depends on slope alone, not on the size of the failure.** A
+  3 m² slip and a 3,000 m² one on the same hillside travel the same distance,
+  which no inventory supports. The decision is whether to make it a function of
+  volume as well, which arrives with the Newmark work in phase 3.
+- **Inundated polygons may overlap one another; evacuated ones may not.** The
+  beta contract says polygons of the same type may not overlap, and runout does
+  not meet it — two failures either side of a gully both land in its floor.
+  Dissolving them would discard the `landslide_id` that depth hangs off, so the
+  decision is whether depth at doubly-buried ground is the deeper of the two or
+  the sum. It has to be settled before the per-property intersect is written.
 
-Landslide is the module the beta needs least from: `steps/s1_landslide_realisation/`
-already emits the structure the chain expects — **polygons of evacuated ground
-and polygons of inundated ground**, one set per realisation. The two types may
-overlap each other.
+### About how the model is exercised
 
-One caveat on the structure, because the chain downstream would double count
-without it. `drop_overlapping()` enforces non-overlap among the **evacuated**
-polygons only. The inundated polygons are those same circles translated
-different distances in different directions, so two of them can and do land on
-top of one another — most obviously where two failures on opposite sides of a
-gully both run into its floor. Ground buried by two landslides is buried once,
-so anything summing inundated area has to dissolve first. The run output prints
-both the summed and the dissolved area for each type, so the gap is visible
-every run.
-
-This is a **conflict with the stated beta contract**, which says polygons of the
-same type may not overlap. Evacuated ground meets it; inundated ground does not.
-It has to be settled before the intersect downstream is written, and the depth
-attribute makes it sharper: where two landslides bury the same ground, it is not
-obvious whether the depth there is the deeper of the two or the sum.
-
-Each polygon also still needs a **depth**, approximated from the **total
-evacuated area of the landslide it belongs to** — a bigger failure is a deeper
-one. Depth belongs to the landslide rather than to the piece of it inside any
-one claim, so it is attached here and carried through the intersect. Dissolving
-the inundated polygons to satisfy the contract would discard the
-`landslide_id` that depth hangs off, which is why the two questions are one
-question.
-
-The step now draws one realisation per id in `config.REALISATION_IDS`, seeded
-from the project-wide `BASE_SEED` through
-`landloss.hazard.realisation.realisation_seed`, and writes
-`landslide-realisation-rNNN[-pilot].geoparquet` with `realisation_id` on every
-polygon. A landslide layer and a liquefaction layer carrying the same
-`realisation_id` are the same modelled earthquake, so a property's causes can be
-summed.
-
-## Where it is now
-
-`steps/s1_landslide_realisation/` holds a runnable first cut of the extend-ESNZ
-route. It reads the supplied 32 m probability grid, samples every cell
-independently, gives each failure a size from a bounded power law and a circular
-footprint, drops the smaller of any overlapping pair, and moves each one downhill
-by a distance that grows with the slope — emitting the source polygon as
-`evacuated land` and the displaced polygon as `inundated land`. The slope and
-downhill direction it uses are in `landloss.common.utils.terrain`, and the reader
-for the grid is `landloss.io.source_material`; both are library code with tests,
-because they will outlive whatever the model turns into. Its method and its
-phased plan are in the step folder.
-
-It has now been run against the real grid over both the pilot box and the full
-study area. The full run produces **66,126 landslides over 106 ha of evacuated
-ground**, at a median slope of 28°, with a median runout of 21 m. The pattern is
-right — the hills either side of the Hutt Valley and around Porirua are dense
-and the valley floors are clear — and the figure under
-`report/hazard/landslide/landslide-realisation/fig/` is how that was checked.
-
-Two numbers from that run need settling before any of it is quoted. The grid's
-probabilities sum to 66,644 failing **cells**, which at 32 m is 6,824 ha if a
-failing cell means the cell went; the sampled sizes make it 106 ha, 1.6% of
-that. Which of the two the grid means is a question for the supplier, and the
-answer moves the loss by a factor of sixty. And the pilot box is flat suburb, so
-it exercises the code rather than the model — judge the step on the full extent.
-
-Two of the three gaps are closed only nominally. There are small failures now,
-but their size distribution is fitted to nothing; there is runout, but it is a
-rigid translation along one bearing. Spatial correlation is not addressed at all.
-
-The folder also holds `validations/fig_landslide_vulnerability_model_gwrc.py`,
-which draws the Greater Wellington zonation the result gets checked against.
-
-## Next
-
-1. Choose between building a new model and extending ESNZ, reviewing the
-   drafted plan with the project team as part of that. The first cut is intended
-   to inform that decision, not to pre-empt it.
-2. Confirm with the supplier what shaking level the grid is conditioned on, and
-   whether its probabilities are conditional on that shaking or already carry a
-   rate. Nothing in the code depends on the answer, and nothing can be written up
-   without it.
-3. Fit the size distribution to an inventory, and replace the displacement ramp
-   with a Newmark displacement. Both are placeholders and both move the answer.
-4. Add spatial correlation, which is the largest remaining error and the one that
-   most affects the shape of the loss distribution rather than its average.
-5. Intersect the result with insured land per claim, keeping loss of support and
-   runout separate because `vul` needs them per cause.
-
-The phased build for the new-model route is in
-`.agents/plans/estimating-eq-landslide-extent-wellington.md`, not here.
-
-## Validation
-
-- Failure probability and total areal coverage against the ESNZ 32 m grid at
-  matching shaking levels. This is the comparison the build-new route exists to
-  support, and on the extend route it is the check that the base rate survived
-  the extensions.
-- Simulated landslide density against the GWRC `SEVERITY` 1–5 zonation, as a
-  rank correlation rather than an absolute one — the layer is a susceptibility
-  zonation, not a rate. A script under `validations/`.
-- Total areal coverage against the Nowicki Jessee (2018) estimate for the same
-  shaking.
-- Simulated size distribution and reach angles against the Kaikōura inventory.
-- Proportion of landslides confined to a single property. Local expectation in
-  `.agents/context/land-damage-mechanisms.md` is that most are, with
-  multi-property failures concentrated in gullies; if the model does not
-  reproduce that it is wrong regardless of how well it matches the literature.
-
-## Open decisions
-
-- **Build new against extend ESNZ.** Undecided, and the decision the rest of
-  the module waits on. The extend route now exists in runnable form, which
-  changes what the comparison costs but not what it is.
-- **What the supplied grid is conditioned on.** The shaking level is read from
-  the file name (`EILProb_PGA2g.tif`) and has not been confirmed, and neither has
-  whether the probabilities are conditional on that shaking or already include a
-  rate. Both have to come from the supplier.
-- **L-08 against using ESNZ as the primary model.** The ESNZ model is
-  confirmed to be the same GNS slope failure model held in PRUE that **L-08**
-  restricts to cross-comparison only. The team may still adopt it as the primary
-  model, so the register entry needs revisiting if the extend route is chosen.
+- **The pilot box is flat suburb and does not test the model.** Over it the
+  failures have a median slope of 3°; over the full study area the median is 28°.
+  The pilot exercises the code and nothing else, so the step should be judged on
+  the full extent. The decision is whether to keep the current pilot for speed or
+  move it onto hill country where it would also be a check on the model.
 - **T-22** — explicit extent against per-property classification. The drafted
-  plan takes the explicit route, and the decision closes when the plan is
-  agreed.
+  plan takes the explicit route, and the decision closes when the plan is agreed.
 - **T-15** — the site class. Carried as a parameter rather than blocking on it.
 - **T-11**, **T-19**, **T-20** — retaining wall and cut-and-fill data. The
-  Kaikōura inventory is natural slopes, and the losses here are expected on
+  Kaikōura inventory is natural slopes and the losses here are expected on
   modified ones, so a second population conditioned on this data is the plan's
   own largest technical risk.
 
 Step-level detail lives in each step's implementation plan and method file under
 `steps/`.
+
+
+could this report help: Hancox G T, Dellow G D and Perrin N D (1994).
+Earthquake induced slope failure hazard study,
+Wellington Region: Review of historical records of
+earthquake induced slope failures. Institute of
+Geological and Nuclear Sciences Limited Contract
+Report prepared for Works Consultancy Services
+Limited for Wellington Regional Council.

@@ -42,13 +42,31 @@
   `s1_simulate_landslides.py` and again in the run output.
 - **Size** is drawn from a bounded power law between `MIN_SOURCE_AREA_M2` (3 m²)
   and `MAX_SOURCE_AREA_M2` (3000 m²), with exponent `SIZE_EXPONENT`, by inverting
-  the cumulative distribution in `sample_areas()`. The exponent is 2.1, the
-  shallowest published value for comparable rock — Massey et al. (2020) fit it to
-  the largely greywacke Kaikōura source polygons — chosen because a shallower
-  exponent puts more mass on the large failures that drive the loss. At these
-  limits it gives a median near 6 m², a mean near 17 m², and about one failure in
-  850 over 1000 m². It is fitted to nothing in this study, and it is applied from
-  3 m² upwards although Massey's fit holds only above about 500 m².
+  the cumulative distribution in `sample_areas()`. The exponent is **1.19, and it
+  is calibrated to total area rather than fitted to a size inventory.** The
+  supplied grid fixes how many failures there are and says nothing about how
+  large they are, so the exponent is the only free parameter controlling total
+  landslide area, and it is solved backwards from the areal-coverage cross-check:
+  1.19 gives a mean source area of 259 m², a median of 33 m², and 0.98% areal
+  coverage over the graded area, against the order of 1% that Nowicki Jessee et
+  al. (2018) give for strong shaking in steep terrain.
+- That exponent is far shallower than any published size fit — Massey et al.
+  (2020) give 2.1 for the Kaikōura greywacke source polygons and Malamud et al.
+  (2004) 2.3 to 2.5 generally — and the reason is stated in the constant's own
+  comment. Those fits hold above a cutoff near 500 m², real inventories roll over
+  below it, and a single power law stretched two decades below the cutoff cannot
+  carry both a published slope and the right total area. **This step currently
+  buys the right total area at the price of the right shape.** A size
+  distribution quoted from it has to say so; a total area quoted from it is
+  calibrated and defensible.
+- **The calibration now leans on the 3000 m² upper bound.** A shallow exponent
+  puts most of the area in the largest failures, so the cap is doing real work
+  rather than just trimming a tail: holding the exponent at 1.19 and moving the
+  cap to 1,000 m² gives 0.44% coverage, 5,000 m² gives 1.44% and 10,000 m² gives
+  2.42%. The 3 m² floor barely matters any more; the cap decides the answer. Both
+  bounds were given as the range to model rather than derived, so the cap is now
+  as much a calibration parameter as the exponent, and phase 2 has to fit the two
+  together.
 - **Shape** is a circle centred on the cell, built by `circles()`. The radius
   comes from `circle_radius()`, which corrects for the fact that a buffer is a
   64-sided polygon rather than a true circle, so the polygon carries exactly the
@@ -66,14 +84,14 @@
   evacuated polygons overlap, inundated polygons may overlap each other, and
   evacuated and inundated polygons may overlap. Two landslides cannot start from
   the same ground; they can perfectly well finish on it.
-- In practice this step rarely fires, and it is worth knowing why. Cell centres
-  are a cell apart — 32 m on the supplied grid — so two circles can only meet if
-  their radii sum to more than that, and a median 6 m² failure has a radius of
-  1.4 m. Only failures of several hundred square metres and up can reach a
-  neighbour at all; a 3000 m² one has a radius of 31 m and reaches several. The
-  step therefore constrains the top of the size distribution and leaves the rest
-  of it alone, which is the right behaviour but is not the one the count in the
-  run output suggests at first reading.
+- Overlap removal now bites, where at the earlier exponent it almost never did.
+  Cell centres are a cell apart — 32 m on the supplied grid — so two circles meet
+  only if their radii sum to more than that, and at a median 33 m² failure
+  (radius 3.2 m) most still do not. The top of the distribution does: over the
+  full study area 586 failures of 66,431, just under 1%, are dropped for
+  overlapping a larger one. The step therefore trims the top of the size
+  distribution slightly, which is part of why the delivered rate is 0.99 times
+  the grid's rather than exactly 1.00.
 - **Slope and downhill direction** come from `landloss.common.utils.terrain`:
   `slope_degrees()` and `downhill_azimuth_degrees()`, both Horn's 3×3 kernel on
   the same gradient, so the steepness and the bearing describe the same

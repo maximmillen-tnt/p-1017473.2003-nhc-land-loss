@@ -1,8 +1,9 @@
 # Landslide vulnerability, land: status
 
-**Status:** Not started. Approach drafted, not agreed with the project team.
+**Status:** Damaged area and depth per property now run end to end. Nothing is
+priced: the repair schedule is not in the repository.
 
-**Updated:** 2026-09-18
+**Updated:** 2026-09-22
 
 ## Approach
 
@@ -10,13 +11,13 @@ Marks: `[x]` done, `[~]` partly done, `[>]` next, `[ ]` planned.
 
 Intended, not implemented.
 
-- [ ] Read the hazard module's source and runout polygons **separately** and produce
+- [x] Read the hazard module's source and runout polygons **separately** and produce
   an outcome per cause, because loss of support and runout are settled
   differently.
-- [ ] Work per claim against the **insured land polygon**, the 8 m line from the
-  dwelling, since that is the extent NHC settles on. `claim_id` currently
-  carries the same value as `address_id` and is held as its own column so the
-  two can decouple later.
+- [x] Work per property against the **insured land polygon**, the 8 m line from the
+  dwelling, since that is the extent NHC settles on. The chain runs on
+  `address_id` throughout; the claim key is minted at the loss boundary, which
+  is one function in one place when the two decouple.
 - [>] Cost the repair from the T+T landslip remediation schedule prepared for EQC
   (`EQCcostestimatesRev10.xlsx`, Rev10, 4 December 2023) rather than from a
   damage ratio alone. The schedule is held in `vul` rather than `loss` so that
@@ -51,10 +52,20 @@ landslides is charged twice. See `.agents/plans/beta-build.md`.
 
 ## Where it is now
 
-Nothing is implemented. This file is the only thing in the folder. The rate
-schedule has not been brought into the repository; it is still a workbook held
-outside it, alongside the Toka Tū Ake EQC Costing Tool v10.42 that applies a
-different set of square-metre rates to the same work.
+- `steps/s3_landslide_land_damage/` intersects the realisation's evacuated and
+  inundated polygons with the insured land and writes the area and depth of each
+  kind of damaged ground per property. Inundated pieces are unioned rather than
+  summed, so ground two landslides both reached is counted once, and the run
+  checks that neither kind exceeds the property's own insured area.
+- Over the Wellington pilot 37 properties of 4,764 are reached. That number is
+  not to be quoted: the hazard realisation currently produces about two orders
+  of magnitude less damaged ground than the ESNZ grid's own expectation, because
+  the size power law is sampled far below the scale it was fitted at. The shape
+  of the output is right and the quantity is not.
+- Nothing is priced. The rate schedule has not been brought into the repository;
+  it is still a workbook held outside it, alongside the Toka Tū Ake EQC Costing
+  Tool v10.42 that applies a different set of square-metre rates to the same
+  work.
 
 ## Next
 
@@ -65,8 +76,8 @@ different set of square-metre rates to the same work.
    the companion costing tool, which do not agree with it.
 3. Hold escalation from the December 2023 base and a regional factor off the
    Auckland base as named constants.
-4. Build the quantity take-off per claim, once the hazard module emits source
-   and runout polygons.
+4. Refit the landslide size distribution in the hazard module, which everything
+   this module reports scales directly with.
 5. Add the scheme feasibility table and the cheapest-feasible selection.
 6. Add the repair-against-value settlement test, reading the land value rate
    from the exposure module.
@@ -85,9 +96,8 @@ different set of square-metre rates to the same work.
 - **L-15** — land whose settlement is driven by cost of repair rather than land
   value does not fit the value-based cost model. The repair costing above is
   what closes it; it is not closed yet.
-- **L-11** — the claim-level identifier. `claim_id` is held apart from
-  `address_id` in anticipation of decoupling, but currently carries the same
-  value.
+- **L-11** — the claim-level identifier. The chain runs on `address_id`; the
+  claim key is minted at the loss boundary when the two decouple.
 - **T-17**, **T-18** — NHC land damage claim costs, needed to validate modelled
   repair costs against settled ones.
 - Holding the cost model in `vul` departs from the module split in

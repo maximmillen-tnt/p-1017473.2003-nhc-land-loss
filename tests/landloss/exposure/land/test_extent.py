@@ -9,9 +9,12 @@ from landloss.exposure.land.extent import (
     ADDRESS_ID_COLUMN,
     AREA_COLUMN,
     BUILDING_COUNT_COLUMN,
+    DWELLING_COUNT_COLUMN,
     INSURED_LAND_BUFFER_M,
+    OUTLINE_ID_COLUMN,
     attach_buildings_to_addresses,
     build_insured_land_extent,
+    collapse_coincident_addresses,
 )
 
 # Two 10 m square buildings with a 10 m gap between them, so the 8 m buffers
@@ -184,3 +187,95 @@ def test_missing_address_id_is_refused():
 
     with pytest.raises(ValueError, match="address_id"):
         build_insured_land_extent(addresses, buildings)
+
+
+def test_a_flat_on_the_same_outline_gets_its_share_of_the_ground():
+    # The nearest-address pass gives the outline to one point and leaves the
+    # other with nothing, which over the Wellington pilot lost 3,827 addresses
+    # of 8,591. Both points stand on the building, so both are units in it.
+    addresses = make_addresses([("front", 2, 5), ("back", 8, 5)])
+    buildings = make_buildings([BUILDING_A])
+
+    extent = build_insured_land_extent(addresses, buildings)
+
+    assert sorted(extent[ADDRESS_ID_COLUMN]) == ["back", "front"]
+    # The two shares are the whole buffer and nothing more: shared ground, not
+    # ground invented for the second unit.
+    alone = build_insured_land_extent(
+        make_addresses([("front", 2, 5)]), make_buildings([BUILDING_A])
+    )
+    assert extent[AREA_COLUMN].sum() == pytest.approx(
+        alone[AREA_COLUMN].sum(), abs=TOLERANCE_M2
+    )
+    assert extent.geometry.union_all().area == pytest.approx(
+        extent[AREA_COLUMN].sum(), abs=TOLERANCE_M2
+    )
+
+
+def test_the_shares_of_one_outline_do_not_overlap():
+    addresses = make_addresses([("front", 2, 5), ("back", 8, 5)])
+    buildings = make_buildings([BUILDING_A])
+
+    extent = build_insured_land_extent(addresses, buildings)
+
+    first, second = extent.geometry.to_numpy()
+    assert first.intersection(second).area == pytest.approx(0.0, abs=1e-6)
+
+
+def test_a_vacant_section_beside_a_house_is_not_given_the_house_ground():
+    # The point of the tight sharing tolerance. This address is well clear of
+    # the outline, so it is a section rather than a unit, and attaching it would
+    # hand it insured land it does not have.
+    addresses = make_addresses([("house", 5, 5), ("vacant", 15, 5)])
+    buildings = make_buildings([BUILDING_A])
+
+    extent = build_insured_land_extent(addresses, buildings)
+
+    assert list(extent[ADDRESS_ID_COLUMN]) == ["house"]
+
+
+def test_addresses_at_one_point_become_one_property_with_a_dwelling_count():
+    addresses = make_addresses([("unit_2", 5, 5), ("unit_1", 5, 5), ("far", 5, 5.5)])
+
+    collapsed = collapse_coincident_addresses(addresses)
+
+    # The lowest identifier represents the location, so which unit stands for a
+    # block does not depend on the order they arrived in.
+    assert sorted(collapsed[ADDRESS_ID_COLUMN]) == ["far", "unit_1"]
+    counts = dict(
+        zip(collapsed[ADDRESS_ID_COLUMN], collapsed[DWELLING_COUNT_COLUMN], strict=True)
+    )
+    assert counts == {"unit_1": 2, "far": 1}
+
+
+def test_a_house_carries_one_dwelling():
+    extent = build_insured_land_extent(
+        make_addresses([("a", 5, 5)]), make_buildings([BUILDING_A])
+    )
+    assert list(extent[DWELLING_COUNT_COLUMN]) == [1]
+
+
+def test_stacked_units_settle_as_one_property_carrying_both_dwellings():
+    # Two addresses on the same coordinate cannot be separated by any geometry,
+    # so they become one property. Left alone the second would hold nothing at
+    # all, and its dwelling would vanish from the per-dwelling sub-caps.
+    addresses = make_addresses([("unit_1", 5, 5), ("unit_2", 5, 5)])
+    buildings = make_buildings([BUILDING_A])
+
+    extent = build_insured_land_extent(addresses, buildings)
+
+    assert list(extent[ADDRESS_ID_COLUMN]) == ["unit_1"]
+    assert list(extent[DWELLING_COUNT_COLUMN]) == [2]
+
+
+def test_the_linz_building_id_is_not_overwritten():
+    # The LINZ outlines layer carries a building_id of its own, and several
+    # outlines can belong to one building, so the row identity this module needs
+    # has to be its own column.
+    addresses = make_addresses([("a", 5, 5)])
+    buildings = make_buildings([BUILDING_A])
+
+    attached = attach_buildings_to_addresses(buildings, addresses)
+
+    assert OUTLINE_ID_COLUMN in attached.columns
+    assert list(attached["building_id"]) == list(buildings["building_id"])
