@@ -240,8 +240,9 @@ def describe_effect_on_extent(crossing_ids, parts):
         "split, the second property carrying no dwelling and so no claim"
     )
     print(
-        f"  {len(split - crossing_ids):,} were split although they do not cross "
-        "by that measure, which should be none"
+        f"  {len(split - crossing_ids):,} were split although they overhang "
+        "nothing -- they stand inside two claim properties that overlap each "
+        "other, which the extent's exact-duplicate dissolve does not catch"
     )
 
 
@@ -264,21 +265,26 @@ def main(*, pilot):
     print(RULE)
     print(f"Property boundaries over the extent: {len(boundaries):,}")
 
-    coverage = best_property_coverage(buildings, boundaries)
+    # Measured against the claim properties rather than the raw boundaries, so
+    # this and the extent look at the same thing: a road parcel is a boundary
+    # but never a claim, and a building against the road reserve would otherwise
+    # appear to straddle something.
+    properties = build_claim_properties(boundaries)
+    print(f"Claim properties: {len(properties):,}")
+
+    coverage = best_property_coverage(buildings, properties)
     describe_coverage(coverage, buildings)
     crossing_ids = describe_crossings(coverage)
-    describe_crossing_titles(crossing_ids, buildings, boundaries)
+    describe_crossing_titles(crossing_ids, buildings, properties)
 
-    parts = assign_buildings_to_properties(
-        buildings, build_claim_properties(boundaries)
-    )
+    parts = assign_buildings_to_properties(buildings, properties)
     describe_effect_on_extent(crossing_ids, parts)
 
     print(RULE)
     print(
         "A building on two titles is a real thing and LINZ captures it "
-        "faithfully. What is wrong is the insured land extent assuming an "
-        "outline belongs to one property."
+        "faithfully. The insured land extent splits one, so the two counts above "
+        "are the same population seen from either side."
     )
 
 

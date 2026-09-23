@@ -295,6 +295,16 @@ A rebuild therefore reproduces the *scheme* faithfully and the *map*
 approximately. It would not reproduce the 1995 polygons and should not be
 presented as doing so.
 
+## Where this now lives
+
+Option 3 below was taken and built. The scheme is
+`landloss.hazard.landslide.susceptibility`, and the step that runs it is
+`src/scripts/landloss/hazard/landslide/steps/s2_slope_failure_susceptibility/`.
+That step's own method file describes what is implemented and its implementation
+plan carries the phases still open, including the first comparison against the
+published layer. This document stays as the method extraction and the record of
+why the rebuild was done at all; it is not updated as the code changes.
+
 ## Scope decisions, 23 September 2026
 
 Three calls taken after the first pass, which between them cut the outstanding

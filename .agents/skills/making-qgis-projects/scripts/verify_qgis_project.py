@@ -63,7 +63,7 @@ def describe(layer) -> str:
     return " | ".join(b for b in bits if b)
 
 
-def render(  # noqa: PLR0913
+def render(
     project, layer, extent, out_dir: Path, idx: int, *, size=(1600, 1100)
 ) -> Path:
     """Draw one layer to a PNG, which is the only way to catch a blank map.

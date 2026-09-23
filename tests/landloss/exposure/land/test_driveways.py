@@ -22,7 +22,7 @@ def road(y=0.0):
 def house(x=0.0, y=50.0, size=10.0, address="A-001"):
     """A square building outline, its south face `y` north of the origin."""
     return gpd.GeoDataFrame(
-        {"address_id": [address]},
+        {"claim_id": [address]},
         geometry=[box(x, y, x + size, y + size)],
         crs=CRS,
     )
@@ -87,17 +87,17 @@ def test_a_building_too_far_from_any_road_reaches_none():
 
 def test_the_driveway_carries_its_property():
     driveways = generate_driveways(house(address="A-042"), road())
-    assert driveways["address_id"].tolist() == ["A-042"]
+    assert driveways["claim_id"].tolist() == ["A-042"]
 
 
 def test_no_buildings_gives_no_driveways():
-    empty = gpd.GeoDataFrame({"address_id": []}, geometry=[], crs=CRS)
+    empty = gpd.GeoDataFrame({"claim_id": []}, geometry=[], crs=CRS)
     assert generate_driveways(empty, road()).empty
 
 
 def test_buildings_without_an_identifier_are_refused():
-    with pytest.raises(ValueError, match="address_id"):
-        generate_driveways(house().drop(columns=["address_id"]), road())
+    with pytest.raises(ValueError, match="claim_id"):
+        generate_driveways(house().drop(columns=["claim_id"]), road())
 
 
 # --- merging into the extent -------------------------------------------------
@@ -105,7 +105,7 @@ def test_buildings_without_an_identifier_are_refused():
 
 def test_merging_a_driveway_grows_the_insured_land():
     extent = gpd.GeoDataFrame(
-        {"address_id": ["A-001"], "area_m2": [100.0]},
+        {"claim_id": ["A-001"], "area_m2": [100.0]},
         geometry=[box(0, 50, 10, 60)],
         crs=CRS,
     )
@@ -116,7 +116,7 @@ def test_merging_a_driveway_grows_the_insured_land():
 
 def test_a_property_with_no_driveway_is_unchanged():
     extent = gpd.GeoDataFrame(
-        {"address_id": ["A-999"], "area_m2": [100.0]},
+        {"claim_id": ["A-999"], "area_m2": [100.0]},
         geometry=[box(0, 50, 10, 60)],
         crs=CRS,
     )
@@ -127,10 +127,10 @@ def test_a_property_with_no_driveway_is_unchanged():
 
 def test_merging_nothing_returns_the_extent_untouched():
     extent = gpd.GeoDataFrame(
-        {"address_id": ["A-001"]}, geometry=[Point(0, 0).buffer(5)], crs=CRS
+        {"claim_id": ["A-001"]}, geometry=[Point(0, 0).buffer(5)], crs=CRS
     )
     empty = gpd.GeoDataFrame(
-        {"address_id": [], "driveway_length_m": []},
+        {"claim_id": [], "driveway_length_m": []},
         geometry=gpd.GeoSeries([], crs=CRS),
         crs=CRS,
     )

@@ -25,7 +25,7 @@ def rng():
 def properties(n=400, slope=20.0, azimuth=90.0, area=400.0):
     return gpd.GeoDataFrame(
         {
-            "address_id": [f"A-{i:04d}" for i in range(n)],
+            "claim_id": [f"A-{i:04d}" for i in range(n)],
             "slope_deg": np.full(n, slope),
             "downhill_azimuth_deg": np.full(n, azimuth),
             "area_m2": np.full(n, area),
@@ -109,7 +109,7 @@ def test_the_share_of_properties_with_a_wall_tracks_the_prevalence():
     addresses = properties(n=4000, slope=20.0)
     walls = beta_wall_population(addresses, rng())
     expected = beta_wall_prevalence(20.0)
-    assert walls["address_id"].nunique() == len(walls)
+    assert walls["claim_id"].nunique() == len(walls)
     assert abs(len(walls) / len(addresses) - expected) < 0.03
 
 
@@ -125,7 +125,7 @@ def test_a_property_with_no_slope_sampled_draws_nothing():
 
 def test_the_population_carries_the_columns_the_chain_reads():
     walls = beta_wall_population(properties(), rng())
-    for column in ("address_id", "size_class", "initial_condition", "height_m"):
+    for column in ("claim_id", "size_class", "initial_condition", "height_m"):
         assert column in walls.columns
     assert walls.geometry.geom_type.eq("LineString").all()
     assert walls.crs == "EPSG:2193"
@@ -134,7 +134,7 @@ def test_the_population_carries_the_columns_the_chain_reads():
 def test_the_same_realisation_draws_the_same_population():
     first = beta_wall_population(properties(), rng())
     second = beta_wall_population(properties(), rng())
-    assert first["address_id"].tolist() == second["address_id"].tolist()
+    assert first["claim_id"].tolist() == second["claim_id"].tolist()
     assert first["initial_condition"].tolist() == second["initial_condition"].tolist()
 
 

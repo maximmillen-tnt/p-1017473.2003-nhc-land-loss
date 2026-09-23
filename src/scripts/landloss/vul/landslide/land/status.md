@@ -3,7 +3,7 @@
 **Status:** Damaged area and depth per property now run end to end. Nothing is
 priced: the repair schedule is not in the repository.
 
-**Updated:** 2026-09-22
+**Updated:** 2026-09-23
 
 ## Approach
 
@@ -49,6 +49,21 @@ its parent landslide. Those areas are what the repair cost is computed from.
 Inundated polygons can overlap one another today, so this intersect has to
 dissolve or otherwise resolve them before summing area, or a property under two
 landslides is charged twice. See `.agents/plans/beta-build.md`.
+
+## Loss contract
+
+What this module owes the land table `loss` reads, as set in
+`.agents/plans/asset-pricing-approach.md` section 1.
+
+Marks: `[x]` done, `[~]` partly done, `[>]` next, `[ ]` planned.
+
+- [x] Supply `inundated_insured_area` and `inundated_mean_depth`, written as
+  `inundated_area_m2` (unioned) and `inundated_depth_m` (area-weighted).
+- [x] Supply `evacuated_area`, written as `evacuated_area_m2`.
+- [ ] Supply `land_slide_total_insured_land_area`, the union of evacuated and
+  inundated ground in the polygon. Only the two are written; whether `vul` or
+  `loss` takes the union is **Q-06**.
+- [~] Carry `claim_id` and coordinates. `claim_id` rides; coordinates do not.
 
 ## Where it is now
 

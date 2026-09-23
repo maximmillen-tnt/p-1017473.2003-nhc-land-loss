@@ -311,7 +311,7 @@ def _raster_renderer(layer: dict[str, Any]) -> str:
       </rasterrenderer>"""
 
 
-def _symbol_xml(  # noqa: PLR0913
+def _symbol_xml(
     name: str,
     geometry: str,
     *,

@@ -64,7 +64,7 @@ def gen_scalebar(font_size: float | None = None) -> ScaleBar:
     )
 
 
-def style_basemap_ax(  # noqa: PLR0913
+def style_basemap_ax(
     ax: Axes,
     extent: gpd.GeoDataFrame,
     *,

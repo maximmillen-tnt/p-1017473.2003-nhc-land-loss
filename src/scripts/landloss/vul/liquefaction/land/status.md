@@ -3,7 +3,7 @@
 **Status:** Canterbury observed damage database built, and the cost rates now
 price a Wellington realisation end to end.
 
-**Updated:** 2026-09-22
+**Updated:** 2026-09-23
 
 ## Approach
 
@@ -26,6 +26,17 @@ price a Wellington realisation end to end.
 - Keep to **flat land**. The Canterbury evidence is flat land liquefaction
   damage, the observed damage database is masked to flat land, and the packaged
   costs carry the same restriction.
+
+## Loss contract
+
+What this module owes the land table `loss` reads, as set in
+`.agents/plans/asset-pricing-approach.md` section 1.
+
+Marks: `[x]` done, `[~]` partly done, `[>]` next, `[ ]` planned.
+
+- [x] Supply `Liq_LD_state` per insured land polygon, written as `ld_state`. A
+  property off the liquefaction grid carries none.
+- [~] Carry `claim_id` and coordinates. `claim_id` rides; coordinates do not.
 
 ## Where it is now
 

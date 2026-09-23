@@ -58,6 +58,33 @@ Three scope decisions made on 23 September 2026 shape what is built:
 - [ ] Decide, from that figure, whether the arithmetic alone is close enough to
       be useful, or whether Phase 4 is needed.
 
+The first run over the pilot, for the decision above:
+
+| Zone | Rebuilt | Published |
+| --- | --- | --- |
+| 1 Very low | 0.0% | 58.5% |
+| 2 Low | 84.2% | 35.0% |
+| 3 Moderate | 15.8% | 5.4% |
+| 4 High | 0.0% | 1.0% |
+| 5 Very high | 0.0% | 0.1% |
+
+Three readings of that, and they pull in different directions:
+
+- **The bottom two zones agree once the offset is allowed for.** The constants
+  put every cell at 30 points, above the 20 point band, so zone 1 is unreachable
+  by construction. Rebuilt zone 2 at 84.2% against published zones 1 and 2
+  together at 93.5% is a reasonable match on ground that is genuinely gentle.
+- **The middle is more severe than the source**, 15.8% against 5.4%.
+- **The top is missing**, 0.0% against 1.1%. This is the generalisation rules
+  and the absent landslide inventory, as expected. At 10 m only 0.2% of cells
+  exceed 45 degrees, where the 1995 map expanded every such facet to the whole
+  slope it sat on.
+
+So the shape of the disagreement is understood, and the open question is whether
+the top of the scale matters enough to be worth Phase 4. For a loss model
+reading susceptibility on insured land it probably does, because the high and
+very high zones are where the claims are.
+
 ## Phase 4 — The 1995 generalisation rules
 
 Not started. The published map is generalised polygons, not a scored grid, and

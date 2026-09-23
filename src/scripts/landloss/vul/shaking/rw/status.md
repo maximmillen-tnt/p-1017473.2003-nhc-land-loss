@@ -2,7 +2,7 @@
 
 **Status:** A damage state is drawn on every wall. The fragility is a flat 70%.
 
-**Updated:** 2026-09-22
+**Updated:** 2026-09-23
 
 ## Approach
 
@@ -22,6 +22,20 @@
 - Emit **states, not costs**. A written-off wall is priced from its
   undepreciated value in the loss module, against the $50,000-per-dwelling
   sub-cap.
+
+## Loss contract
+
+What this module owes the retaining wall table `loss` reads, as set in
+`.agents/plans/asset-pricing-approach.md` section 1.
+
+Marks: `[x]` done, `[~]` partly done, `[>]` next, `[ ]` planned.
+
+- [ ] Carry `rw_id` through from the exposure module.
+- [x] Carry `claim_id`, `rw_size` (`size_class`) and `rw_length` (`length_m`).
+- [~] Supply `is_damaged_by_shaking`, from `damage_state`. Drawn on a flat 70%.
+- [ ] Carry coordinates. The wall line is dropped when the state is written.
+- [ ] Supply `is_evacuated` and `is_inundated`. Nothing intersects walls with
+  the landslide polygons yet (plan section 4.4).
 
 ## Where it is now
 

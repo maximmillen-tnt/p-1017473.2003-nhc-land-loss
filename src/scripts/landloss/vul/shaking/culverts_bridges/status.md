@@ -3,7 +3,7 @@
 **Status:** A damage state is drawn on every structure, but the pilot holds
 none, so nothing has run against real rows.
 
-**Updated:** 2026-09-22
+**Updated:** 2026-09-23
 
 ## Approach
 
@@ -17,6 +17,23 @@ none, so nothing has run against real rows.
   them apart even while the fragility does not.
 - Emit **states, not costs**. A written-off crossing is priced from its
   undepreciated value in the loss module.
+
+## Loss contract
+
+What this module owes the culvert and bridge tables `loss` reads, as set in
+`.agents/plans/asset-pricing-approach.md` section 1.
+
+Marks: `[x]` done, `[~]` partly done, `[>]` next, `[ ]` planned.
+
+- [ ] Carry `culvert_id` and `bridge_id` through from the exposure module.
+- [ ] Write culverts and bridges as two tables. They share one today, told
+  apart by `asset`.
+- [~] Supply `is_damaged` for culverts and `is_damaged_by_shaking` for bridges,
+  from `damage_state`. Drawn on a flat 70%; the pilot has no rows.
+- [ ] Carry coordinates.
+- [ ] Supply `is_inundated` for both and `is_evacuated` for bridges. Nothing
+  intersects crossings with the landslide polygons yet (plan section 4.6).
+- Whether culverts deliberately carry no `is_evacuated` is **Q-09**.
 
 ## Where it is now
 

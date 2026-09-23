@@ -17,7 +17,7 @@ def insured(*bounds_and_ids):
     for address, bounds in bounds_and_ids:
         ids.append(address)
         geoms.append(box(*bounds))
-    frame = gpd.GeoDataFrame({"address_id": ids}, geometry=geoms, crs=CRS)
+    frame = gpd.GeoDataFrame({"claim_id": ids}, geometry=geoms, crs=CRS)
     frame["area_m2"] = frame.geometry.area
     return frame
 
@@ -73,7 +73,7 @@ def test_a_property_no_landslide_reached_is_absent():
     land = insured(("A-001", (0, 0, 20, 20)), ("A-002", (100, 100, 120, 120)))
     hazard = slides((EVACUATED, 1.0, (0, 0, 20, 20)))
     damaged = damaged_area_per_property(land, hazard)
-    assert damaged["address_id"].tolist() == ["A-001"]
+    assert damaged["claim_id"].tolist() == ["A-001"]
 
 
 def test_an_untouched_kind_of_ground_is_zero_not_unknown():

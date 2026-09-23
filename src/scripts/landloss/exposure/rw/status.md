@@ -2,7 +2,7 @@
 
 **Status:** A beta stand-in population runs; the real inference is not started.
 
-**Updated:** 2026-09-22
+**Updated:** 2026-09-23
 
 ## Approach
 
@@ -49,6 +49,19 @@ structures rather than the right numbers; see
 The retaining wall exposure the chain expects is **lines**, one per wall, keyed
 to `claim_id` and carrying `size_class` and `initial_condition`. That is the
 structure the beta has to emit however the population is produced.
+
+## Loss contract
+
+What this module owes the retaining wall table `loss` reads, as set in
+`.agents/plans/asset-pricing-approach.md` section 1.
+
+Marks: `[x]` done, `[~]` partly done, `[>]` next, `[ ]` planned.
+
+- [ ] Give every wall an `rw_id`. Walls are keyed on `claim_id` alone, so two
+  walls on one property cannot be told apart downstream.
+- [x] Carry `claim_id`, `size_class` (the contract's `rw_size`) and `length_m`
+  (`rw_length`).
+- [x] Carry coordinates, as the wall line.
 
 ## Where it is now
 

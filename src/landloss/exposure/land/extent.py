@@ -68,6 +68,7 @@ claimant does not own.
 import geopandas as gpd
 import numpy as np
 import pandas as pd
+import pyproj
 
 # The insured land definition: metres from the building outline. Not a tuning
 # parameter -- it is NHC's own line, so it belongs here rather than in a step's
@@ -110,6 +111,25 @@ SOURCE_ID_COLUMN = "source_id"
 TITLE_TYPE_COLUMN = "title_type"
 
 
+def _check_projected(crs: pyproj.CRS | None) -> None:
+    """Refuse a geographic system, where a buffer of 8 would be 8 degrees.
+
+    Args:
+        crs: The coordinate reference system to check.
+
+    Raises:
+        ValueError: If the system is geographic.
+    """
+    if crs is not None and crs.is_geographic:
+        msg = (
+            f"{crs} is a geographic system, so a buffer of "
+            f"{INSURED_LAND_BUFFER_M} would be that many degrees, and an area "
+            "would be in square degrees. Work in a projected system such as "
+            "NZGD2000 / NZTM."
+        )
+        raise ValueError(msg)
+
+
 def _check_frames(properties: gpd.GeoDataFrame, other: gpd.GeoDataFrame) -> None:
     """Refuse inputs the buffer arithmetic would silently get wrong.
 
@@ -131,13 +151,7 @@ def _check_frames(properties: gpd.GeoDataFrame, other: gpd.GeoDataFrame) -> None
         )
         raise ValueError(msg)
 
-    if properties.crs is not None and properties.crs.is_geographic:
-        msg = (
-            f"{properties.crs} is a geographic system, so a buffer of "
-            f"{INSURED_LAND_BUFFER_M} would be that many degrees. Work in a "
-            "projected system such as NZGD2000 / NZTM."
-        )
-        raise ValueError(msg)
+    _check_projected(properties.crs)
 
 
 def build_claim_properties(
@@ -166,8 +180,11 @@ def build_claim_properties(
         boundary rows were dissolved into it -- and the layer's own columns.
 
     Raises:
-        ValueError: If the boundaries carry no source columns.
+        ValueError: If the boundaries carry no source columns, or are in a
+            geographic coordinate reference system, where the areas this
+            computes would be in square degrees.
     """
+    _check_projected(boundaries.crs)
     missing = [
         column
         for column in (SOURCE_COLUMN, SOURCE_ID_COLUMN)
