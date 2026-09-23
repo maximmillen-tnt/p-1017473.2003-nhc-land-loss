@@ -23,3 +23,8 @@ NHI_ACT_LAND_CLAIMS_COHORT_CSV = ASSETS_DIR / "NHI_Act_Land claims cohort modell
 NHI_ACT_SETTLED_LAND_CLAIMS_CSV = (
     ASSETS_DIR / "NHI_Act_Settled_Land_Claims - 20260916.csv"
 )
+
+IAG_1502000_REPORT_PATHS_CSV = ASSETS_DIR / "claims-report-paths-iag-1502000.csv"
+IAG_1502000_LANDSLIDE_SUMMARY_CSV = (
+    ASSETS_DIR / "claims-landslide-summary-iag-1502000.csv"
+)
