@@ -55,6 +55,10 @@ The settlement core is built and is the only part that needed no upstream data.
   damaged area and `area_cap_m2`. The claim takes an area and a rate rather than
   a pre-multiplied market value, because the cap acts on the area — which is
   also the shape `vul` sends.
+- **The dwelling count is wired up.** `landloss.loss.claims.dwelling_counts`
+  reads it off the `s3_dwellings_per_property` output onto the claims being
+  settled, refusing a claim with no count rather than settling it as one
+  dwelling. That closed **Q-07**, which was a hard stop on any real run.
 - **Inundation removal** is the first line of the Land SOW to land.
   `inundation_volume_m3` and `classify_inundation_earthworks` turn the inundated
   area and mean depth into an earthworks rating, so that one of the three site
@@ -115,9 +119,11 @@ The settlement core is built and is the only part that needed no upstream data.
 
 ## Open decisions
 
-- **The dwelling count (Q-07).** Every sub-cap multiplies by dwellings in the
-  residential building, and no layer produces one — `insured-land.geoparquet`
-  carries `building_count`, and `vul`'s contract carries nothing. `settle`
+- **What a dwelling is (Q-07, closed).** The count now comes from the
+  module-level exposure step `s3_dwellings_per_property`, read on by
+  `landloss.loss.claims.dwelling_counts`. A dwelling is an **address point**
+  rather than a self-contained dwelling, so the count is a floor on a block of
+  flats and an over-count on a mixed-use building. `settle`
   refuses a count below one rather than
   reading a zero as "no cover", so the gap fails loudly instead of quietly
   halving caps.
