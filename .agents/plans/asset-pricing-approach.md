@@ -18,20 +18,101 @@ every place:
 
 ## 1. What `loss` receives
 
-**[confirmed]** — `.agents/plans/beta-build.md`, "What `loss` receives".
+**[confirmed]** — the `vul` output contract, set by Maxim Millen on 2026-09-23.
+It supersedes the earlier sketch in `.agents/plans/beta-build.md`, which had one
+land frame keyed on `address_id` with a row per cause.
 
-- **Land** — several rows per `address_id`, each `cause`, `area_m2`,
-  `land_rate_nzd_per_m2`, `rate_basis`, `cost_year`. Multiple areas, each with
-  its own rate and its own hazard.
-- **Retaining walls, culverts and bridges** — a **damage state only**:
-  `no damage` or `replace`. No repair cost and no repair state.
-- `address_id` throughout. A claim-level key is minted **at the `loss`
-  boundary**, not upstream (**L-11**).
+`vul` hands over **four tables**, not one frame. Every table carries `claim_id`
+and coordinates; each also carries its own asset identifier.
 
-The consequence is the thing to be clear about: **every dollar attached to a
-retaining wall, culvert or bridge is `loss`'s to compute.** `vul` hands over a
-verdict, not a price. Land arrives half-priced — an area and a market rate —
-and `loss` still has to produce its repair cost.
+**Land** — one row per insured land polygon, the polygons being non-overlapping,
+so a claim's areas can be summed without double counting.
+
+| Column | What it is |
+| --- | --- |
+| `land_id` | The polygon |
+| `claim_id` | The claim it belongs to |
+| `$/m2 market value` | The market rate the damaged area is valued at |
+| `Liq_LD_state` | The liquefaction land damage state |
+| `total_insured_land_area` | The whole insured area of the polygon |
+| `land_slide_total_insured_land_area` | Insured area taken by landslide |
+| `inundated_insured_area` | Insured area buried by material coming to rest |
+| `inundated_mean_depth` | How deep that material lies |
+| `evacuated_area` | Area the material came from |
+
+**Retaining walls** — one row per insured wall: `rw_id`, `claim_id`, `rw_size`
+(small, medium or large), `rw_length`, and three damage flags,
+`is_damaged_by_shaking`, `is_evacuated`, `is_inundated`.
+
+**Culverts** — `culvert_id`, `claim_id`, `is_inundated`, `is_damaged`.
+
+**Bridges** — `bridge_id`, `claim_id`, `is_damaged_by_shaking`, `is_evacuated`,
+`is_inundated`. The identifier was absent from the contract as first written and
+was confirmed on 2026-09-23 as belonging there, so every table identifies its
+own asset.
+
+Four consequences, in the order they bite:
+
+- **`claim_id` arrives from upstream.** It is not minted at this boundary, which
+  is what the earlier contract had and what **L-11** was written against. `loss`
+  aggregates four tables onto a key it is given rather than creating one.
+- **Every dollar attached to a structure is `loss`'s to compute.** `vul` hands
+  over a verdict, not a price — and now a verdict per cause rather than a single
+  damage state. Since a damaged structure is replaced rather than repaired, any
+  flag being true means one replacement, not one per flag.
+- **Land arrives half-priced**, as an area and a market rate, so `loss` still
+  produces the repair cost. Because the rate and the area arrive separately, the
+  Act's area cap can finally be applied — it is the lesser of the damaged area
+  and the cap that is valued, and a pre-multiplied market value would have
+  thrown away the area the cap needs.
+- **Damage is decomposed by mechanism, in named columns rather than rows per
+  cause.** Whether `land_slide_total_insured_land_area` is already the union of
+  the evacuated and inundated footprints, as
+  `.agents/context/nhc-land-cover-and-settlement.md` requires, or whether `loss`
+  must take that union itself, is **Q-06**.
+
+Four things the contract does not carry, each of which `loss` needs:
+
+- **No dwelling count.** Both sub-caps and the excess multiply by dwellings in
+  the residential building, and nothing in the four tables supplies one
+  (**Q-07**).
+- **No wall height.** The rates are charged per square metre of wall face, which
+  is retained height by length; `rw_length` arrives and `rw_size` is a band, so
+  `loss` turns a size class into a height. Settled for now as **set values** of
+  0.75 m, 1.75 m and 2.75 m — see section 1.1.
+- **No `cost_year` or `rate_basis`.** The earlier contract carried both. Their
+  absence reads as every rate being stated at one cost year, which is worth
+  confirming before a rate from a different year is mixed in.
+
+Bridges and culverts are also described asymmetrically — culverts carry a
+generic `is_damaged` and no `is_evacuated`, bridges carry `is_damaged_by_shaking`
+and do have `is_evacuated`. Whether that is deliberate is **Q-09**.
+
+### 1.1 Turning a wall size class into a height **[confirmed]**
+
+`vul` sends `rw_size` and `rw_length`; the rate is charged on wall face, so a
+band has to become a height. The agreed first cut is a **set value per class**:
+
+`beta_population` draws heights over 0.4 to 3.0 m, so a class holds its band
+clipped to that range, and each set height is the middle of what its class can
+actually contain:
+
+| Class | Band | Realised range | Priced at |
+| --- | --- | --- | --- |
+| small | below 1 m | 0.4 to 1.0 m | **0.75 m** |
+| medium | 1 to 2.5 m | 1.0 to 2.5 m | **1.75 m** |
+| large | 2.5 m and above | 2.5 to 3.0 m | **2.75 m** |
+
+The three land a clean metre apart, and each classifies back to its own size
+class — which is what rules out pricing small at 1 m, since the band is *below*
+1 m and `classify_wall_size` reads 1 m as medium. A test asserts that round
+trip, so this mapping and those bands cannot drift apart unnoticed.
+
+What follows is that a size class carries **no variation of its own**: every
+medium wall in the study is 1.75 m, so the spread in wall cost across the
+portfolio comes from length and the site ratings alone. Drawing a height within
+the band, or setting it off the slope the wall sits on, would add that variation
+back. Deferred as **I-14**.
 
 ## 2. The settlement calculation
 

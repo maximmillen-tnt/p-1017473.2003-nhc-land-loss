@@ -426,7 +426,7 @@
     },
     {
       "ID": "L-11",
-      "Limitation": "The LINZ property ID is the simplest and most stable unique identifier but is less useful to the NHC loss modelling team, who work at claim level.",
+      "Limitation": "The LINZ property ID is the simplest and most stable unique identifier but is less useful to the NHC loss modelling team, who work at claim level. Superseded in part: as of the vul output contract of 2026-09-23, vul carries claim_id and hands it to loss on every table, so the key is no longer minted at the loss boundary. Where vul itself gets claim_id from is still to be settled.",
       "Affects": "Phase 4 handover",
       "Source": "Kick-off 2026-09-16",
       "Status": "Open"
@@ -683,6 +683,13 @@
       "Phase": "Future",
       "Source": "Costing tool demo 2026-09-21",
       "Status": "Parked"
+    },
+    {
+      "ID": "I-14",
+      "Improvement": "Give a retaining wall a retained height with some variation in it, rather than one set value per size class. Either draw within the class band or set the height off the slope the wall sits on. Both add spread the portfolio currently gets only from wall length and site ratings, and both would make the priced height round-trip back to its own size class, which the set value for small does not.",
+      "Affects": "loss pricing",
+      "Source": "vul output contract 2026-09-23",
+      "Status": "Open"
     }
   ],
   "Questions": [
@@ -706,17 +713,17 @@
       "ID": "Q-03",
       "Question": "Are the enabling works allowances for easy, moderate and difficult sites — nothing, about 15 and about 30 — dollar amounts in thousands or percentage multipliers on the base cost? Chris Ewens gave them as figures and then agreed they were multipliers, while John Leeves was discussing dollar amounts in the same exchange.",
       "Asked of": "Chris Ewens",
-      "Answer": "",
+      "Answer": "Multipliers. The bands are the EEE, MMM and DDD rows of the costing tool's combination table -- 0%, 15% and 30% -- so the figures quoted at the demo were percentages on the base cost, not dollar amounts in thousands.",
       "Source": "Costing tool demo 2026-09-21",
-      "Status": "Open"
+      "Status": "Closed"
     },
     {
       "ID": "Q-04",
       "Question": "What are the excess earthworks and constructability percentages for easy, moderate and difficult? Chris Ewens described 15% for each, giving 30% or 45% on the subtotal, then revised it to nearer 0%, 5% and 10%, and separately said individual line items cap at 30%.",
       "Asked of": "Chris Ewens",
-      "Answer": "",
+      "Answer": "0% easy, 5% moderate, 10% difficult, applied to each of three rated factors and summed: construction access, earthworks required, and constructability and reinstatement. The tool enumerates all 27 combinations and every row is that sum, so an all-difficult site reaches 30%, which is the line item cap. Carried in landloss.loss.pricing.",
       "Source": "Costing tool demo 2026-09-21",
-      "Status": "Open"
+      "Status": "Closed"
     },
     {
       "ID": "Q-05",
@@ -724,6 +731,38 @@
       "Asked of": "Chris Ewens",
       "Answer": "",
       "Source": "Costing tool demo 2026-09-21",
+      "Status": "Open"
+    },
+    {
+      "ID": "Q-06",
+      "Question": "Is land_slide_total_insured_land_area already the union of the evacuated and inundated footprints, or must loss take that union itself? Where the two overlap the ground is damaged once, so summing the columns would double count it.",
+      "Asked of": "Maxim Millen",
+      "Answer": "",
+      "Source": "vul output contract 2026-09-23",
+      "Status": "Open"
+    },
+    {
+      "ID": "Q-07",
+      "Question": "Where does the dwelling count come from? Both land structure sub-caps and the excess multiply by dwellings in the residential building, and no table in the vul contract carries one. insured-land.geoparquet carries building_count, which is not the same thing.",
+      "Asked of": "Maxim Millen",
+      "Answer": "",
+      "Source": "vul output contract 2026-09-23",
+      "Status": "Open"
+    },
+    {
+      "ID": "Q-08",
+      "Question": "What retained height does each rw_size stand for? The costing tool charges per square metre of wall face, which is retained height by length; rw_length arrives but rw_size is a band (small below 1 m, medium 1 to 2.5 m, large above 2.5 m) rather than a height.",
+      "Asked of": "Maxim Millen",
+      "Answer": "Set values for now: small 0.75 m, medium 1.75 m, large 2.75 m. Each is the middle of what its class can contain, the population drawing heights over 0.4 to 3.0 m, and each classifies back to its own size class -- which rules out 1 m for small, since the band is below 1 m and classify_wall_size reads 1 m as medium. Carried as BETA_SIZE_CLASS_HEIGHT_M in landloss.loss.pricing. A size class therefore carries no variation of its own; adding it back is I-14.",
+      "Source": "vul output contract 2026-09-23",
+      "Status": "Closed"
+    },
+    {
+      "ID": "Q-09",
+      "Question": "Why are culverts and bridges described asymmetrically in the vul contract? Culverts carry a generic is_damaged and no is_evacuated, while bridges carry is_damaged_by_shaking and do carry is_evacuated.",
+      "Asked of": "Maxim Millen",
+      "Answer": "Partly answered: bridges do carry a bridge_id, confirmed 2026-09-23, so every table identifies its own asset. The damage flag asymmetry is still open.",
+      "Source": "vul output contract 2026-09-23",
       "Status": "Open"
     }
   ]
