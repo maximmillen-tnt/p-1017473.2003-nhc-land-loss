@@ -23,9 +23,9 @@ per realisation; exposure does not vary by realisation.
 | `hazard.liquefaction` | Land damage state | raster | `ld_state` 1–6 |
 | `hazard.landslide` | Evacuated ground | polygons | `landslide_id`, `area_m2`, `depth_m` |
 | `hazard.landslide` | Inundated ground | polygons | `landslide_id`, `area_m2`, `depth_m` |
-| `exposure.land` | Insured land extent | polygons | `address_id`, `land_rate_nzd_per_m2`, `area_m2` |
-| `exposure.rw` | Retaining walls | lines | `claim_id`, `size_class`, `initial_condition` |
-| `exposure.culverts_bridges` | Culverts, bridges | lines | `claim_id`, `structure` |
+| `exposure.land` | Insured land extent | polygons | `land_id`, `claim_id`, `land_rate_nzd_per_m2`, `area_m2` |
+| `exposure.rw` | Retaining walls | lines | `rw_id`, `claim_id`, `size_class`, `initial_condition` |
+| `exposure.culverts_bridges` | Culverts, bridges | lines | `crossing_id`, `claim_id`, `structure` |
 | `vul.*` | Damage | table | `realisation_id`, `claim_id`, `cause`, `damage`, `quantity` |
 | repair cost | Cost | table | `realisation_id`, `claim_id`, `cause`, `repair_cost_nzd` |
 
@@ -64,10 +64,17 @@ across the hazards, so a claim's causes can be summed within a realisation.
 
 ### The identifier
 
-`address_id` through exposure and the hazards. **`claim_id` is carried by `vul`
-and arrives on every table it hands to `loss`**, so the key is not minted at the
-`loss` boundary as this file previously assumed. `claim_id` exists in no Python
-today; where `vul` gets it from is still to be settled.
+**`claim_id` is the LINZ property** — the property boundary's `source_id` —
+set by `build_claim_properties` in exposure step 5
+(`exposure/land/steps/s5_insured_land_extent`). `address_id` is used only up to
+and inside that step, where it counts the dwellings on each claim. Every
+exposure, vul and hazard-join output after step 5 is keyed on `claim_id`, and it
+arrives on every table `vul` hands to `loss`.
+
+Each asset also carries its own id, minted once in exposure and carried
+unchanged through `vul`: `land_id` (step 5), `rw_id` (step 6) and `crossing_id`
+(step 7, handed to `loss` as `culvert_id` or `bridge_id` by vul step 10). The
+column names live in `landloss.domain.loss_contract`.
 
 ### What `loss` receives
 

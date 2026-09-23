@@ -1,6 +1,6 @@
 # Step 6 — Retaining wall population: implementation plan
 
-**Status:** Phase 1 complete. The population is a beta stand-in.
+**Status:** Phases 1 and 1b complete. The population is a beta stand-in.
 
 ## Phase 1 — A population of the right shape (complete)
 
@@ -14,6 +14,16 @@
       pairs with the hazards.
 - [x] Write one file per realisation with the columns the vulnerability work
       reads.
+
+## Phase 1b — Coverage filter and wall id for the loss contract (complete)
+
+- [x] Keep only the walls that intersect their own claim's insured land
+      buffered by 2 m (`keep_walls_on_insured_land`), and print the counts kept
+      and dropped (`describe_coverage`).
+- [x] Give each kept wall a stable `rw_id`, minted after the filter on walls
+      sorted by location (`sort_by_location`, `mint_asset_ids`).
+- [ ] Rerun over the pilot box and record the kept and dropped counts in the
+      method file.
 
 ## Phase 2 — Replace the stand-in with the real inference
 

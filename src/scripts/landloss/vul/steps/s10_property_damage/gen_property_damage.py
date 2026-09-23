@@ -1,49 +1,74 @@
-"""Join every hazard's damage onto one row per property.
+"""Write the four tables the vulnerability module hands to the loss module.
 
-The vulnerability module ends in four separate files keyed on ``claim_id`` --
-liquefaction land damage, landslide areas, retaining wall states and crossing
-states -- and nothing brings them together. This step does:
+The contract in section 1 of ``.agents/plans/asset-pricing-approach.md`` has vul
+hand loss four tables per realisation, each row carrying its own asset id, the
+``claim_id`` of the LINZ property it belongs to and its coordinates:
+
+- **land**, one row per insured land polygon, with its market value rate, its
+  liquefaction land damage state and its landslide damaged areas;
+- **rw**, one row per insured retaining wall, with its size, length, shaking
+  damage and landslide flags;
+- **culverts** and **bridges**, split from the detected crossings by structure
+  kind, with their shaking damage and landslide flags.
+
+This step builds them from the earlier vul steps' outputs:
 
     uv run --frozen python src/scripts/landloss/vul/steps/s10_property_damage/gen_property_damage.py
 
-It adds **no modelling**. Every number it writes was decided by the step it came
-from; what it contributes is the join, and the two things the join makes visible
-that four separate files hide:
+It adds **no modelling**. The assembly lives in :mod:`landloss.vul.loss_input`
+and every number it writes was decided by the step it came from. The geometry,
+in EPSG:2193, supplies the coordinates, and each table carries a
+``realisation_id``.
 
-- **A property damaged by more than one cause.** Separate files cannot say how
-  many properties carry both a liquefaction state and a landslide, and that
-  overlap is what decides whether the caps bind.
-- **Whether the causes are counting the same damage twice.** The Canterbury
-  land damage rates may already include retaining wall, culvert and bridge
-  damage, in which case a property's wall is priced twice over -- once inside
-  its liquefaction cost and once as a written-off wall. That is **T-27**, and
-  this run prints how many properties it would apply to.
+The run also prints the overlap four tables hide: how many claims carry both a
+liquefaction land damage state and a retaining wall damaged by shaking. The
+Canterbury land damage rates may already include retaining wall damage, in
+which case such a claim's wall is priced twice over. That is **T-27**.
 
-**Nothing is settled and nothing is converted.** Costs stay in the units their
-own step recorded, which for the liquefaction component is 2011 dollars
-excluding GST; `cost_year` and `rate_basis` ride on the row so the loss module
-can reconcile them. Caps, excesses, GST and the market value of the damaged land
-belong to the loss module, which this step does not touch.
-
-The key is the property, which is **not the same as the address**: units sharing
-a coordinate were collapsed into one property carrying a ``dwelling_count`` by
-the insured land step, because NHC's sub-caps and excess are per dwelling.
+**Nothing is settled.** Caps, excesses, GST and pricing belong to the loss
+module, which this step does not touch.
 
 What it runs over comes from ``config.py`` beside it.
 """
 
 import sys
+from pathlib import Path
 
 import geopandas as gpd
 import pandas as pd
 
-from landloss.vul.shaking.fragility import DAMAGE_STATE_COLUMN, REPLACE
+from landloss.domain.constants import DEFAULT_CRS
+from landloss.domain.loss_contract import (
+    CLAIM_ID_COLUMN,
+    EVACUATED_AREA_COLUMN,
+    INUNDATED_AREA_COLUMN,
+    IS_DAMAGED_BY_SHAKING_COLUMN,
+    IS_DAMAGED_COLUMN,
+    IS_EVACUATED_COLUMN,
+    IS_INUNDATED_COLUMN,
+    LANDSLIDE_AREA_COLUMN,
+    LIQ_LD_STATE_COLUMN,
+    REALISATION_ID_COLUMN,
+)
+from landloss.exposure.land.extent import DWELLING_COUNT_COLUMN
+from landloss.vul.loss_input import (
+    LOSS_TABLES,
+    build_crossing_tables,
+    build_land_table,
+    build_rw_table,
+)
 from scripts.landloss.exposure.land.steps.s5_insured_land_extent.gen_insured_land import (
     insured_land_path,
 )
 from scripts.landloss.paths import TEMP_DIR
+from scripts.landloss.vul.landslide.culverts_bridges.steps.s11_crossing_landslide_damage.gen_crossing_landslide_damage import (
+    crossing_landslide_damage_path,
+)
 from scripts.landloss.vul.landslide.land.steps.s3_landslide_land_damage.gen_landslide_land_damage import (
     landslide_land_damage_path,
+)
+from scripts.landloss.vul.landslide.rw.steps.s11_wall_landslide_damage.gen_wall_landslide_damage import (
+    wall_landslide_damage_path,
 )
 from scripts.landloss.vul.liquefaction.land.steps.s2_liq_land_damage.gen_liq_land_damage import (
     liq_land_damage_path,
@@ -60,174 +85,87 @@ if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 WORK_DIR = TEMP_DIR / "vul"
-OUT_STEM = "property-damage"
-
-ID_COLUMN = "claim_id"
-
-# What the landslide step contributes, and what a property it did not reach
-# carries instead. An area is zero because untouched ground is undamaged ground;
-# a depth is left missing, because there is no depth to report rather than a
-# depth of none. The same distinction applies to the liquefaction state and to
-# the structure counts, which are filled in beside their own joins.
-LANDSLIDE_COLUMNS = {
-    "evacuated_area_m2": 0.0,
-    "inundated_area_m2": 0.0,
-    "evacuated_depth_m": None,
-    "inundated_depth_m": None,
-}
-# The kinds of structure counted per property, as the damage state files name
-# them, against the column prefix each is written under.
-STRUCTURE_ASSETS = {
-    "retaining_walls": "retaining wall",
-    "culverts": "culvert",
-    "bridges": "bridge",
-}
+OUT_STEM = "loss-input"
 
 RULE = "-" * 72
 
 
-def property_damage_path(realisation_id, *, pilot):
-    """Return the file a run writes one realisation's joined damage to."""
+def loss_input_path(table: str, realisation_id: int, *, pilot: bool) -> Path:
+    """Return the file a run writes one realisation's contract table to.
+
+    Raises:
+        ValueError: If ``table`` is not one of the four contract tables.
+    """
+    if table not in LOSS_TABLES:
+        msg = f"unknown loss table {table!r}, expected one of {LOSS_TABLES}"
+        raise ValueError(msg)
     suffix = "-pilot" if pilot else ""
-    return WORK_DIR / f"{OUT_STEM}-r{realisation_id:03d}{suffix}.parquet"
+    return WORK_DIR / f"{OUT_STEM}-{table}-r{realisation_id:03d}{suffix}.geoparquet"
 
 
-def count_structures(states, asset):
-    """Return how many of one kind of structure each property has, and loses.
+def in_default_crs(table: gpd.GeoDataFrame, name: str) -> gpd.GeoDataFrame:
+    """Return ``table`` in EPSG:2193, refusing one with no CRS at all."""
+    if table.crs is None:
+        msg = f"the {name} table has no CRS, so its coordinates cannot be trusted"
+        raise ValueError(msg)
+    return table if table.crs == DEFAULT_CRS else table.to_crs(DEFAULT_CRS)
 
-    Args:
-        states: The damage states of one asset class, carrying ``ID_COLUMN``,
-            an ``asset`` column and a damage state.
-        asset: The asset to count, as the damage state file names it.
 
-    Returns:
-        A frame indexed by property with a total and a replace count, empty when
-        no structure of that kind exists.
-    """
+def describe_land(land):
+    """Print the land table's polygons, claims, states and landslide areas."""
+    print(RULE)
+    if land.empty:
+        print("Land: no insured land polygons.")
+        return
+    print(
+        f"Land: {len(land):,} polygons on {land[CLAIM_ID_COLUMN].nunique():,} "
+        f"claims, {int(land[DWELLING_COUNT_COLUMN].sum()):,} dwellings"
+    )
+    states = land[LIQ_LD_STATE_COLUMN].dropna()
     if states.empty:
-        return pd.DataFrame(columns=[ID_COLUMN]).set_index(ID_COLUMN)
-
-    of_kind = states[states["asset"] == asset]
-    if of_kind.empty:
-        return pd.DataFrame(columns=[ID_COLUMN]).set_index(ID_COLUMN)
-
-    return pd.DataFrame(
-        {
-            "total": of_kind.groupby(ID_COLUMN).size(),
-            "replace": of_kind[of_kind[DAMAGE_STATE_COLUMN] == REPLACE]
-            .groupby(ID_COLUMN)
-            .size(),
-        }
-    ).fillna(0)
-
-
-def join_damage(insured, liquefaction, landslide, walls, structures):
-    """Return one row per property, carrying every hazard's damage.
-
-    Args:
-        insured: The insured land extent, one row per property.
-        liquefaction: The liquefaction land damage rows.
-        landslide: The landslide damaged area rows.
-        walls: The retaining wall damage states.
-        structures: The culvert and bridge damage states.
-
-    Returns:
-        One row per property in ``insured``, in its order.
-    """
-    joined = insured.drop(columns=insured.geometry.name).copy()
-
-    liq = liquefaction.set_index(ID_COLUMN)
-    joined["ld_state"] = joined[ID_COLUMN].map(liq["ld_state"])
-    joined["ld_state_name"] = joined[ID_COLUMN].map(liq["state_name"])
-    joined["liq_cost_nzd"] = joined[ID_COLUMN].map(liq["cost_nzd"]).fillna(0.0)
-    for column in ("cost_year", "rate_basis", "cost_percentile"):
-        joined[column] = joined[ID_COLUMN].map(liq[column])
-
-    slides = landslide.set_index(ID_COLUMN)
-    for column, default in LANDSLIDE_COLUMNS.items():
-        values = joined[ID_COLUMN].map(slides[column]) if column in slides else None
-        joined[column] = values if values is not None else default
-        if default is not None:
-            joined[column] = joined[column].fillna(default)
-
-    for prefix, asset in STRUCTURE_ASSETS.items():
-        frame = walls if prefix == "retaining_walls" else structures
-        counts = count_structures(frame, asset)
-        joined[prefix] = (
-            joined[ID_COLUMN].map(counts["total"]).fillna(0).astype(int)
-            if not counts.empty
-            else 0
-        )
-        joined[f"{prefix}_to_replace"] = (
-            joined[ID_COLUMN].map(counts["replace"]).fillna(0).astype(int)
-            if not counts.empty
-            else 0
-        )
-
-    return joined
-
-
-def describe_join(joined):
-    """Print what the join makes visible that the separate files cannot."""
-    causes = pd.DataFrame(
-        {
-            "liquefaction": joined["ld_state"].notna(),
-            "landslide": (joined["evacuated_area_m2"] > 0)
-            | (joined["inundated_area_m2"] > 0),
-            "retaining wall": joined["retaining_walls_to_replace"] > 0,
-            "culvert or bridge": (joined["culverts_to_replace"] > 0)
-            | (joined["bridges_to_replace"] > 0),
-        }
-    )
-    count = causes.sum(axis=1)
-
-    print(RULE)
-    print(
-        f"Properties: {len(joined):,}, {int(joined['dwelling_count'].sum()):,} dwellings"
-    )
-    print(f"  {int((count > 0).sum()):,} carry damage from at least one cause")
-    for cause in causes.columns:
-        print(f"    {cause}: {int(causes[cause].sum()):,}")
-
-    print(RULE)
-    print("Causes per property:")
-    for causes_on_property, properties in count.value_counts().sort_index().items():
-        print(f"  {causes_on_property}: {properties:,}")
-
-    # The double count T-27 would create, sized. The Canterbury rates may
-    # already include retaining wall damage, in which case every property in
-    # this line is being charged for its wall twice.
-    both = int((causes["liquefaction"] & causes["retaining wall"]).sum())
-    print(
-        f"  {both:,} carry both a liquefaction land damage state and a wall to "
-        "replace, which is the double count T-27 would create"
-    )
-
-
-def describe_totals(joined):
-    """Print the repair cost this run puts on the portfolio, with its basis."""
-    print(RULE)
-    priced = joined[joined["liq_cost_nzd"] > 0]
-    if priced.empty:
-        print("No priced damage.")
+        print("  No liquefaction land damage state on any polygon")
     else:
-        year = int(priced["cost_year"].dropna().iloc[0])
-        percentile = int(priced["cost_percentile"].dropna().iloc[0])
-        print(
-            f"Liquefaction land repair cost: "
-            f"{priced['liq_cost_nzd'].sum():,.0f} NZD, {year} dollars excluding "
-            f"GST, at the {percentile}th percentile of settled cost"
-        )
+        print(f"  {len(states):,} polygons carry a liquefaction land damage state:")
+        for state, polygons in states.value_counts().sort_index().items():
+            print(f"    {state}: {polygons:,}")
 
-    damaged_ground = (
-        joined["evacuated_area_m2"].sum() + joined["inundated_area_m2"].sum()
-    )
-    print(f"Landslide damaged ground: {damaged_ground:,.0f} m2, unpriced")
+    # The contract takes the union of evacuated and inundated ground, so ground
+    # both evacuated and buried is counted once. The gap below is what adding
+    # the two would have double counted.
+    union = land[LANDSLIDE_AREA_COLUMN].sum()
+    added = land[EVACUATED_AREA_COLUMN].sum() + land[INUNDATED_AREA_COLUMN].sum()
+    reached = int((land[LANDSLIDE_AREA_COLUMN] > 0).sum())
     print(
-        f"Structures to replace: "
-        f"{int(joined['retaining_walls_to_replace'].sum()):,} retaining walls, "
-        f"{int(joined['culverts_to_replace'].sum()):,} culverts, "
-        f"{int(joined['bridges_to_replace'].sum()):,} bridges, all unpriced"
+        f"  Landslide damaged ground: {union:,.0f} m2 on {reached:,} polygons, "
+        f"against {added:,.0f} m2 if evacuated and inundated were added "
+        f"({added - union:,.0f} m2 not double counted)"
+    )
+
+
+def describe_structures(name, table, flags):
+    """Print how many structures one table holds and how many carry each flag."""
+    if table.empty:
+        print(f"{name}: none")
+        return
+    counts = ", ".join(f"{int(table[flag].sum()):,} {flag}" for flag in flags)
+    print(
+        f"{name}: {len(table):,} on {table[CLAIM_ID_COLUMN].nunique():,} claims, {counts}"
+    )
+
+
+def describe_overlap(land, rw):
+    """Print how many claims T-27 would apply to.
+
+    The Canterbury rates may already include retaining wall damage, in which
+    case every claim in this line is charged for its wall twice.
+    """
+    with_state = set(land.loc[land[LIQ_LD_STATE_COLUMN].notna(), CLAIM_ID_COLUMN])
+    with_wall = set(rw.loc[rw[IS_DAMAGED_BY_SHAKING_COLUMN], CLAIM_ID_COLUMN])
+    both = len(with_state & with_wall)
+    print(RULE)
+    print(
+        f"{both:,} claims carry both a liquefaction land damage state and a wall "
+        "damaged by shaking, which is the double count T-27 would create"
     )
     print(
         "Nothing here is settled. Caps, excesses, GST and the market value of "
@@ -236,27 +174,54 @@ def describe_totals(joined):
 
 
 def main(*, pilot, realisation_ids):
-    """Write one joined damage row per property, per realisation."""
+    """Write the four contract tables, per realisation."""
     insured = gpd.read_parquet(insured_land_path(pilot=pilot))
 
     for realisation_id in realisation_ids:
-        print(f"Joining realisation {realisation_id} ...", flush=True)
-        joined = join_damage(
+        print(f"Assembling realisation {realisation_id} ...", flush=True)
+        land = build_land_table(
             insured,
             pd.read_parquet(liq_land_damage_path(realisation_id, pilot=pilot)),
             pd.read_parquet(landslide_land_damage_path(realisation_id, pilot=pilot)),
-            pd.read_parquet(wall_damage_state_path(realisation_id, pilot=pilot)),
-            pd.read_parquet(structure_damage_state_path(realisation_id, pilot=pilot)),
         )
-        joined.insert(0, "realisation_id", realisation_id)
+        rw = build_rw_table(
+            gpd.read_parquet(wall_damage_state_path(realisation_id, pilot=pilot)),
+            pd.read_parquet(wall_landslide_damage_path(realisation_id, pilot=pilot)),
+        )
+        culverts, bridges = build_crossing_tables(
+            gpd.read_parquet(structure_damage_state_path(realisation_id, pilot=pilot)),
+            pd.read_parquet(
+                crossing_landslide_damage_path(realisation_id, pilot=pilot)
+            ),
+        )
+        tables = dict(zip(LOSS_TABLES, (land, rw, culverts, bridges), strict=True))
 
-        describe_join(joined)
-        describe_totals(joined)
+        describe_land(land)
+        print(RULE)
+        describe_structures(
+            "Retaining walls",
+            rw,
+            (IS_DAMAGED_BY_SHAKING_COLUMN, IS_EVACUATED_COLUMN, IS_INUNDATED_COLUMN),
+        )
+        describe_structures(
+            "Culverts",
+            culverts,
+            (IS_DAMAGED_COLUMN, IS_EVACUATED_COLUMN, IS_INUNDATED_COLUMN),
+        )
+        describe_structures(
+            "Bridges",
+            bridges,
+            (IS_DAMAGED_BY_SHAKING_COLUMN, IS_EVACUATED_COLUMN, IS_INUNDATED_COLUMN),
+        )
+        describe_overlap(land, rw)
 
-        out_path = property_damage_path(realisation_id, pilot=pilot)
-        out_path.parent.mkdir(parents=True, exist_ok=True)
-        joined.to_parquet(out_path)
-        print(f"Wrote {len(joined):,} rows to {out_path}")
+        for name, table in tables.items():
+            table = in_default_crs(table, name)
+            table.insert(0, REALISATION_ID_COLUMN, realisation_id)
+            out_path = loss_input_path(name, realisation_id, pilot=pilot)
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+            table.to_parquet(out_path)
+            print(f"Wrote {len(table):,} {name} rows to {out_path}")
 
 
 if __name__ == "__main__":

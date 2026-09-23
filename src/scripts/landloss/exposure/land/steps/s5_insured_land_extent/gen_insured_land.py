@@ -37,6 +37,9 @@ import sys
 import geopandas as gpd
 
 from landloss.domain import constants
+from landloss.domain.gst import add_gst
+from landloss.domain.loss_contract import LAND_ID_COLUMN
+from landloss.exposure.asset_ids import LAND_ID_SUFFIX, mint_asset_ids
 from landloss.exposure.land.driveways import (
     describe_driveways,
     generate_driveways,
@@ -48,6 +51,8 @@ from landloss.exposure.land.extent import (
     BUILDING_COUNT_COLUMN,
     CLAIM_ID_COLUMN,
     DWELLING_COUNT_COLUMN,
+    LAND_RATE_EXCL_GST_COLUMN,
+    LAND_RATE_INCL_GST_COLUMN,
     MIN_CROSSING_AREA_M2,
     MIN_CROSSING_SHARE,
     OUTLINE_ID_COLUMN,
@@ -84,7 +89,7 @@ PILOT_LAND_VALUE_NAME = "land-value-by-address-pilot.geoparquet"
 OUT_NAME = "insured-land.geoparquet"
 PILOT_OUT_NAME = "insured-land-pilot.geoparquet"
 
-# The rate the extent carries forward, and the lot size assumption it is there
+# Step 2's rate per address, which the extent carries forward, and the lot size assumption it is there
 # to be checked against.
 RATE_COLUMN = "land_rate_nzd_per_m2"
 ASSUMED_LOT_SIZE_COLUMN = "assumed_lot_size_m2"
@@ -358,11 +363,26 @@ def main(*, pilot, use_cached_extent):
         .groupby(CLAIM_ID_COLUMN)[RATE_COLUMN]
         .mean()
     )
-    insured = extent.assign(**{RATE_COLUMN: extent[CLAIM_ID_COLUMN].map(rates)})
+    # Step 2's rate is taken as excluding GST, and is grossed up here by the one
+    # named function so both sides are written and the loss module is handed
+    # only the inclusive one.
+    rate_excl_gst = extent[CLAIM_ID_COLUMN].map(rates)
+    insured = extent.assign(
+        **{
+            LAND_RATE_EXCL_GST_COLUMN: rate_excl_gst,
+            LAND_RATE_INCL_GST_COLUMN: add_gst(rate_excl_gst),
+        }
+    )
+    # One polygon per claim today, so every land_id is <claim_id>-L01. The id is
+    # kept separate from the claim so that a claim split into several polygons
+    # later still gives the loss contract one row per polygon.
+    insured[LAND_ID_COLUMN] = mint_asset_ids(insured[CLAIM_ID_COLUMN], LAND_ID_SUFFIX)
     insured = insured[
         [
+            LAND_ID_COLUMN,
             CLAIM_ID_COLUMN,
-            RATE_COLUMN,
+            LAND_RATE_EXCL_GST_COLUMN,
+            LAND_RATE_INCL_GST_COLUMN,
             AREA_COLUMN,
             PROPERTY_AREA_COLUMN,
             BUILDING_COUNT_COLUMN,

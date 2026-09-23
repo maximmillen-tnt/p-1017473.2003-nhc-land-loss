@@ -5,6 +5,12 @@
   the fragility is in `landloss.vul.shaking.fragility`.
 - Walls come from `temp/exposure/beta-wall-population-r<nnn>[-pilot].geoparquet`,
   the population step 6 draws, read through its own `wall_population_path()`.
+  Step 6 has already kept only the walls on insured land and sorted them by
+  claim and location, so every row arrives with its `rw_id`.
+- **`rw_id` and `claim_id` are carried unchanged** from the population, under
+  the names `RW_ID_COLUMN` and `CLAIM_ID_COLUMN` from
+  `landloss.domain.loss_contract`. Rows stay in population order, so the draw a
+  wall receives is fixed by its position in step 6's sorted output.
 - **Two damage states only, no damage and replace.** Repair is not modelled
   because very few damaged walls are repaired in practice, so a third state
   would carry almost nothing.
@@ -35,6 +41,13 @@
 - The draw is seeded by `realisation_seed(BASE_SEED, realisation_id,
   "vulnerability")` — one stream for the whole vulnerability module, so adding
   an asset class does not shift the draws of the ones already there.
-- Output is `temp/vul/wall-damage-state-r<nnn>[-pilot].parquet`.
+- **The wall line is kept as the geometry**, in the population's CRS
+  (EPSG:2193), so the loss table can carry coordinates.
+- Output is `temp/vul/wall-damage-state-r<nnn>[-pilot].geoparquet`, written with
+  `GeoDataFrame.to_parquet()`. Columns are `realisation_id`, `rw_id`,
+  `claim_id`, `asset`, `size_class`, `initial_condition`, `height_m`,
+  `length_m`, `pga_g`, `failure_probability`, `damage_state` and `geometry`.
+  Files written before this change are plain parquet without `rw_id` and must
+  be regenerated after step 6 is rerun.
 
 Potential future improvements see `s9_wall_damage_state_implementation_plan.md`.

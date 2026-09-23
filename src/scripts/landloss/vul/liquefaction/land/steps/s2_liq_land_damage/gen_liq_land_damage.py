@@ -19,6 +19,11 @@ quantity is per property, so `rate_basis` says so.
 The rates are **flat land only**. Nothing here masks the hill properties out,
 because the liquefaction hazard grid covers flat land alone and a hill property
 comes back with no state at all; if that ever changes, this step needs a mask.
+A property off the grid is written as state 1, None, at **no cost**: it is not
+liquefiable ground, so it is undamaged rather than unknown. The Canterbury cost
+of state 1 is not charged to it, because that is the cost of surveyed flat land
+that showed no damage, not of land that cannot liquefy. `on_liq_grid` keeps the
+two apart.
 
 What it runs over comes from ``config.py`` beside it.
 """
@@ -31,6 +36,8 @@ import pandas as pd
 
 from landloss.common.utils.terrain import sample_at_points
 from landloss.domain import constants
+from landloss.domain.loss_contract import CLAIM_ID_COLUMN, LAND_ID_COLUMN
+from landloss.exposure.land.extent import LAND_RATE_INCL_GST_COLUMN
 from landloss.vul.liquefaction.costs import (
     COST_YEAR,
     RATE_BASIS,
@@ -54,6 +61,9 @@ OUT_STEM = "liq-land-damage"
 
 CAUSE = str(constants.Cause.LIQUEFACTION)
 STATE_COLUMN = "ld_state"
+ON_GRID_COLUMN = "on_liq_grid"
+# The state a property off the liquefaction grid is written as: None, no damage.
+OFF_GRID_STATE = 1
 RULE = "-" * 72
 
 
@@ -65,13 +75,14 @@ def liq_land_damage_path(realisation_id, *, pilot):
 
 def describe_damage(damage, properties, percentile):
     """Print the states drawn and what they cost."""
-    known = damage[STATE_COLUMN].notna()
+    known = damage[ON_GRID_COLUMN]
     print(RULE)
     print(f"Properties: {properties:,}")
-    print(f"  {int(known.sum()):,} carry a liquefaction land damage state")
+    print(f"  {int(known.sum()):,} sampled a liquefaction land damage state")
     print(
-        f"  {properties - int(known.sum()):,} do not, which is the hazard grid "
-        "covering flat land only"
+        f"  {properties - int(known.sum()):,} sit off the hazard grid, which "
+        f"covers flat land only, and are written as state {OFF_GRID_STATE} at "
+        "no cost"
     )
     if not known.any():
         return
@@ -79,7 +90,7 @@ def describe_damage(damage, properties, percentile):
     counts = (
         damage.loc[known]
         .groupby([STATE_COLUMN, "state_name"])
-        .agg(properties=("claim_id", "size"), cost_nzd=("cost_nzd", "first"))
+        .agg(properties=(CLAIM_ID_COLUMN, "size"), cost_nzd=("cost_nzd", "first"))
     )
     print(f"By land damage state, at the {percentile}th percentile of settled cost:")
     print(counts.to_string())
@@ -97,19 +108,28 @@ def main(*, pilot, realisation_ids, cost_percentile):
     for realisation_id in realisation_ids:
         raster = ld_state_path(realisation_id, pilot=pilot)
         print(f"Sampling {raster} at {len(insured):,} properties ...", flush=True)
-        states = sample_at_points(raster, points).to_numpy()
-
-        cost = ld_cost_nzd(states, percentile=cost_percentile, costs=costs)
+        sampled = sample_at_points(raster, points).to_numpy()
+        on_grid = ~np.isnan(sampled)
+        # The cost is looked up on the sampled state, so a property off the grid
+        # costs nothing rather than the Canterbury cost of state 1.
+        cost = np.nan_to_num(
+            ld_cost_nzd(sampled, percentile=cost_percentile, costs=costs)
+        )
+        states = np.where(on_grid, sampled, OFF_GRID_STATE).astype(int)
         damage = pd.DataFrame(
             {
                 "realisation_id": realisation_id,
-                "claim_id": insured["claim_id"].to_numpy(),
+                LAND_ID_COLUMN: insured[LAND_ID_COLUMN].to_numpy(),
+                CLAIM_ID_COLUMN: insured[CLAIM_ID_COLUMN].to_numpy(),
                 "cause": CAUSE,
                 STATE_COLUMN: states,
+                ON_GRID_COLUMN: on_grid,
                 "state_name": pd.Series(states).map(names).to_numpy(),
                 "area_m2": insured["area_m2"].to_numpy(),
-                "land_rate_nzd_per_m2": insured["land_rate_nzd_per_m2"].to_numpy(),
-                "cost_nzd": np.nan_to_num(cost),
+                LAND_RATE_INCL_GST_COLUMN: insured[
+                    LAND_RATE_INCL_GST_COLUMN
+                ].to_numpy(),
+                "cost_nzd": cost,
                 "rate_basis": RATE_BASIS,
                 "cost_year": COST_YEAR,
                 "cost_percentile": cost_percentile,

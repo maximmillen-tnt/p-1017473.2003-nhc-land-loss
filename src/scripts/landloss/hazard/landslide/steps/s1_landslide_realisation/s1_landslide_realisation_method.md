@@ -139,7 +139,9 @@
 - A run where cells failed but every one of them was dropped for want of a slope
   raises rather than reporting an empty realisation: it means the elevation model
   does not cover the probability grid, which is a broken run rather than a quiet
-  one. A run where nothing failed at all prints that and writes nothing.
+  one. A run where nothing failed at all prints that and **writes an empty
+  layer** with the full schema, so the vulnerability steps reading the
+  realisation find a file and report nothing damaged.
 - The reusable parts are covered without the network:
   `tests/landloss/common/utils/test_terrain.py` for the slope and the downhill
   direction, on hillsides whose answer can be pointed at, and

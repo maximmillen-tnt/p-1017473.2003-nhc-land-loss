@@ -1,6 +1,6 @@
 # Step 9 — Retaining wall damage state: implementation plan
 
-**Status:** Phase 1 complete. The fragility is a flat 70%.
+**Status:** Phases 1 and 1a complete. The fragility is a flat 70%.
 
 ## Phase 1 — A damage state on every wall (complete)
 
@@ -11,6 +11,15 @@
       reproduces and pairs with the hazards of the same modelled earthquake.
 - [x] Report the split, the PGA range, and how many properties carry a wall to
       replace.
+
+## Phase 1a — Ids and geometry for the loss contract (complete)
+
+- [x] Carry `rw_id` and `claim_id` from the wall population, using the names in
+      `landloss.domain.loss_contract`.
+- [x] Keep the wall line as geometry, in the population's CRS, so the loss table
+      has coordinates.
+- [x] Write GeoParquet (`.geoparquet`) instead of plain parquet.
+- [ ] Rerun the pilot after step 6 has been rerun, so the outputs carry `rw_id`.
 
 ## Phase 2 — A real fragility
 

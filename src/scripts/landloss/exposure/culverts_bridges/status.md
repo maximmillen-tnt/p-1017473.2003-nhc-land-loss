@@ -3,7 +3,7 @@
 **Status:** Detection runs end to end; empty over the pilot box, which holds
 no named watercourse.
 
-**Updated:** 2026-09-23
+**Updated:** 2026-09-24
 
 ## Approach
 
@@ -58,8 +58,11 @@ What this module owes the culvert and bridge tables `loss` reads, as set in
 
 Marks: `[x]` done, `[~]` partly done, `[>]` next, `[ ]` planned.
 
-- [ ] Give every crossing an identifier, written out as `culvert_id` or
-  `bridge_id` by structure.
+- [x] Give every crossing an identifier, written out as `culvert_id` or
+  `bridge_id` by structure. It is minted as `crossing_id` in step 7 and split
+  by kind at vul step 10.
+- [x] Pass on only the crossings lying wholly inside their claim's insured
+  land.
 - [x] Carry `claim_id` and the kind of structure.
 - [x] Carry coordinates, as the crossing geometry.
 
@@ -67,7 +70,10 @@ Marks: `[x]` done, `[~]` partly done, `[>]` next, `[ ]` planned.
 
 `steps/s7_crossing_population/` runs end to end. It reads the driveway corridors
 step 5 now writes, intersects them against both LINZ river layers, and draws a
-culvert or a bridge at each crossing under the project realisation seed.
+culvert or a bridge at each crossing under the project realisation seed. Only
+crossings wholly inside their claim's insured land are kept, each with a
+`crossing_id` minted before the draw. A river found on both layers is merged
+into one crossing, so each physical crossing is one structure.
 
 **Over the pilot box it finds nothing**, and that is geography rather than a
 fault: neither river layer returns a feature there, the nearest named

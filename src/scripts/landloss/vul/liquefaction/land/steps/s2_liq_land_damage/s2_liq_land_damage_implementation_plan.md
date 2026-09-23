@@ -1,6 +1,7 @@
 # Step 2 — Liquefaction land damage: implementation plan
 
-**Status:** Phase 1 complete. Costs are the packaged Canterbury settlements.
+**Status:** Phases 1, 1a and 1b complete. Costs are the packaged Canterbury
+settlements.
 
 ## Phase 1 — A priced state on every property (complete)
 
@@ -13,6 +14,23 @@
       loss table cannot silently mix bases or vintages.
 - [x] Report the properties the hazard grid does not reach, which over the
       pilot is the model covering flat land only.
+
+## Phase 1a — land_id for the loss contract (complete)
+
+- [x] Carry `land_id` from the insured land onto every row, after
+      `realisation_id` and before `claim_id`, so step 10 can join the state to
+      its land polygon.
+- [x] Import the key names from `landloss.domain.loss_contract` rather than
+      retyping them.
+- [x] Leave the output without geometry; step 10 takes the coordinates from the
+      insured land.
+
+## Phase 1b — Off the grid is no damage (complete)
+
+- [x] Write a property off the liquefaction grid as state 1, None, at no cost,
+      rather than as a missing state, and record `on_liq_grid` beside it.
+- [x] Carry the GST-inclusive land rate from the insured land rather than the
+      exclusive one.
 
 ## Phase 2 — Beyond the Canterbury lookup
 

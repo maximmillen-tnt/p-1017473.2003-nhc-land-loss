@@ -16,8 +16,8 @@ Intended, not implemented.
   differently.
 - [x] Work per property against the **insured land polygon**, the 8 m line from the
   dwelling, since that is the extent NHC settles on. The chain runs on
-  `address_id` throughout; the claim key is minted at the loss boundary, which
-  is one function in one place when the two decouple.
+  `claim_id`, the LINZ property from exposure step 5, and each insured land
+  polygon carries its own `land_id`.
 - [>] Cost the repair from the T+T landslip remediation schedule prepared for EQC
   (`EQCcostestimatesRev10.xlsx`, Rev10, 4 December 2023) rather than from a
   damage ratio alone. The schedule is held in `vul` rather than `loss` so that
@@ -60,10 +60,11 @@ Marks: `[x]` done, `[~]` partly done, `[>]` next, `[ ]` planned.
 - [x] Supply `inundated_insured_area` and `inundated_mean_depth`, written as
   `inundated_area_m2` (unioned) and `inundated_depth_m` (area-weighted).
 - [x] Supply `evacuated_area`, written as `evacuated_area_m2`.
-- [ ] Supply `land_slide_total_insured_land_area`, the union of evacuated and
-  inundated ground in the polygon. Only the two are written; whether `vul` or
-  `loss` takes the union is **Q-06**.
-- [~] Carry `claim_id` and coordinates. `claim_id` rides; coordinates do not.
+- [x] Supply `land_slide_total_insured_land_area`, the union of evacuated and
+  inundated ground in the polygon (**Q-06**): vul supplies the union as
+  `landslide_area_m2`.
+- [x] Carry `claim_id` and coordinates. Step 3 rows carry `land_id` and
+  `claim_id`; coordinates come via the s10 land table.
 
 ## Where it is now
 
@@ -71,7 +72,9 @@ Marks: `[x]` done, `[~]` partly done, `[>]` next, `[ ]` planned.
   inundated polygons with the insured land and writes the area and depth of each
   kind of damaged ground per property. Inundated pieces are unioned rather than
   summed, so ground two landslides both reached is counted once, and the run
-  checks that neither kind exceeds the property's own insured area.
+  checks that neither kind exceeds the property's own insured area. Rows are
+  keyed on `land_id` with `claim_id`, and the union of the two kinds is written
+  as `landslide_area_m2`.
 - Over the Wellington pilot 37 properties of 4,764 are reached. That number is
   not to be quoted: the hazard realisation currently produces about two orders
   of magnitude less damaged ground than the ESNZ grid's own expectation, because
@@ -111,8 +114,8 @@ Marks: `[x]` done, `[~]` partly done, `[>]` next, `[ ]` planned.
 - **L-15** — land whose settlement is driven by cost of repair rather than land
   value does not fit the value-based cost model. The repair costing above is
   what closes it; it is not closed yet.
-- **L-11** — the claim-level identifier. The chain runs on `address_id`; the
-  claim key is minted at the loss boundary when the two decouple.
+- **L-11** — the claim-level identifier. Superseded: the chain runs on the
+  upstream `claim_id` from exposure step 5, and `land_id` is per polygon.
 - **T-17**, **T-18** — NHC land damage claim costs, needed to validate modelled
   repair costs against settled ones.
 - Holding the cost model in `vul` departs from the module split in

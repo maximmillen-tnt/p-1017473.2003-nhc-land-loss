@@ -9,11 +9,11 @@ suburb (**T-19**) is the measure the real model would be calibrated against.
 So this module manufactures a population instead. **Everything here carries a
 ``beta`` name and is deleted when the real inference arrives** -- nothing in it
 is evidence about Wellington. What it does buy is the structure the rest of the
-chain reads: a line per wall, keyed to an address, carrying a size class and an
+chain reads: a line per wall, keyed to a claim, carrying a size class and an
 initial condition.
 
 Slope is the only driver, because it is the only one of the real model's inputs
-already attached to every address. That is defensible as far as it goes -- a
+already attached to every insured property. That is defensible as far as it goes -- a
 wall exists to hold up ground that will not stand at its own angle, so steep
 ground carries more walls and taller ones -- and it is nowhere near enough: it
 knows nothing about cut-and-fill, road batters, section shape or the age of the
@@ -31,6 +31,7 @@ import pandas as pd
 from shapely.geometry import LineString
 
 from landloss.common.utils.terrain import azimuth_offsets
+from landloss.domain.loss_contract import CLAIM_ID_COLUMN
 
 # The size class boundaries, in metres of retained height. Set by what the
 # costing can tell apart rather than by engineering interest: above the sub-cap
@@ -65,7 +66,7 @@ BETA_LENGTH_SHARE = 0.5
 
 # The columns the population is keyed and sized on, fixed by the layer step 5
 # writes rather than varying per caller.
-ID_COLUMN = "claim_id"
+ID_COLUMN = CLAIM_ID_COLUMN
 AREA_COLUMN = "area_m2"
 
 COLUMNS = (ID_COLUMN, "size_class", "initial_condition", "height_m", "length_m")
@@ -132,10 +133,11 @@ def wall_lines(
     """Return a wall line per property, lying along the contour.
 
     A retaining wall runs across the slope rather than down it, so each line is
-    drawn perpendicular to the downhill direction and centred on the property's
-    address point. That is the crudest placement that puts a wall where one
-    could be: it is the right orientation and the wrong position, since nothing
-    here knows where on the section the wall actually sits.
+    drawn perpendicular to the downhill direction and centred on the
+    representative point of the claim's insured land polygon. That is the
+    crudest placement that puts a wall where one could be: it is the right
+    orientation and the wrong position, since nothing here knows where on the
+    section the wall actually sits.
 
     Args:
         points: One point per property, in a projected CRS.
@@ -174,7 +176,7 @@ def wall_lines(
 
 
 def beta_wall_population(
-    addresses: gpd.GeoDataFrame,
+    properties: gpd.GeoDataFrame,
     rng: np.random.Generator,
     *,
     slope_column: str = "slope_deg",
@@ -186,8 +188,9 @@ def beta_wall_population(
     then sized, conditioned and placed along the contour.
 
     Args:
-        addresses: One row per property, carrying the slope, downhill azimuth,
-            insured area and identifier columns named below, with point geometry.
+        properties: One row per claim, carrying the slope, downhill azimuth,
+            insured area and claim id columns named below, with point geometry
+            at the representative point of the claim's insured land.
         rng: The generator for this realisation's exposure stream.
         slope_column: Ground slope in degrees.
         azimuth_column: Downhill bearing in degrees clockwise from grid north.
@@ -200,26 +203,26 @@ def beta_wall_population(
         ValueError: If a required column is missing.
     """
     required = (slope_column, azimuth_column, AREA_COLUMN, ID_COLUMN)
-    missing = [column for column in required if column not in addresses.columns]
+    missing = [column for column in required if column not in properties.columns]
     if missing:
-        msg = f"addresses is missing {missing}"
+        msg = f"properties is missing {missing}"
         raise ValueError(msg)
 
-    slope = addresses[slope_column].to_numpy(dtype=float)
+    slope = properties[slope_column].to_numpy(dtype=float)
     prevalence = beta_wall_prevalence(slope)
 
     # A property with no slope sampled cannot be placed, so it draws no wall
     # rather than being treated as flat.
     known = np.isfinite(slope) & np.isfinite(
-        addresses[azimuth_column].to_numpy(dtype=float)
+        properties[azimuth_column].to_numpy(dtype=float)
     )
-    has_wall = known & (rng.random(len(addresses)) < prevalence)
-    walls = addresses.loc[has_wall].copy()
+    has_wall = known & (rng.random(len(properties)) < prevalence)
+    walls = properties.loc[has_wall].copy()
     if walls.empty:
         return gpd.GeoDataFrame(
             {column: [] for column in COLUMNS},
-            geometry=gpd.GeoSeries([], crs=addresses.crs),
-            crs=addresses.crs,
+            geometry=gpd.GeoSeries([], crs=properties.crs),
+            crs=properties.crs,
         )
 
     height = beta_wall_height_m(walls[slope_column].to_numpy(dtype=float))
@@ -243,7 +246,7 @@ def beta_wall_population(
             walls[azimuth_column].to_numpy(dtype=float),
             length,
         ).to_numpy(),
-        crs=addresses.crs,
+        crs=properties.crs,
     )
 
 

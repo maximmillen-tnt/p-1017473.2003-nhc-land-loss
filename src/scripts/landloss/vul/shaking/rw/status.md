@@ -2,7 +2,7 @@
 
 **Status:** A damage state is drawn on every wall. The fragility is a flat 70%.
 
-**Updated:** 2026-09-23
+**Updated:** 2026-09-24
 
 ## Approach
 
@@ -30,18 +30,18 @@ What this module owes the retaining wall table `loss` reads, as set in
 
 Marks: `[x]` done, `[~]` partly done, `[>]` next, `[ ]` planned.
 
-- [ ] Carry `rw_id` through from the exposure module.
+- [x] Carry `rw_id` through from the exposure module.
 - [x] Carry `claim_id`, `rw_size` (`size_class`) and `rw_length` (`length_m`).
 - [~] Supply `is_damaged_by_shaking`, from `damage_state`. Drawn on a flat 70%.
-- [ ] Carry coordinates. The wall line is dropped when the state is written.
-- [ ] Supply `is_evacuated` and `is_inundated`. Nothing intersects walls with
-  the landslide polygons yet (plan section 4.4).
+- [x] Carry coordinates. The wall line is written as the geometry.
+- [x] Supply `is_evacuated` and `is_inundated`, from vul/landslide/rw s11.
 
 ## Where it is now
 
 - `steps/s9_wall_damage_state/` reads the wall population and the realisation's
-  PGA field, draws a state per wall, and writes it with the wall's size class,
-  condition, height, length and sampled PGA.
+  PGA field, draws a state per wall, and writes it as GeoParquet with the wall's
+  `rw_id`, `claim_id`, size class, condition, height, length, sampled PGA and
+  line geometry.
 - The fragility is `BETA_FAILURE_PROBABILITY = 0.7` in
   `landloss.vul.shaking.fragility` — one number for every wall, whatever its
   size, condition or the acceleration it saw. Over the pilot's 754 walls, 523

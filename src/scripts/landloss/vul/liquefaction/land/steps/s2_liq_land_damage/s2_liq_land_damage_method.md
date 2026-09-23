@@ -9,10 +9,14 @@
   `ld_state_path()`, sampled at each property's **representative point** with
   `landloss.common.utils.terrain.sample_at_points`. A property therefore carries
   one state rather than a mixture of the states under it.
-- **A property outside the grid carries no state and no cost.** The liquefaction
-  model covers flat land, as expected, so over the Wellington pilot roughly two
-  properties in five come back with nothing. The run prints that split rather
-  than reporting it as coverage loss.
+- **A property outside the grid is state 1, None, at no cost.** The
+  liquefaction model covers flat land, as expected, so over the Wellington pilot
+  roughly two properties in five sit off it. Off the grid is ground that cannot
+  liquefy, so it is undamaged rather than unknown, and it is written as
+  `OFF_GRID_STATE` in `gen_liq_land_damage.py`. The cost is looked up on the
+  sampled state before that fill, so the Canterbury cost of state 1 (surveyed
+  flat land showing no damage) is not charged to it. `on_liq_grid` records
+  which properties were sampled, and the run prints the split.
 - Costs are looked up, not modelled, by `landloss.vul.liquefaction.costs`. They
   are what NHC settled for land damage after the 2010 and 2011 Canterbury
   earthquakes, grouped by the damage state surveyed on the ground, and shipped
@@ -20,7 +24,7 @@
 - **The rates are a cost per property, not per square metre**, which is what
   `rate_basis = "per_property"` on every row records. An area never multiplies
   them: a property assessed at Moderate cost what it cost, whatever its size.
-  Insured area and land rate ride along as columns because the loss module needs
+  Insured area and the GST-inclusive land rate ride along as columns because the loss module needs
   them for the market value side of the cap, not because the repair cost uses
   them.
 - **The percentile is a run-level scenario**, set by `COST_PERCENTILE` in
@@ -33,7 +37,13 @@
 - The money is **2011 dollars excluding GST**, recorded in `cost_year` on every
   row because land values are indexed to a different date and the loss module
   compares the two.
-- Output is `temp/vul/liq-land-damage-r<nnn>[-pilot].parquet`.
+- **Each row is keyed on `land_id` and `claim_id`**, both read from the insured
+  land. `land_id` is minted at exposure step 5 and follows `realisation_id` as
+  the first column; the names are imported from `landloss.domain.loss_contract`.
+- Output is `temp/vul/liq-land-damage-r<nnn>[-pilot].parquet`, a plain parquet
+  with **no geometry**. The coordinates on the land table are supplied at
+  `vul/steps/s10_property_damage` from the insured-land geometry, joined on
+  `land_id`.
 
 Potential future improvements see
 `s2_liq_land_damage_implementation_plan.md`.

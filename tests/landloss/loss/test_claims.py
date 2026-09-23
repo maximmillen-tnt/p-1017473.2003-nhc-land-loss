@@ -86,9 +86,7 @@ def test_the_refusal_names_the_claims_and_stops_at_five():
 
 
 def test_a_duplicated_claim_is_refused_as_ambiguous():
-    table = pd.DataFrame(
-        {CLAIM_ID_COLUMN: ["c1", "c1"], DWELLING_COUNT_COLUMN: [1, 4]}
-    )
+    table = pd.DataFrame({CLAIM_ID_COLUMN: ["c1", "c1"], DWELLING_COUNT_COLUMN: [1, 4]})
     with pytest.raises(ValueError, match="more than once"):
         dwelling_counts(["c1"], table)
 

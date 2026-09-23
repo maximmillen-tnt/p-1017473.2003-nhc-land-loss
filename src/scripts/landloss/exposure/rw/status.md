@@ -57,8 +57,10 @@ What this module owes the retaining wall table `loss` reads, as set in
 
 Marks: `[x]` done, `[~]` partly done, `[>]` next, `[ ]` planned.
 
-- [ ] Give every wall an `rw_id`. Walls are keyed on `claim_id` alone, so two
-  walls on one property cannot be told apart downstream.
+- [x] Give every wall an `rw_id`, `<claim_id>-RW<nn>`, minted in step 6 after
+  the coverage filter.
+- [x] Pass on only the walls that intersect their claim's insured land buffered
+  by 2 m (`keep_walls_on_insured_land`).
 - [x] Carry `claim_id`, `size_class` (the contract's `rw_size`) and `length_m`
   (`rw_length`).
 - [x] Carry coordinates, as the wall line.
@@ -69,7 +71,9 @@ Marks: `[x]` done, `[~]` partly done, `[>]` next, `[ ]` planned.
 insured property, prevalence and retained height ramped off slope alone, initial
 condition split evenly, and each wall placed as a line along the contour. Over
 the pilot box that is 758 walls over 4,764 properties, 15.9%, median retained
-height 1.8 m. The library behind it is `landloss.exposure.rw.beta_population`,
+height 1.8 m, counted before the coverage filter. Only walls intersecting their
+claim's insured land buffered by 2 m are now written, each with an `rw_id`. The
+library behind it is `landloss.exposure.rw.beta_population`,
 whose every public name carries `beta` because it is deleted when the real
 inference lands.
 

@@ -1,6 +1,6 @@
 # Step 3 — Landslide land damage: implementation plan
 
-**Status:** Phase 1 complete. The quantity is measured; nothing is priced.
+**Status:** Phases 1 and 1a complete. The quantity is measured; nothing is priced.
 
 ## Phase 1 — Damaged area and depth per property (complete)
 
@@ -12,6 +12,14 @@
       each landslide contributed.
 - [x] Check no property carries more damaged ground of either kind than it has
       insured land, and report it on every run.
+
+## Phase 1a — Loss contract keys and union (complete)
+
+- [x] Key rows on `land_id` from exposure step 5 and carry `claim_id` beside it.
+- [x] Write the union of evacuated and inundated ground as `landslide_area_m2`,
+      the contract's `land_slide_total_insured_land_area` (**Q-06**).
+- [x] Print the union total and the double count the sum would have made.
+- [ ] Rerun the pilot once exposure step 5 has been rerun with `land_id`.
 
 ## Phase 2 — Pricing
 

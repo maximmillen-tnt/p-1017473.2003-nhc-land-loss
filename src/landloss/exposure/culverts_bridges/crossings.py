@@ -30,6 +30,9 @@ this produces is therefore a floor rather than an estimate.
 import geopandas as gpd
 import numpy as np
 import pandas as pd
+import shapely
+
+from landloss.domain.loss_contract import CLAIM_ID_COLUMN
 
 # The split between the two structures at a crossing. Exhaustive: a crossing
 # carries one or the other, because the accessway has to get over the water
@@ -41,7 +44,6 @@ CULVERT = "culvert"
 BRIDGE = "bridge"
 STRUCTURES = (CULVERT, BRIDGE)
 
-CLAIM_ID_COLUMN = "claim_id"
 STRUCTURE_COLUMN = "structure"
 WATERCOURSE_SOURCE_COLUMN = "watercourse_source"
 
@@ -49,6 +51,10 @@ WATERCOURSE_SOURCE_COLUMN = "watercourse_source"
 # reading both layers earned over reading the lines alone.
 FROM_LINES = "lines"
 FROM_POLYGONS = "polygons"
+# A crossing both layers found, where a river polygon has its centreline
+# running through it, merged into one row.
+FROM_BOTH = "both"
+SOURCES = (FROM_LINES, FROM_POLYGONS, FROM_BOTH)
 
 
 def _crossing_geometry(
@@ -67,6 +73,66 @@ def _crossing_geometry(
     return overlay[~overlay.geometry.is_empty]
 
 
+def _component_labels(crossings: gpd.GeoDataFrame, id_column: str) -> np.ndarray:
+    """Label the groups of same-claim crossings that intersect one another.
+
+    Args:
+        crossings: The crossings found on both layers, with a default index.
+        id_column: The property identifier the groups must share.
+
+    Returns:
+        One label per row; rows sharing a label are one physical crossing.
+    """
+    parent = np.arange(len(crossings))
+
+    def root(i: int) -> int:
+        while parent[i] != i:
+            parent[i] = parent[parent[i]]
+            i = parent[i]
+        return i
+
+    claims = crossings[id_column].to_numpy()
+    left, right = crossings.sindex.query(crossings.geometry, predicate="intersects")
+    for i, j in zip(left, right, strict=True):
+        if i < j and claims[i] == claims[j]:
+            parent[root(j)] = root(i)
+    return np.array([root(i) for i in range(len(crossings))])
+
+
+def _merge_shared_crossings(
+    crossings: gpd.GeoDataFrame, id_column: str
+) -> gpd.GeoDataFrame:
+    """Merge the rows of one claim that are the same physical crossing.
+
+    The two layers overlap where a river polygon has its centreline running
+    through it, so one accessway over that river is found twice. Any rows of the
+    same claim that intersect are unioned into one, so each physical crossing
+    becomes one structure and one row in the loss tables.
+
+    Args:
+        crossings: The crossings found on both layers, with a default index.
+        id_column: The property identifier carried onto each crossing.
+
+    Returns:
+        One row per physical crossing, in first-found order. A merged row found
+        on both layers carries :data:`FROM_BOTH`.
+    """
+    labels = pd.Series(_component_labels(crossings, id_column), index=crossings.index)
+    merged = crossings[~labels.duplicated().to_numpy()].copy()
+    shared = labels[labels.duplicated(keep=False)]
+    for _, members in shared.groupby(shared):
+        group = crossings.loc[members.index]
+        position = members.index[0]
+        sources = set(group[WATERCOURSE_SOURCE_COLUMN])
+        merged.loc[position, WATERCOURSE_SOURCE_COLUMN] = (
+            sources.pop() if len(sources) == 1 else FROM_BOTH
+        )
+        merged.loc[position, merged.geometry.name] = shapely.union_all(
+            group.geometry.to_numpy()
+        )
+    return merged.reset_index(drop=True)
+
+
 def detect_crossings(
     accessways: gpd.GeoDataFrame,
     river_lines: gpd.GeoDataFrame,
@@ -83,9 +149,11 @@ def detect_crossings(
         id_column: The property identifier carried onto each crossing.
 
     Returns:
-        One row per crossing, carrying ``id_column``,
-        :data:`WATERCOURSE_SOURCE_COLUMN` and the crossing geometry. A property
-        whose accessway crosses nothing has no row.
+        One row per physical crossing, carrying ``id_column``,
+        :data:`WATERCOURSE_SOURCE_COLUMN` and the crossing geometry. Crossings
+        of the same property that intersect, such as a river found on both
+        layers, are merged into one row. A property whose accessway crosses
+        nothing has no row.
 
     Raises:
         ValueError: If the frames disagree on their coordinate reference system,
@@ -119,9 +187,10 @@ def detect_crossings(
         )
 
     combined = pd.concat(found, ignore_index=True)
-    return gpd.GeoDataFrame(
+    combined = gpd.GeoDataFrame(
         combined, geometry=combined.geometry.name, crs=accessways.crs
     )
+    return _merge_shared_crossings(combined, id_column)
 
 
 def sample_structures(
@@ -167,7 +236,7 @@ def describe_crossings(crossings: gpd.GeoDataFrame, accessways: int) -> pd.Serie
         return pd.Series(summary)
     for structure in STRUCTURES:
         summary[structure] = int((crossings[STRUCTURE_COLUMN] == structure).sum())
-    for source in (FROM_LINES, FROM_POLYGONS):
+    for source in SOURCES:
         summary[f"found on {source}"] = int(
             (crossings[WATERCOURSE_SOURCE_COLUMN] == source).sum()
         )

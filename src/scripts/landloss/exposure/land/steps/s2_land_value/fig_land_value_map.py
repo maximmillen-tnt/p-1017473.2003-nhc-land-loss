@@ -389,7 +389,8 @@ def main():
             "Run s4_estimate_land_value.py first:\n"
             "  uv run --frozen python "
             "src/scripts/landloss/exposure/land/steps/s2_land_value/"
-            "s4_estimate_land_value.py" + (" --pilot" if args.pilot else "")
+            "s4_estimate_land_value.py"
+            + ("\n  with PILOT = True in the config.py beside it" if args.pilot else "")
         )
         return 1
 

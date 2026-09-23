@@ -518,7 +518,7 @@ def main():
         print(
             f"Run {BUILDER} first:\n"
             f"  uv run --frozen python {BUILDER_PATH}"
-            + (" --pilot" if args.pilot else "")
+            + ("\n  with PILOT = True in the config.py beside it" if args.pilot else "")
         )
         return 1
 

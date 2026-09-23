@@ -4,6 +4,12 @@
   `s1_build_terrain_attributes.py` and `s4_estimate_land_value.py` read
   `temp/exposure/address-spine.geoparquet` and rebuild it from LINZ in their own
   `get_spine()` if it is not there, so either script runs on a clean checkout.
+- The run settings of both scripts — `PILOT`, `FRESH`, the `SPINE`,
+  `TERRAIN`, `LAND_VALUE_OUT` and `COHORTS_OUT` path overrides and the
+  `WINDOW_M` override — are read from the one `config.py` in this folder and
+  passed into each `main()` as keyword arguments; neither script takes
+  command-line arguments. Sharing `PILOT` and `TERRAIN` keeps s4 reading
+  what s1 wrote.
 - Each address is tagged flat or hill by
   `landloss.exposure.land.landform.classify_landform`, against the National
   Liquefaction Model flatland polygons read by
@@ -56,7 +62,7 @@
   by `sample_at_points`, and the sampled values written to
   `temp/exposure/terrain-by-address.geoparquet` carrying `address_id`,
   `slope_deg`, `topographic_position_m` and the geometry. All four take a
-  `-pilot` suffix under `--pilot`.
+  `-pilot` suffix when `PILOT` is True.
 - Nodata is masked to NaN before either derivative is computed, by
   `mask_nodata()` in `s1_build_terrain_attributes.py`, and the run names which
   of the three nodata cases the DEM presented. Addresses that still sampled no
@@ -113,7 +119,7 @@
   with `read_terrain()` and joins them with `attach_terrain()` — a left merge on
   `address_id` validated one-to-one, with the unmatched count printed — and when
   the file is absent it prints what the run is going without and values on
-  landform class alone. `--terrain` points the run at
+  landform class alone. `TERRAIN` in `config.py` points both scripts at
   a different file.
 - The run prints the calibration per territorial authority in
   `describe_calibration()` — the modelled mean, the indexed published average
@@ -131,7 +137,7 @@
   `temp/exposure/land-value-by-address.geoparquet`, and the cohort table from
   `landloss.exposure.land.land_value.summarise_by_suburb`, one row per territorial
   authority, suburb and landform class, to `temp/exposure/land-value-by-suburb.csv`.
-  Both take a `-pilot` suffix under `--pilot`, so a pilot run cannot overwrite
+  Both take a `-pilot` suffix when `PILOT` is True, so a pilot run cannot overwrite
   the full outputs.
 - The distribution of the modelled rate across the study area is shown in the
   figure produced by `fig_land_value_map.py`, written to

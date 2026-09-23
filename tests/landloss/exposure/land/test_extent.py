@@ -4,7 +4,9 @@ import geopandas as gpd
 import pytest
 from shapely.geometry import Point, box
 
-from landloss.domain import constants
+from landloss.domain import constants, loss_contract
+from landloss.exposure.land import driveways as driveways_module
+from landloss.exposure.land import extent as extent_module
 from landloss.exposure.land.extent import (
     ADDRESS_ID_COLUMN,
     AREA_COLUMN,
@@ -69,6 +71,11 @@ def build(boundaries, buildings, addresses, **kwargs):
     properties = build_claim_properties(boundaries)
     dwellings = count_dwellings(properties, addresses)
     return build_insured_land_extent(properties, buildings, dwellings, **kwargs)
+
+
+def test_the_claim_id_is_the_shared_contract_name():
+    assert extent_module.CLAIM_ID_COLUMN == loss_contract.CLAIM_ID_COLUMN
+    assert driveways_module.CLAIM_ID_COLUMN == loss_contract.CLAIM_ID_COLUMN
 
 
 def test_one_building_gives_one_buffered_polygon():

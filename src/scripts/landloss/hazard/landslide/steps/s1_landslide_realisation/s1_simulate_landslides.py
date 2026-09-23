@@ -474,8 +474,6 @@ def build_failures(probability, slope, azimuth, rng):
 
     rows, columns = np.nonzero(failed)
     drawn = int(rows.size)
-    if drawn == 0:
-        return gpd.GeoDataFrame(geometry=[], crs=probability.rio.crs), 0, 0
 
     eastings = probability["x"].to_numpy()[columns]
     northings = probability["y"].to_numpy()[rows]
@@ -795,24 +793,26 @@ def draw_realisation(probability, slope, azimuth, *, pilot, realisation_id):
         )
         raise ValueError(msg)
 
-    if failures.empty:
-        print("\nNothing failed in this realisation, so there is nothing to write.")
-        return
-
     survivors = drop_overlapping(failures)
     print(
         f"  {len(failures) - len(survivors):,} dropped for overlapping a larger "
         f"failure, leaving {len(survivors):,}"
     )
 
-    print(RULE)
-    describe_distribution(survivors["source_area_m2"], "Source area", "m2")
-    describe_distribution(survivors["slope_degrees"], "Slope", "degrees")
-    describe_distribution(survivors["displacement_m"], "Displacement", "m")
-
     polygons = to_polygons(survivors)
     polygons[REALISATION_ID_COLUMN] = realisation_id
-    describe_result(polygons)
+
+    # No failures is a result, and it is written as one: an empty layer with the
+    # full schema, so every step reading this realisation finds a file and
+    # reports nothing damaged rather than stopping on a missing input.
+    if failures.empty:
+        print("\nNothing failed in this realisation; writing an empty layer.")
+    else:
+        print(RULE)
+        describe_distribution(survivors["source_area_m2"], "Source area", "m2")
+        describe_distribution(survivors["slope_degrees"], "Slope", "degrees")
+        describe_distribution(survivors["displacement_m"], "Displacement", "m")
+        describe_result(polygons)
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     polygons.to_parquet(out_path)

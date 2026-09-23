@@ -47,8 +47,9 @@ asset, and adds only money and policy wording.
 
 **A submodule is created when there is something to put in it**, not up front.
 At the time of writing the populated ones are `exposure/land`,
-`hazard/liquefaction`, `hazard/landslide` and `vul/liquefaction/land`; the rest
-appear as the work reaches them.
+`hazard/liquefaction`, `hazard/landslide`, `vul/liquefaction/land`,
+`vul/landslide/rw` and `vul/landslide/culverts_bridges`; the rest appear as the
+work reaches them.
 
 ### Each submodule carries a `status.md`
 
@@ -154,7 +155,8 @@ Three packages sit outside the four modules because all of them need them:
 
 - `src/landloss/domain/` — constants shared across the model: the default CRS
   (NZTM, `EPSG:2193`), the Koordinates domains and their API key variables, and
-  layer IDs.
+  layer IDs. `loss_contract.py` holds the column names of the tables `vul` hands
+  to `loss`, which every producer imports rather than retyping.
 - `src/landloss/io/` — readers for the datasets the models are built from, and
   `area_of_interest.py`, which holds the named study extents.
 - `src/landloss/common/utils/` — helpers belonging to no one module. `plot.py`

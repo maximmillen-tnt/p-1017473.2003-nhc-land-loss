@@ -550,7 +550,7 @@ def main():
         print(f"No land value output found at {path}")
         print(f"\nRun the land value step first:\n  {STEP_COMMAND}")
         if args.pilot:
-            print("    --pilot")
+            print("  with PILOT = True in the config.py beside it")
         return 1
 
     print(f"Reading {path}")

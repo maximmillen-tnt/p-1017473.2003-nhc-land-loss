@@ -4,7 +4,7 @@
 applied to an insured land extent buffered off every building on the property,
 driveways included, clipped to the boundary.
 
-**Updated:** 2026-09-23
+**Updated:** 2026-09-24
 
 ## Approach
 
@@ -49,11 +49,14 @@ What this module owes the land table `loss` reads, as set in
 
 Marks: `[x]` done, `[~]` partly done, `[>]` next, `[ ]` planned.
 
-- [ ] Supply a `land_id` per insured land polygon. None is written; while a
-  claim is one polygon, `claim_id` could serve as both.
+- [x] Supply a `land_id` per insured land polygon, `<claim_id>-L01`, minted in
+  `steps/s5_insured_land_extent/`.
 - [x] Supply `claim_id`, the LINZ property boundary's identifier.
-- [~] Supply the `$/m2 market value`, written as `land_rate_nzd_per_m2`. Still
-  the mean of the address rates on an assumed lot size (`Next` 2 and 3).
+- [~] Supply the `$/m2 market value`, written both sides of GST as
+  `land_rate_excl_gst_nzd_per_m2` and `land_rate_incl_gst_nzd_per_m2` by
+  `landloss.domain.gst.add_gst`; only the inclusive rate reaches `loss`. Still
+  the mean of the address rates on an assumed lot size (`Next` 2 and 3), and
+  step 2's rate is assumed to exclude GST.
 - [x] Supply `total_insured_land_area`, written as `area_m2`.
 - [x] Supply coordinates, as the insured land polygon.
 - [x] Supply `dwelling_count`. The contract omits it, but `loss` needs it for
@@ -80,8 +83,8 @@ polygon now includes the driveway and is cut to the property boundary.
 - `steps/s5_insured_land_extent/` builds the claim properties from the LINZ
   property boundaries, buffers every building standing on one by 8 m, unions the
   driveways in and clips the result to the boundary, writing
-  `insured-land.geoparquet` under `temp/exposure/` carrying `claim_id`,
-  `land_rate_nzd_per_m2`, `area_m2`, `property_area_m2`, `building_count`,
+  `insured-land.geoparquet` under `temp/exposure/` carrying `land_id`,
+  `claim_id`, `land_rate_nzd_per_m2`, `area_m2`, `property_area_m2`, `building_count`,
   `dwelling_count` and the polygon. That layer is what the hazard modules
   intersect against.
 - Over the Wellington pilot that is **4,388 claims covering 8,438 of the 8,591

@@ -10,6 +10,10 @@ That is what the per-TA table this run prints is there to show.
 
     uv run --frozen python src/scripts/landloss/exposure/land/steps/s2_land_value/s4_estimate_land_value.py
 
+The run settings -- the pilot box or the full study area, whether to ignore the
+caches, and the input and output paths -- come from config.py beside this
+script rather than from the command line.
+
 The script is numbered s4 within this step, not s1, because terrain,
 accessibility and amenity are s1 to s3 of the same step. Terrain is the one of
 those three that Phase 2 builds, in s1_build_terrain_attributes.py; the gap at
@@ -30,13 +34,13 @@ Phase 1 behaviour and says so, so that the two steps can be run independently
 and a new extent can be valued before any DEM has been fetched for it.
 
 The address spine is rebuilt from LINZ if it is not already on disk, so this can
-be run on its own. Pass --pilot to work over the small Wellington box.
+be run on its own. Set PILOT in config.py to work over the small Wellington
+box.
 
 Requires TNT_KOORDINATES_API_KEY in .env for the flatland layer, and LINZ_API_KEY
 if the address spine has to be rebuilt.
 """
 
-import argparse
 import sys
 from pathlib import Path
 
@@ -66,6 +70,7 @@ from landloss.exposure.land.landform import (
     get_flatland,
 )
 from landloss.io.area_of_interest import SMALL_WLG_PILOT, get_study_areas
+from scripts.landloss.exposure.land.steps.s2_land_value import config
 from scripts.landloss.paths import REPO_ROOT, TEMP_DIR
 
 # Wellington suburb names are macronised -- Ōwhiro Bay, Pāuatahanui -- which the
@@ -350,88 +355,37 @@ def describe_suburbs(cohorts, limit=SUBURB_LIMIT):
             )
 
 
-def parse_args():
-    """Read the command line."""
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "--pilot",
-        action="store_true",
-        help="Use the small Wellington pilot box instead of the full study area.",
-    )
-    parser.add_argument(
-        "--fresh",
-        action="store_true",
-        help="Ignore the extent cache and re-read from the source layers.",
-    )
-    parser.add_argument(
-        "--spine",
-        type=Path,
-        default=None,
-        help=(
-            f"The address spine from step 1. Defaults to {WORK_DIR / SPINE_NAME}, "
-            f"or to {WORK_DIR / PILOT_SPINE_NAME} under --pilot. Rebuilt from "
-            "LINZ if it is not there."
-        ),
-    )
-    parser.add_argument(
-        "--terrain",
-        type=Path,
-        default=None,
-        help=(
-            f"The terrain attributes from s1. Defaults to "
-            f"{WORK_DIR / TERRAIN_NAME}, or to {WORK_DIR / PILOT_TERRAIN_NAME} "
-            "under --pilot. If the file is not there the run falls back to "
-            "valuing on landform class alone."
-        ),
-    )
-    parser.add_argument(
-        "--out",
-        type=Path,
-        default=None,
-        help=(
-            f"Where to write the valued addresses. Defaults to "
-            f"{WORK_DIR / OUT_NAME}, or to {WORK_DIR / PILOT_OUT_NAME} under "
-            "--pilot."
-        ),
-    )
-    parser.add_argument(
-        "--cohorts",
-        type=Path,
-        default=None,
-        help=(
-            f"Where to write the per-suburb cohort table. Defaults to "
-            f"{WORK_DIR / COHORTS_NAME}, or to {WORK_DIR / PILOT_COHORTS_NAME} "
-            "under --pilot."
-        ),
-    )
-    return parser.parse_args()
+def _default(path, pilot_name, name, *, pilot):
+    """Return ``path`` as a Path, or the standard location under temp/exposure/."""
+    if path is not None:
+        return Path(path)
+    return WORK_DIR / (pilot_name if pilot else name)
 
 
-def resolve_outputs(args):
+def resolve_outputs(*, pilot, spine, terrain, out, cohorts):
     """Choose where the spine is read from and where the two outputs are written.
 
-    Resolved here rather than as argparse defaults, so that a pilot run cannot
+    Resolved here rather than as config defaults, so that a pilot run cannot
     overwrite the full outputs with a few streets of Wellington and leave
     everything downstream reading them without noticing.
 
     Args:
-        args: The parsed command line.
+        pilot: Whether the run is over the pilot box.
+        spine: The address spine path from config.py, or None for the default.
+        terrain: The terrain attributes path, or None for the default.
+        out: The valued address path, or None for the default.
+        cohorts: The cohort table path, or None for the default.
 
     Returns:
         The spine path, the terrain path, the valued address path and the cohort
         table path.
     """
-    spine_path = args.spine or WORK_DIR / (
-        PILOT_SPINE_NAME if args.pilot else SPINE_NAME
+    return (
+        _default(spine, PILOT_SPINE_NAME, SPINE_NAME, pilot=pilot),
+        _default(terrain, PILOT_TERRAIN_NAME, TERRAIN_NAME, pilot=pilot),
+        _default(out, PILOT_OUT_NAME, OUT_NAME, pilot=pilot),
+        _default(cohorts, PILOT_COHORTS_NAME, COHORTS_NAME, pilot=pilot),
     )
-    terrain_path = args.terrain or WORK_DIR / (
-        PILOT_TERRAIN_NAME if args.pilot else TERRAIN_NAME
-    )
-    out = args.out or WORK_DIR / (PILOT_OUT_NAME if args.pilot else OUT_NAME)
-    cohorts_out = args.cohorts or WORK_DIR / (
-        PILOT_COHORTS_NAME if args.pilot else COHORTS_NAME
-    )
-    return spine_path, terrain_path, out, cohorts_out
 
 
 def resolve_extent(study_areas, *, pilot):
@@ -515,24 +469,44 @@ def write_outputs(valued, cohorts, out, cohorts_out):
     print(f"  Rows    : {len(cohorts):,} suburb/landform cohorts")
 
 
-def main():
-    args = parse_args()
-    spine_path, terrain_path, out, cohorts_out = resolve_outputs(args)
+def main(*, pilot, fresh, spine, terrain, out, cohorts):
+    """Estimate a land value for every address in the spine.
+
+    Args:
+        pilot: Use the small Wellington pilot box instead of the full study area.
+        fresh: Ignore the extent cache and re-read from the source layers.
+        spine: The address spine from step 1. None reads the standard location
+            under temp/exposure/, with a pilot name when ``pilot`` is True.
+            Rebuilt from LINZ if it is not there.
+        terrain: The terrain attributes from s1. None reads the standard
+            location. If the file is not there the run falls back to valuing on
+            landform class alone.
+        out: Where to write the valued addresses. None writes to the standard
+            location.
+        cohorts: Where to write the per-suburb cohort table. None writes to the
+            standard location.
+
+    Returns:
+        1 if the spine or the flatland layer could not be had, otherwise None.
+    """
+    spine_path, terrain_path, out, cohorts_out = resolve_outputs(
+        pilot=pilot, spine=spine, terrain=terrain, out=out, cohorts=cohorts
+    )
 
     study_areas = get_study_areas(constants.DEFAULT_CRS)
-    bbox, clip_to, extent_name = resolve_extent(study_areas, pilot=args.pilot)
+    bbox, clip_to, extent_name = resolve_extent(study_areas, pilot=pilot)
     describe_extent(extent_name, bbox)
 
-    spine = read_spine(spine_path, bbox, clip_to, use_cache=not args.fresh)
-    if spine is None:
+    addresses = read_spine(spine_path, bbox, clip_to, use_cache=not fresh)
+    if addresses is None:
         return 1
-    if spine.empty:
+    if addresses.empty:
         print("\nThe address spine is empty; there is nothing to value.")
         return 1
 
-    print(f"Addresses in the spine: {len(spine):,}")
+    print(f"Addresses in the spine: {len(addresses):,}")
     print("\nReading the NLM flatland layer ...")
-    flatland = read_flatland(bbox, clip_to, use_cache=not args.fresh)
+    flatland = read_flatland(bbox, clip_to, use_cache=not fresh)
     if flatland is None:
         return 1
 
@@ -541,26 +515,31 @@ def main():
     base_rates = load_base_rates()
     factors = load_factors()
 
-    classified = classify_landform(spine, flatland)
+    classified = classify_landform(addresses, flatland)
 
-    terrain = read_terrain(terrain_path)
-    if terrain is not None:
-        classified = attach_terrain(classified, terrain, factors)
+    attributes = read_terrain(terrain_path)
+    if attributes is not None:
+        classified = attach_terrain(classified, attributes, factors)
 
     describe_landform(classified)
 
     valued = estimate_land_value(classified, base_rates=base_rates, factors=factors)
     describe_calibration(valued, base_rates)
 
-    cohorts = summarise_by_suburb(valued)
-    describe_distinct_rates(valued, cohorts)
-    describe_suburbs(cohorts)
+    cohort_table = summarise_by_suburb(valued)
+    describe_distinct_rates(valued, cohort_table)
+    describe_suburbs(cohort_table)
 
-    write_outputs(valued, cohorts, out, cohorts_out)
-    return 0
+    write_outputs(valued, cohort_table, out, cohorts_out)
+    return None
 
 
 if __name__ == "__main__":
-    status = main()
-    if status:
-        raise SystemExit(status)
+    main(
+        pilot=config.PILOT,
+        fresh=config.FRESH,
+        spine=config.SPINE,
+        terrain=config.TERRAIN,
+        out=config.LAND_VALUE_OUT,
+        cohorts=config.COHORTS_OUT,
+    )

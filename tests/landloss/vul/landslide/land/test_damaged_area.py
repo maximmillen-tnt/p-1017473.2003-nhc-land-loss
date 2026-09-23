@@ -1,10 +1,11 @@
 import geopandas as gpd
 import pytest
-from shapely.geometry import box
+from shapely.geometry import Point, box
 
 from landloss.vul.landslide.land.damaged_area import (
     EVACUATED,
     INUNDATED,
+    UNION_AREA_COLUMN,
     check_within_insured_area,
     damaged_area_per_property,
 )
@@ -24,10 +25,10 @@ def insured(*bounds_and_ids):
 
 def slides(*specs):
     classes, depths, geoms = [], [], []
-    for land_class, depth, bounds in specs:
+    for land_class, depth, shape in specs:
         classes.append(land_class)
         depths.append(depth)
-        geoms.append(box(*bounds))
+        geoms.append(box(*shape) if isinstance(shape, tuple) else shape)
     return gpd.GeoDataFrame(
         {"land_class": classes, "depth_m": depths}, geometry=geoms, crs=CRS
     )
@@ -110,3 +111,78 @@ def test_landslides_without_a_land_class_are_refused():
     hazard = slides((EVACUATED, 1.0, (0, 0, 20, 20))).drop(columns=["land_class"])
     with pytest.raises(ValueError, match="land_class"):
         damaged_area_per_property(land, hazard)
+
+
+def test_ground_both_evacuated_and_inundated_counts_once_in_the_union():
+    land = insured(("A-001", (0, 0, 100, 100)))
+    evacuated = Point(40, 50).buffer(20)
+    inundated = Point(60, 50).buffer(20)
+    hazard = slides((EVACUATED, 1.0, evacuated), (INUNDATED, 0.5, inundated))
+    row = damaged_area_per_property(land, hazard).iloc[0]
+    assert row[UNION_AREA_COLUMN] == pytest.approx(evacuated.union(inundated).area)
+    assert row[UNION_AREA_COLUMN] < (
+        row["evacuated_area_m2"] + row["inundated_area_m2"]
+    )
+
+
+def test_disjoint_kinds_of_ground_sum_in_the_union():
+    land = insured(("A-001", (0, 0, 20, 20)))
+    hazard = slides((EVACUATED, 1.0, (0, 0, 10, 20)), (INUNDATED, 0.5, (10, 0, 20, 5)))
+    row = damaged_area_per_property(land, hazard).iloc[0]
+    assert row[UNION_AREA_COLUMN] == pytest.approx(
+        row["evacuated_area_m2"] + row["inundated_area_m2"]
+    )
+
+
+def test_the_union_is_at_least_the_larger_kind():
+    land = insured(("A-001", (0, 0, 20, 20)))
+    hazard = slides((EVACUATED, 1.0, (0, 0, 15, 20)), (INUNDATED, 0.5, (5, 0, 10, 20)))
+    row = damaged_area_per_property(land, hazard).iloc[0]
+    largest = max(row["evacuated_area_m2"], row["inundated_area_m2"])
+    assert row[UNION_AREA_COLUMN] >= largest - 1e-9
+    assert row[UNION_AREA_COLUMN] == pytest.approx(300.0)
+
+
+def test_the_union_never_exceeds_the_property_it_sits_on():
+    land = insured(("A-001", (0, 0, 20, 20)))
+    hazard = slides(
+        (EVACUATED, 1.0, (-50, -50, 10, 50)), (INUNDATED, 0.5, (5, -50, 50, 50))
+    )
+    row = damaged_area_per_property(land, hazard).iloc[0]
+    assert row[UNION_AREA_COLUMN] == pytest.approx(400.0)
+    assert row[UNION_AREA_COLUMN] <= land["area_m2"].iloc[0] * (1 + 1e-9)
+
+
+def test_no_landslides_still_carries_the_union_column():
+    land = insured(("A-001", (0, 0, 20, 20)))
+    empty = gpd.GeoDataFrame(
+        {"land_class": [], "depth_m": []}, geometry=gpd.GeoSeries([], crs=CRS), crs=CRS
+    )
+    damaged = damaged_area_per_property(land, empty)
+    assert damaged.empty
+    assert UNION_AREA_COLUMN in damaged.columns
+
+
+def test_the_output_is_keyed_on_the_named_identifier():
+    land = insured(("A-001", (0, 0, 20, 20))).rename(columns={"claim_id": "land_id"})
+    hazard = slides((EVACUATED, 1.0, (0, 0, 10, 20)), (INUNDATED, 0.5, (5, 0, 20, 20)))
+    damaged = damaged_area_per_property(land, hazard, id_column="land_id")
+    assert damaged.columns[0] == "land_id"
+    assert damaged["land_id"].tolist() == ["A-001"]
+    assert damaged[UNION_AREA_COLUMN].iloc[0] == pytest.approx(400.0)
+
+
+def test_an_oversize_union_is_flagged():
+    land = insured(("A-001", (0, 0, 20, 20)))
+    hazard = slides((EVACUATED, 1.0, (0, 0, 10, 20)))
+    damaged = damaged_area_per_property(land, hazard)
+    damaged[UNION_AREA_COLUMN] = 500.0
+    assert check_within_insured_area(damaged, land)["claim_id"].tolist() == ["A-001"]
+
+
+def test_a_union_smaller_than_either_kind_is_flagged():
+    land = insured(("A-001", (0, 0, 20, 20)))
+    hazard = slides((EVACUATED, 1.0, (0, 0, 10, 20)))
+    damaged = damaged_area_per_property(land, hazard)
+    damaged[UNION_AREA_COLUMN] = 100.0
+    assert check_within_insured_area(damaged, land)["claim_id"].tolist() == ["A-001"]
