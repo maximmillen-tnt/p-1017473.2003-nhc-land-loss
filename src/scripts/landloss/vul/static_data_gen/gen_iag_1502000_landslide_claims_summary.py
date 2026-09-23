@@ -10,7 +10,19 @@ text:
   Damage" heading, e.g. "Ngaire Bennie, 44 Cecil Road, Wadestown";
 - whether the report mentions landslide/landslip damage at all;
 - whether it goes on to describe an evacuated and/or an inundated land
-  extent, the two ways NHC settles landslide land damage.
+  extent, the two ways NHC settles landslide land damage, and the area (and,
+  where the report gives one, the volume) of each;
+- whether a retaining wall is reported damaged and/or undamaged.
+
+The area/volume and retaining wall figures are read off the "Property damage"
+table most reports carry, which lists an "Area of insured land damaged:"
+block ("Evacuated:"/"Inundated:" each followed by an "N m2", sometimes with an
+"(N m3)" volume alongside), and, where a wall is present, a
+"Damaged: (insured face area)" figure per retaining wall. This is a
+best-effort parse of a template that varies between report writers and
+years -- a handful of multi-hazard or multi-location reports mix figures from
+more than one damage area, and any field the parse can't find is left blank
+rather than guessed at.
 
 Run:
 
@@ -39,6 +51,98 @@ W_NS = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
 # The template heading every claim report opens with, right before the line
 # carrying the customer's name and the site address.
 CLAIM_TYPE_PATTERN = re.compile(r"^claim for natural disaster", re.IGNORECASE)
+
+# The "Property damage" table's own headings, in document order: the primary
+# land-damage block starts here and ends at whichever of the "at imminent
+# risk"/"main access way" headings comes next.
+LAND_DAMAGED_HEADING = re.compile(
+    r"^(?:insured )?area of insured land damaged\s*:?\s*$", re.IGNORECASE
+)
+LAND_DAMAGE_BLOCK_END = re.compile(
+    r"^(?:insured )?area of insured land at imminent risk|^main access way",
+    re.IGNORECASE,
+)
+AREA_PATTERN = re.compile(r"(\d+(?:\.\d+)?)\s*m[²2]", re.IGNORECASE)
+VOLUME_PATTERN = re.compile(r"(\d+(?:\.\d+)?)\s*m[³3]", re.IGNORECASE)
+
+# The per-wall damage figure in the retaining wall table, e.g.
+# "Damaged: (insured face area): 6.0 m2" (or "Nil" for an undamaged wall).
+RETAINING_WALL_DAMAGED_AREA = re.compile(
+    r"damaged:?\s*\(insured face area\):?\s*([\d.]+|nil)", re.IGNORECASE
+)
+# Narrative fallbacks for reports where a wall isn't in the formal table.
+RETAINING_WALL_DAMAGED_NARRATIVE = re.compile(
+    r"(collapse|rotat\w*|undermin\w*)[^.]{0,80}retaining wall"
+    r"|retaining wall[^.]{0,80}(collapse|rotat\w*|undermin\w*)",
+    re.IGNORECASE,
+)
+RETAINING_WALL_UNDAMAGED_NARRATIVE = re.compile(
+    r"no damage[^.]{0,80}retaining wall"
+    r"|retaining wall[^.]{0,80}(?:no damage|not damaged|undamaged)",
+    re.IGNORECASE,
+)
+
+
+def _area_or_nil(text: str) -> float | None:
+    """Return the first "N m2" figure in text, or 0.0 for a "Nil" extent."""
+    match = AREA_PATTERN.search(text)
+    if match:
+        return float(match.group(1))
+    return 0.0 if re.search(r"\bnil\b", text, re.IGNORECASE) else None
+
+
+def extract_land_damage(paragraphs: list[str]) -> dict[str, float | None]:
+    """Read the evacuated/inundated area and volume off the damage table.
+
+    Looks only at the report's primary "Area of insured land damaged:" block,
+    not any secondary "main access way" block a report may also carry.
+    """
+    block: list[str] = []
+    in_block = False
+    for paragraph in paragraphs:
+        stripped = paragraph.strip()
+        if in_block:
+            if LAND_DAMAGE_BLOCK_END.match(stripped):
+                break
+            block.append(stripped)
+        elif LAND_DAMAGED_HEADING.match(stripped):
+            in_block = True
+
+    evacuated_area = inundated_area = inundated_volume = None
+    for index, line in enumerate(block):
+        window = " ".join(block[index : index + 3])
+        if line.lower().startswith("evacuated"):
+            evacuated_area = _area_or_nil(window)
+        elif line.lower().startswith("inundated"):
+            inundated_area = _area_or_nil(window)
+            volume_match = VOLUME_PATTERN.search(window)
+            inundated_volume = float(volume_match.group(1)) if volume_match else None
+
+    total_area = (
+        evacuated_area + inundated_area
+        if evacuated_area is not None and inundated_area is not None
+        else None
+    )
+    return {
+        "evacuated_land_area_m2": evacuated_area,
+        "inundated_land_area_m2": inundated_area,
+        "inundated_land_volume_m3": inundated_volume,
+        "total_damaged_land_area_m2": total_area,
+    }
+
+
+def extract_retaining_wall_flags(full_text: str) -> dict[str, bool]:
+    """Flag whether the report records a damaged and/or an undamaged wall."""
+    damaged_areas = [
+        0.0 if value.lower() == "nil" else float(value)
+        for value in RETAINING_WALL_DAMAGED_AREA.findall(full_text)
+    ]
+    return {
+        "mentions_damaged_retaining_wall": any(area > 0 for area in damaged_areas)
+        or bool(RETAINING_WALL_DAMAGED_NARRATIVE.search(full_text)),
+        "mentions_undamaged_retaining_wall": any(area == 0 for area in damaged_areas)
+        or bool(RETAINING_WALL_UNDAMAGED_NARRATIVE.search(full_text)),
+    }
 
 
 def read_paragraphs(path: Path) -> list[str]:
@@ -73,6 +177,8 @@ def summarise_report(paragraphs: list[str]) -> dict[str, str | bool]:
         "has_landslide": "landslide" in full_text or "landslip" in full_text,
         "mentions_evacuated_extent": "evacuat" in full_text,
         "mentions_inundated_extent": "inundat" in full_text,
+        **extract_land_damage(paragraphs),
+        **extract_retaining_wall_flags(full_text),
     }
 
 
@@ -109,10 +215,20 @@ def main() -> int:
     inundated_count = sum(
         1 for summary in summaries if summary["mentions_inundated_extent"]
     )
+    damaged_wall_count = sum(
+        1 for summary in summaries if summary["mentions_damaged_retaining_wall"]
+    )
+    undamaged_wall_count = sum(
+        1 for summary in summaries if summary["mentions_undamaged_retaining_wall"]
+    )
     print(f"Wrote {len(summaries)} rows to {paths.IAG_1502000_LANDSLIDE_SUMMARY_CSV}")
     print(f"{landslide_count}/{len(summaries)} mention landslide/landslip")
     print(f"{evacuated_count}/{len(summaries)} mention an evacuated extent")
     print(f"{inundated_count}/{len(summaries)} mention an inundated extent")
+    print(f"{damaged_wall_count}/{len(summaries)} mention a damaged retaining wall")
+    print(
+        f"{undamaged_wall_count}/{len(summaries)} mention an undamaged retaining wall"
+    )
     return 0
 
 
