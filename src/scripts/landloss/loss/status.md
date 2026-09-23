@@ -28,9 +28,9 @@ build proceeds against it rather than waiting.
 - [~] **Price the land structures**, which this module owns: `vul` emits a
   damage state for walls, culverts and bridges rather than a cost, so both the
   repair cost and the undepreciated value are worked out here. Retaining wall
-  repair cost is built on the costing tool's own rates and site multiplier, on
-  a beta flat rate until a wall type mapping is settled. Undepreciated value
-  waits on its sheet of set fees, and culverts and bridges are not priced.
+  both a wall's repair cost and its undepreciated value are built on the costing
+  tool's own rates, on a beta flat rate until a wall type mapping is settled.
+  Culverts and bridges are not priced.
 - [ ] **Aggregate four tables to a claim.** `vul` hands over land, retaining
   walls, culverts and bridges as separate tables, each carrying `claim_id` and
   coordinates. The key arrives rather than being minted here, which is a change
@@ -51,6 +51,16 @@ The settlement core is built and is the only part that needed no upstream data.
 - `landloss.loss.settlement` holds `land_cover_cap_nzd`, `settle`,
   `DamagedClaim` and `Settlement`. Arrays in, arrays out, so a portfolio settles
   in one call.
+- The **area cap applies**: `damaged_land_value_nzd` values the lesser of the
+  damaged area and `area_cap_m2`. The claim takes an area and a rate rather than
+  a pre-multiplied market value, because the cap acts on the area — which is
+  also the shape `vul` sends.
+- **Inundation removal** is the first line of the Land SOW to land.
+  `inundation_volume_m3` and `classify_inundation_earthworks` turn the inundated
+  area and mean depth into an earthworks rating, so that one of the three site
+  ratings comes off the claim's own geometry. The volume bands, 20 m³ and
+  200 m³, are **assumed and unconfirmed** (**Q-11**), and the clearing is folded
+  into that rating rather than costed on its own (**L-33**).
 - `landloss.loss.pricing` carries the 29 retaining wall square-metre rates from
   the costing tool's `lists` sheet, excluding GST, and the site multiplier that
   goes on top: three ratings — construction access, earthworks required, and
@@ -75,19 +85,16 @@ The settlement core is built and is the only part that needed no upstream data.
 
 ## Next
 
-1. Undepreciated value, from the costing tool's own sheet of set fees. It is
-   not derivable from the square-metre rates, and without it `settle` has no
-   structure contribution to build the land cover cap from. This is what keeps
-   the settlement chain from closing for a wall claim.
-2. Replace the beta flat rate with a real mapping from size class and initial
+1. Replace the beta flat rate with a real mapping from size class and initial
    condition onto a construction type. The rates span a factor of 21, so this
    decides more of the answer than anything else in the module.
+2. Generate the three site ratings, without which no wall prices at all
+   (**Q-10**).
 3. Price culverts and bridges.
 4. Build a stub input generator matching the contract in
    `.agents/plans/beta-build.md`, so the module can run end to end before the
    upstream modules emit anything.
-5. Aggregate `vul`'s four tables onto `claim_id`, and apply the area cap, which
-   the contract's separate area and rate columns now make possible.
+5. Aggregate `vul`'s four tables onto `claim_id`.
 6. Wire to the real layers as each lands, structures last since shaking gates
    them.
 
@@ -98,7 +105,11 @@ The settlement core is built and is the only part that needed no upstream data.
   rather than one of several.
 - Share of claims binding on each constraint — repair cost, land cover cap, and
   each sub-cap. A sub-cap that never binds is not doing any work, and a spike of
-  claims settling at exactly a cap is either real or a bug.
+  claims settling at exactly a cap is either real or a bug. `Settlement` carries
+  `capped` and a flag per sub-cap, so each is read off the result rather than
+  reconstructed. On a claim with no damaged land, read the sub-cap flag rather
+  than `capped`: the cap is below the repair cost by construction there, so
+  `capped` is true of every such claim.
 - Claims where the excess exceeds what would otherwise be paid, counted rather
   than silently settled at zero.
 
@@ -128,10 +139,28 @@ The settlement core is built and is the only part that needed no upstream data.
   replaced rather than repaired, any flag being true is one replacement, not
   three — but nothing yet says whether the land areas behind those flags are
   already a union or have still to be unioned.
-- **What the site ratings are driven by.** The multiplier is implemented and the
-  duty geotechnical report supplies all three ratings, but nothing in the model
-  generates them yet, so every wall would currently have to be rated by hand or
-  by assumption.
+- **Where the site ratings come from (Q-10).** The multiplier applies to the
+  wall construction subtotal alone, which makes the three ratings a per-wall
+  figure belonging on the retaining wall table. `earthworks_required` can now be
+  derived from the inundation volume, but construction access and
+  constructability cannot, and `SiteRatings` has no default, so no wall can be
+  priced yet. They cannot be looked up for a synthetic population and have to be
+  inferred; the inputs — slope, and the building-to-road path — are already held
+  in `exposure`.
+- **What the inundation volume bands should be (Q-11).** 20 m³ and 200 m³ are
+  assumed and unconfirmed. They set the earthworks rating on every land claim,
+  and through it the markup on any wall on the same property.
+- **Whether inundation removal is its own cost line (L-33).** Folded into the
+  earthworks rating for now. Because the multiplier reaches wall construction
+  alone, a claim with inundated ground and no wall is currently charged nothing
+  for the clearing.
+- **Whether the replacement should be a higher specification than the wall it
+  replaces (L-34).** Both numbers come off the same square-metre rate, which is
+  how the costing spreadsheet works and is the agreed basis. It assumes the
+  replacement matches the wall that failed, where walls are often rebuilt to a
+  more substantial current standard that would want a higher rate on the repair
+  side. The bias runs one way — understating repair cost can only lower a
+  settlement — so the study under-reports rather than over-reports.
 - **Q-01** — whether a property can carry more than one claim, which decides
   whether the claim key is the identity of `address_id`.
 - **Q-02** — how the sub-caps interact where a property carries more than one,

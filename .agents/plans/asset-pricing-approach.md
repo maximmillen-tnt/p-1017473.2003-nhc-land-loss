@@ -114,6 +114,34 @@ portfolio comes from length and the site ratings alone. Drawing a height within
 the band, or setting it off the slope the wall sits on, would add that variation
 back. Deferred as **I-14**.
 
+### 1.2 The site multiplier applies to wall construction only **[confirmed]**
+
+The allowance for construction access, earthworks required, and constructability
+and reinstatement goes on the **wall construction subtotal** — the square metre
+rate by the wall face area — and on nothing else. It does not reach inundation
+removal, land reinstatement, or any other line of the scope of works.
+
+`nhc-costing-tool.md` records Chris Ewens describing the multipliers as applying
+to the Land SOW subtotal, which is the broader reading. The narrower scope is the
+decision for this study, and `landloss.loss.pricing` implements it.
+
+Two things follow:
+
+- **The ratings are per wall, not per claim.** A markup on one wall's
+  construction cannot be a claim-level figure, so the three belong beside
+  `rw_size` and `rw_length` on the retaining wall table.
+- **The `vul` contract does not carry them** (**Q-10**). `SiteRatings` is a
+  required argument with no default, so no wall can be priced until they arrive
+  — the same hard stop the dwelling count creates for `settle`.
+
+They are not a lookup. For a real claim the three come from a table in the duty
+geotechnical report, and at NHC's scale from flyover or satellite imagery;
+neither exists for a synthetic population, so for this study they have to be
+inferred, as wall prevalence and height are. The inputs are already held in
+`exposure`: slope drives earthworks and constructability, and
+`landloss.exposure.land.driveways` computes the building-to-road path that
+construction access turns on.
+
 ## 2. The settlement calculation
 
 **[confirmed]** — `nhi-act-land-cover-explainer.md`, with three worked examples.
@@ -187,6 +215,46 @@ alternatives:
   where only part failed. Since `vul` emits a binary `replace` per wall, the
   beta gets this right by construction — but if a partial-damage state is ever
   added, UDV must not follow it down.
+
+### 3.1 Both numbers come off the same rate **[confirmed]**
+
+Confirmed against the costing spreadsheet on 2026-09-23: **the tool uses the
+same square-metre rates for undepreciated value as for the Land SOW.** So:
+
+```text
+repair cost = m2 rate x wall face area x (1 + site multiplier)
+udv         = m2 rate x wall face area
+```
+
+The site allowance is the whole of the difference. Access, earthworks and
+constructability are what it costs to work on this particular site; they are not
+part of what the wall cost to build, so they have no place in UDV.
+
+This settles an earlier misreading in this file. Chris Ewens's "set fees for
+under-depreciated value" and UDV being "without the additional items the
+square-metre rates build into the Land SOW" do **not** mean a separate rate
+table. They mean UDV is the wall rate alone, without the other Land SOW lines
+that sit beside it — inundation removal, enabling works, reinstatement, the
+compliance items — and without the site multiplier.
+
+Two consequences:
+
+- **Repair cost can never come out below UDV**, the multiplier never being
+  negative. That is the direction Chris said the two run, but here it holds by
+  construction, so it is a check on the arithmetic rather than evidence the gap
+  is the right size.
+- **No age or condition enters UDV.** Undepreciated means no deduction for age,
+  so a twenty-year-old wall and a new one of the same construction and size are
+  worth the same, and `initial_condition` has no bearing on it.
+
+The remaining limitation is specification, not rates (**L-34**). One rate for
+both assumes the replacement matches the wall that failed, where in practice a
+failed wall is often rebuilt to a more substantial current standard — which
+would want a higher rate on the repair side. The bias has a known direction:
+settlement is `min(repair, cap) − excess`, so understating repair cost can only
+lower a settlement or leave it at the cap, meaning the study **under-reports
+NHC's liability** rather than over-reporting it. The same-rate approach is the
+agreed basis meanwhile.
 
 ## 4. The pricing matrix
 

@@ -577,6 +577,20 @@
       "Affects": "Phase 2 cost estimates",
       "Source": "Costing tool demo 2026-09-21",
       "Status": "Open"
+    },
+    {
+      "ID": "L-33",
+      "Limitation": "Inundation removal is folded into the earthworks difficulty rating rather than costed as its own line. The spoil volume sets the rating and buys nothing else, and because the site multiplier reaches wall construction alone, a claim with inundated ground and no retaining wall attracts nothing for the clearing -- real work priced at zero. Whether inundation removal should instead be its own line item, at a rate per cubic metre, is undecided.",
+      "Affects": "loss pricing, land repair cost",
+      "Source": "Inundation removal 2026-09-23",
+      "Status": "Open"
+    },
+    {
+      "ID": "L-34",
+      "Limitation": "Repair cost and undepreciated value come off the same retaining wall square-metre rate, the difference between them being the site multiplier alone. That is how the costing spreadsheet itself works, confirmed 2026-09-23, and it keeps repair cost above UDV by construction. The limitation is specification rather than rates: it assumes the replacement wall matches the one that failed, where in practice a failed wall is often rebuilt to a more substantial current standard, which would warrant a higher rate on the repair side than on the UDV side. The bias has a known direction: settlement is min(repair, cap) less the excess, so understating repair cost can only lower a settlement, meaning the study under-reports NHC's liability rather than over-reporting it.",
+      "Affects": "loss pricing, retaining wall settlements",
+      "Source": "Perrie Gilbert 2026-09-23",
+      "Status": "Open"
     }
   ],
   "Improvements": [
@@ -763,6 +777,22 @@
       "Asked of": "Maxim Millen",
       "Answer": "Partly answered: bridges do carry a bridge_id, confirmed 2026-09-23, so every table identifies its own asset. The damage flag asymmetry is still open.",
       "Source": "vul output contract 2026-09-23",
+      "Status": "Open"
+    },
+    {
+      "ID": "Q-10",
+      "Question": "Can the retaining wall table carry the three site ratings -- construction access, earthworks required, and constructability and reinstatement, each easy, moderate or difficult? loss needs one of each per wall to price a replacement and the vul contract carries none, so no wall can be priced until they arrive. They are a per-wall figure because the multiplier applies to the wall construction subtotal alone. For a real claim they come from a table in the duty geotechnical report; for a synthetic population they have to be inferred, and the inputs -- slope, and the building-to-road path from landloss.exposure.land.driveways -- are already held in exposure.",
+      "Asked of": "Maxim Millen",
+      "Answer": "",
+      "Source": "vul output contract 2026-09-23",
+      "Status": "Open"
+    },
+    {
+      "ID": "Q-11",
+      "Question": "At what spoil volumes does clearing inundated ground move between hand tools, a mini excavator, and a full excavator with truck cartage? The repository records the distinction only qualitatively -- two rates, 'one for volumes a shovel and a truck can clear, one for volumes needing an excavator' (L-28) -- with no volume attached to either. landloss.loss.pricing currently uses 20 m3 and 200 m3, which are engineering judgement fitted to nothing and set the earthworks rating on every land claim.",
+      "Asked of": "Chris Ewens",
+      "Answer": "Not answered. 20 m3 and 200 m3 adopted as a working assumption on 2026-09-23 so the chain could run, reasoned from plant capability rather than from any source, and explicitly not confirmed by NHC.",
+      "Source": "Inundation removal 2026-09-23",
       "Status": "Open"
     }
   ]

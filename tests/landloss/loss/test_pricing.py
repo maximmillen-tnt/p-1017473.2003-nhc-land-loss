@@ -1,7 +1,6 @@
 import numpy as np
 import pytest
 
-from landloss.loss.policy import PolicySettings
 from landloss.exposure.rw.beta_population import (
     BETA_MAX_HEIGHT_M,
     BETA_MIN_HEIGHT_M,
@@ -10,19 +9,29 @@ from landloss.exposure.rw.beta_population import (
     SMALL_MAX_HEIGHT_M,
     classify_wall_size,
 )
+from landloss.loss.policy import PolicySettings
 from landloss.loss.pricing import (
     BETA_SIZE_CLASS_HEIGHT_M,
     BETA_WALL_RATE_EXCL_GST_NZD_PER_M2,
     BETA_WALL_TYPES,
+    DIFFICULT,
+    EASY,
+    EASY_INUNDATION_MAX_VOLUME_M3,
     MAX_SITE_MULTIPLIER,
+    MODERATE,
+    MODERATE_INUNDATION_MAX_VOLUME_M3,
     WALL_RATE_EXCL_GST_NZD_PER_M2,
     SiteRatings,
     beta_wall_face_area_m2,
     beta_wall_height_m,
     beta_wall_repair_cost_incl_gst_nzd,
+    beta_wall_udv_incl_gst_nzd,
+    classify_inundation_earthworks,
+    inundation_volume_m3,
     wall_face_area_m2,
     wall_rate_excl_gst_nzd_per_m2,
     wall_repair_cost_incl_gst_nzd,
+    wall_udv_incl_gst_nzd,
 )
 
 ACT = PolicySettings()
@@ -89,9 +98,7 @@ def test_the_table_is_a_complete_enumeration():
 
 
 def test_multiplier_never_exceeds_the_line_item_ceiling():
-    worst = max(
-        ratings_from(combo).multiplier for combo in TOOL_COMBINATION_TABLE
-    )
+    worst = max(ratings_from(combo).multiplier for combo in TOOL_COMBINATION_TABLE)
     assert worst == pytest.approx(MAX_SITE_MULTIPLIER)
     assert worst == pytest.approx(0.30)
 
@@ -116,8 +123,9 @@ def test_ratings_are_case_insensitive():
 
 
 def test_an_unknown_rating_is_refused():
+    ratings = ratings_from("EXD")
     with pytest.raises(ValueError, match="earthworks_required must be one of"):
-        ratings_from("EXD").multiplier
+        _ = ratings.multiplier
 
 
 def test_ratings_apply_across_a_population():
@@ -144,9 +152,7 @@ def test_rate_lookup_returns_the_tools_figure():
 
 
 def test_rate_lookup_works_across_a_population():
-    rates = wall_rate_excl_gst_nzd_per_m2(
-        np.array(["Shotcrete", "UC: 310mm x 158mm"])
-    )
+    rates = wall_rate_excl_gst_nzd_per_m2(np.array(["Shotcrete", "UC: 310mm x 158mm"]))
     assert rates == pytest.approx([226.67, 4_736.23])
 
 
@@ -228,9 +234,7 @@ def test_a_portfolio_prices_in_one_call():
         ),
         policy=ACT,
     )
-    assert cost == pytest.approx(
-        [226.67 * 5.0 * 1.15, 1_010.58 * 10.0 * 1.30 * 1.15]
-    )
+    assert cost == pytest.approx([226.67 * 5.0 * 1.15, 1_010.58 * 10.0 * 1.30 * 1.15])
 
 
 def test_an_undamaged_wall_costs_nothing():
@@ -258,10 +262,11 @@ def test_the_beta_rate_averages_the_four_non_driven_timber_pole_walls():
         "Timber Pole: 300mm SED",
         "Timber Pole: 350mm SED",
     )
-    assert BETA_WALL_RATE_EXCL_GST_NZD_PER_M2 == pytest.approx(
-        (643.19 + 744.69 + 798.80 + 879.87) / 4
+    assert (
+        pytest.approx((643.19 + 744.69 + 798.80 + 879.87) / 4)
+        == BETA_WALL_RATE_EXCL_GST_NZD_PER_M2
     )
-    assert BETA_WALL_RATE_EXCL_GST_NZD_PER_M2 == pytest.approx(766.6375)
+    assert pytest.approx(766.6375) == BETA_WALL_RATE_EXCL_GST_NZD_PER_M2
 
 
 def test_the_beta_rate_excludes_the_driven_timber_poles():
@@ -392,3 +397,153 @@ def test_beta_cost_prices_a_population_in_one_call():
             766.6375 * 10.0 * 1.30 * 1.15,
         ]
     )
+
+
+# ---------------------------------------------------------------------------
+# Inundation removal, and the earthworks rating its volume implies.
+# ---------------------------------------------------------------------------
+
+
+def test_volume_is_inundated_area_by_mean_depth():
+    assert inundation_volume_m3(120.0, 0.5) == pytest.approx(60.0)
+
+
+def test_volume_works_across_a_population():
+    volumes = inundation_volume_m3(np.array([50.0, 200.0]), np.array([0.2, 1.5]))
+    assert volumes == pytest.approx([10.0, 300.0])
+
+
+def test_a_negative_depth_is_refused():
+    with pytest.raises(ValueError, match="inundated_mean_depth_m must be finite"):
+        inundation_volume_m3(100.0, -0.5)
+
+
+def test_a_small_spoil_volume_is_easy():
+    # A shovel, a wheelbarrow and a truck.
+    assert classify_inundation_earthworks(10.0) == EASY
+
+
+def test_a_mid_spoil_volume_is_moderate():
+    # A mini excavator, small enough to get down a residential driveway.
+    assert classify_inundation_earthworks(100.0) == MODERATE
+
+
+def test_a_large_spoil_volume_is_difficult():
+    # A full-size excavator and truck cartage.
+    assert classify_inundation_earthworks(500.0) == DIFFICULT
+
+
+def test_the_band_edges_fall_to_the_easier_rating():
+    assert classify_inundation_earthworks(EASY_INUNDATION_MAX_VOLUME_M3) == EASY
+    assert classify_inundation_earthworks(MODERATE_INUNDATION_MAX_VOLUME_M3) == MODERATE
+    assert (
+        classify_inundation_earthworks(MODERATE_INUNDATION_MAX_VOLUME_M3 + 0.1)
+        == DIFFICULT
+    )
+
+
+def test_no_inundation_rates_easy():
+    # There is no spoil to clear, which is an answer rather than a gap.
+    assert classify_inundation_earthworks(0.0) == EASY
+
+
+def test_the_rating_feeds_straight_into_the_site_ratings():
+    # The whole point: a land claim answers its own earthworks rating from the
+    # geometry vul already sends, rather than having to be told.
+    ratings = SiteRatings(
+        construction_access=EASY,
+        earthworks_required=classify_inundation_earthworks(
+            inundation_volume_m3(300.0, 1.5)
+        ),
+        constructability_reinstatement=EASY,
+    )
+    assert ratings.multiplier == pytest.approx(0.10)
+
+
+def test_the_earthworks_rating_classifies_a_population_in_one_call():
+    ratings = classify_inundation_earthworks(
+        inundation_volume_m3(np.array([20.0, 200.0, 400.0]), np.array([0.5, 0.5, 1.0]))
+    )
+    assert list(ratings) == [EASY, MODERATE, DIFFICULT]
+
+
+# ---------------------------------------------------------------------------
+# Undepreciated value. The same rate as the repair cost, without the site
+# allowance -- so the site multiplier is the whole of the difference.
+# ---------------------------------------------------------------------------
+
+
+def test_udv_is_the_bare_rate_by_area_grossed_up():
+    assert wall_udv_incl_gst_nzd("Concrete Block", 10.0, policy=ACT) == pytest.approx(
+        1_010.58 * 10.0 * 1.15
+    )
+
+
+def test_udv_ignores_the_site_ratings_entirely():
+    # There is nowhere to pass them: what it costs to work on a site is not
+    # part of what the wall cost to build.
+    easy_site_repair = wall_repair_cost_incl_gst_nzd(
+        "Concrete Block", 10.0, ratings=ratings_from("EEE"), policy=ACT
+    )
+    assert wall_udv_incl_gst_nzd("Concrete Block", 10.0, policy=ACT) == pytest.approx(
+        easy_site_repair
+    )
+
+
+def test_the_site_multiplier_is_the_whole_difference_between_the_two():
+    udv = wall_udv_incl_gst_nzd("Concrete Block", 10.0, policy=ACT)
+    repair = wall_repair_cost_incl_gst_nzd(
+        "Concrete Block", 10.0, ratings=ratings_from("DDD"), policy=ACT
+    )
+    assert repair == pytest.approx(udv * (1.0 + MAX_SITE_MULTIPLIER))
+
+
+@pytest.mark.parametrize("combo", TOOL_COMBINATION_TABLE)
+def test_repair_cost_is_never_below_udv(combo):
+    # The property the whole comparison rests on, across every site rating the
+    # tool carries. It holds by construction -- the multiplier is never
+    # negative -- which is worth pinning precisely because it is not evidence.
+    udv = wall_udv_incl_gst_nzd("Timber Pole: 250mm SED", 18.0, policy=ACT)
+    repair = wall_repair_cost_incl_gst_nzd(
+        "Timber Pole: 250mm SED", 18.0, ratings=ratings_from(combo), policy=ACT
+    )
+    assert repair >= udv
+
+
+def test_udv_carries_no_deduction_for_age_or_condition():
+    # Undepreciated means exactly that. There is no age or condition argument,
+    # so two walls of the same construction and size are worth the same.
+    assert wall_udv_incl_gst_nzd("Concrete Block", 10.0, policy=ACT) == pytest.approx(
+        wall_udv_incl_gst_nzd("Concrete Block", 10.0, policy=ACT)
+    )
+
+
+def test_udv_prices_a_population_in_one_call():
+    values = wall_udv_incl_gst_nzd(
+        np.array(["Shotcrete", "Concrete Block"]),
+        np.array([5.0, 10.0]),
+        policy=ACT,
+    )
+    assert values == pytest.approx([226.67 * 5.0 * 1.15, 1_010.58 * 10.0 * 1.15])
+
+
+def test_an_unknown_wall_type_is_refused_for_udv():
+    with pytest.raises(ValueError, match="unknown wall type"):
+        wall_udv_incl_gst_nzd("Mud Brick", 10.0, policy=ACT)
+
+
+def test_beta_udv_uses_the_beta_flat_rate():
+    assert beta_wall_udv_incl_gst_nzd(
+        beta_wall_face_area_m2("medium", 12.0), policy=ACT
+    ) == pytest.approx(766.6375 * 21.0 * 1.15)
+
+
+def test_a_wall_gives_both_numbers_from_what_vul_sends():
+    # The whole path: rw_size and rw_length in, the two figures settle needs
+    # out, with only the site allowance between them.
+    area = beta_wall_face_area_m2("large", 10.0)
+    ratings = ratings_from("EMD")
+    udv = beta_wall_udv_incl_gst_nzd(area, policy=ACT)
+    repair = beta_wall_repair_cost_incl_gst_nzd(area, ratings=ratings, policy=ACT)
+    assert udv == pytest.approx(766.6375 * 27.5 * 1.15)
+    assert repair == pytest.approx(udv * 1.15)

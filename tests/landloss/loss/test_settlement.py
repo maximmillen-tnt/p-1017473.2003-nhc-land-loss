@@ -4,6 +4,8 @@ import pytest
 from landloss.loss.policy import PolicySettings
 from landloss.loss.settlement import (
     DamagedClaim,
+    area_cap_bound,
+    damaged_land_value_nzd,
     land_cover_cap_nzd,
     settle,
     structure_contribution_nzd,
@@ -21,6 +23,11 @@ ONE_DWELLING_WALL_LIMIT = 57_500.0
 # assessed at $45,000, on a single-dwelling property. Only the wall differs.
 DAMAGED_LAND_NZD = 45_000.0
 
+# The same claim as an area and a rate, which is how it now arrives: the
+# explainer states both the 60 m2 and the $45,000, so the rate follows.
+DAMAGED_LAND_M2 = 60.0
+LAND_RATE_NZD_PER_M2 = DAMAGED_LAND_NZD / DAMAGED_LAND_M2
+
 
 # ---------------------------------------------------------------------------
 # The three worked examples in .agents/context/nhi-act-land-cover-explainer.md.
@@ -36,7 +43,8 @@ def test_worked_example_1_wall_only_settles_on_the_sub_cap():
     result = settle(
         DamagedClaim(
             repair_cost_incl_gst_nzd=120_000.0,
-            market_value_incl_gst_nzd=0.0,
+            damaged_area_m2=0.0,
+            land_rate_incl_gst_nzd_per_m2=LAND_RATE_NZD_PER_M2,
             retaining_wall_udv_incl_gst_nzd=70_000.0,
             n_dwellings=1,
         ),
@@ -53,7 +61,8 @@ def test_worked_example_2_land_and_wall_settle_on_the_cap():
     result = settle(
         DamagedClaim(
             repair_cost_incl_gst_nzd=210_000.0,
-            market_value_incl_gst_nzd=DAMAGED_LAND_NZD,
+            damaged_area_m2=DAMAGED_LAND_M2,
+            land_rate_incl_gst_nzd_per_m2=LAND_RATE_NZD_PER_M2,
             retaining_wall_udv_incl_gst_nzd=70_000.0,
             n_dwellings=1,
         ),
@@ -71,7 +80,8 @@ def test_worked_example_3_a_modest_wall_settles_on_the_repair_cost():
     result = settle(
         DamagedClaim(
             repair_cost_incl_gst_nzd=58_000.0,
-            market_value_incl_gst_nzd=DAMAGED_LAND_NZD,
+            damaged_area_m2=DAMAGED_LAND_M2,
+            land_rate_incl_gst_nzd_per_m2=LAND_RATE_NZD_PER_M2,
             retaining_wall_udv_incl_gst_nzd=30_000.0,
             n_dwellings=1,
         ),
@@ -93,7 +103,8 @@ def test_a_sub_cap_limits_the_contribution_not_the_settlement():
     result = settle(
         DamagedClaim(
             repair_cost_incl_gst_nzd=210_000.0,
-            market_value_incl_gst_nzd=DAMAGED_LAND_NZD,
+            damaged_area_m2=DAMAGED_LAND_M2,
+            land_rate_incl_gst_nzd_per_m2=LAND_RATE_NZD_PER_M2,
             retaining_wall_udv_incl_gst_nzd=70_000.0,
             n_dwellings=1,
         ),
@@ -136,7 +147,8 @@ def test_a_claim_below_the_excess_settles_at_nothing_rather_than_owing():
     result = settle(
         DamagedClaim(
             repair_cost_incl_gst_nzd=300.0,
-            market_value_incl_gst_nzd=10_000.0,
+            damaged_area_m2=10_000.0 / LAND_RATE_NZD_PER_M2,
+            land_rate_incl_gst_nzd_per_m2=LAND_RATE_NZD_PER_M2,
             n_dwellings=1,
         ),
         policy=ACT,
@@ -156,7 +168,8 @@ def test_the_current_act_has_no_total_cap():
 def test_a_total_cap_binds_before_the_excess():
     claim = DamagedClaim(
         repair_cost_incl_gst_nzd=210_000.0,
-        market_value_incl_gst_nzd=DAMAGED_LAND_NZD,
+        damaged_area_m2=DAMAGED_LAND_M2,
+        land_rate_incl_gst_nzd_per_m2=LAND_RATE_NZD_PER_M2,
         retaining_wall_udv_incl_gst_nzd=70_000.0,
         n_dwellings=1,
     )
@@ -169,7 +182,8 @@ def test_a_total_cap_binds_before_the_excess():
 def test_a_generous_total_cap_changes_nothing():
     claim = DamagedClaim(
         repair_cost_incl_gst_nzd=210_000.0,
-        market_value_incl_gst_nzd=DAMAGED_LAND_NZD,
+        damaged_area_m2=DAMAGED_LAND_M2,
+        land_rate_incl_gst_nzd_per_m2=LAND_RATE_NZD_PER_M2,
         retaining_wall_udv_incl_gst_nzd=70_000.0,
         n_dwellings=1,
     )
@@ -188,7 +202,8 @@ def test_a_portfolio_settles_in_one_call():
     result = settle(
         DamagedClaim(
             repair_cost_incl_gst_nzd=np.array([120_000.0, 210_000.0, 58_000.0]),
-            market_value_incl_gst_nzd=np.array([0.0, 45_000.0, 45_000.0]),
+            damaged_area_m2=np.array([0.0, DAMAGED_LAND_M2, DAMAGED_LAND_M2]),
+            land_rate_incl_gst_nzd_per_m2=LAND_RATE_NZD_PER_M2,
             retaining_wall_udv_incl_gst_nzd=np.array([70_000.0, 70_000.0, 30_000.0]),
             n_dwellings=np.array([1.0, 1.0, 1.0]),
         ),
@@ -202,7 +217,8 @@ def test_bridges_and_culverts_add_their_own_contribution():
     result = settle(
         DamagedClaim(
             repair_cost_incl_gst_nzd=500_000.0,
-            market_value_incl_gst_nzd=0.0,
+            damaged_area_m2=0.0,
+            land_rate_incl_gst_nzd_per_m2=LAND_RATE_NZD_PER_M2,
             bridge_culvert_udv_incl_gst_nzd=90_000.0,
             n_dwellings=1,
         ),
@@ -216,7 +232,8 @@ def test_undamaged_structures_contribute_nothing():
     result = settle(
         DamagedClaim(
             repair_cost_incl_gst_nzd=20_000.0,
-            market_value_incl_gst_nzd=DAMAGED_LAND_NZD,
+            damaged_area_m2=DAMAGED_LAND_M2,
+            land_rate_incl_gst_nzd_per_m2=LAND_RATE_NZD_PER_M2,
             n_dwellings=1,
         ),
         policy=ACT,
@@ -230,7 +247,8 @@ def test_a_missing_dwelling_count_is_refused_rather_than_read_as_no_cover():
         settle(
             DamagedClaim(
                 repair_cost_incl_gst_nzd=10_000.0,
-                market_value_incl_gst_nzd=10_000.0,
+                damaged_area_m2=10_000.0 / LAND_RATE_NZD_PER_M2,
+                land_rate_incl_gst_nzd_per_m2=LAND_RATE_NZD_PER_M2,
                 n_dwellings=0,
             ),
             policy=ACT,
@@ -242,7 +260,8 @@ def test_negative_amounts_are_refused():
         settle(
             DamagedClaim(
                 repair_cost_incl_gst_nzd=-1.0,
-                market_value_incl_gst_nzd=10_000.0,
+                damaged_area_m2=10_000.0 / LAND_RATE_NZD_PER_M2,
+                land_rate_incl_gst_nzd_per_m2=LAND_RATE_NZD_PER_M2,
                 n_dwellings=1,
             ),
             policy=ACT,
@@ -251,9 +270,223 @@ def test_negative_amounts_are_refused():
 
 def test_a_cap_can_be_computed_without_settling():
     cap = land_cover_cap_nzd(
-        market_value_incl_gst_nzd=DAMAGED_LAND_NZD,
+        land_value_incl_gst_nzd=damaged_land_value_nzd(
+            DAMAGED_LAND_M2, LAND_RATE_NZD_PER_M2, policy=ACT
+        ),
         retaining_wall_udv_incl_gst_nzd=70_000.0,
         n_dwellings=1,
         policy=ACT,
     )
     assert cap == pytest.approx(102_500.0)
+
+
+# ---------------------------------------------------------------------------
+# Which constraint bound. The study reports the share of claims binding on
+# each, so each has to be readable off a settled claim rather than
+# reconstructed from the total.
+# ---------------------------------------------------------------------------
+
+
+def test_the_sub_cap_binds_when_the_wall_is_worth_more_than_the_limit():
+    result = settle(
+        DamagedClaim(
+            repair_cost_incl_gst_nzd=120_000.0,
+            damaged_area_m2=0.0,
+            land_rate_incl_gst_nzd_per_m2=LAND_RATE_NZD_PER_M2,
+            retaining_wall_udv_incl_gst_nzd=70_000.0,
+            n_dwellings=1,
+        ),
+        policy=ACT,
+    )
+    assert result.retaining_wall_sub_cap_bound
+    assert result.retaining_wall_contribution_nzd == pytest.approx(
+        ONE_DWELLING_WALL_LIMIT
+    )
+
+
+def test_the_sub_cap_does_not_bind_on_a_modest_wall():
+    result = settle(
+        DamagedClaim(
+            repair_cost_incl_gst_nzd=58_000.0,
+            damaged_area_m2=DAMAGED_LAND_M2,
+            land_rate_incl_gst_nzd_per_m2=LAND_RATE_NZD_PER_M2,
+            retaining_wall_udv_incl_gst_nzd=30_000.0,
+            n_dwellings=1,
+        ),
+        policy=ACT,
+    )
+    assert not result.retaining_wall_sub_cap_bound
+    assert result.retaining_wall_contribution_nzd == pytest.approx(30_000.0)
+
+
+def test_a_wall_worth_exactly_the_limit_does_not_bind():
+    # At the limit the sub-cap took nothing away, so it did not bind. Strict,
+    # matching `capped`. The limit is taken from the policy rather than written
+    # as 57_500.0, because $50,000 grossed up by 15% lands a whole float step
+    # below that, and this test is about the boundary rather than about how the
+    # boundary is represented.
+    result = settle(
+        DamagedClaim(
+            repair_cost_incl_gst_nzd=120_000.0,
+            damaged_area_m2=0.0,
+            land_rate_incl_gst_nzd_per_m2=LAND_RATE_NZD_PER_M2,
+            retaining_wall_udv_incl_gst_nzd=ACT.retaining_wall_limit_nzd(1),
+            n_dwellings=1,
+        ),
+        policy=ACT,
+    )
+    assert not result.retaining_wall_sub_cap_bound
+
+
+def test_an_undamaged_structure_never_binds():
+    result = settle(
+        DamagedClaim(
+            repair_cost_incl_gst_nzd=10_000.0,
+            damaged_area_m2=DAMAGED_LAND_M2,
+            land_rate_incl_gst_nzd_per_m2=LAND_RATE_NZD_PER_M2,
+            n_dwellings=1,
+        ),
+        policy=ACT,
+    )
+    assert not result.retaining_wall_sub_cap_bound
+    assert not result.bridge_culvert_sub_cap_bound
+
+
+def test_the_sub_cap_flag_is_not_recoverable_from_the_contribution():
+    # A wall bound at the limit and a wall worth exactly the limit give the
+    # same contribution, which is why the flag is carried rather than derived.
+    bound = settle(
+        DamagedClaim(
+            repair_cost_incl_gst_nzd=120_000.0,
+            damaged_area_m2=0.0,
+            land_rate_incl_gst_nzd_per_m2=LAND_RATE_NZD_PER_M2,
+            retaining_wall_udv_incl_gst_nzd=70_000.0,
+            n_dwellings=1,
+        ),
+        policy=ACT,
+    )
+    exactly = settle(
+        DamagedClaim(
+            repair_cost_incl_gst_nzd=120_000.0,
+            damaged_area_m2=0.0,
+            land_rate_incl_gst_nzd_per_m2=LAND_RATE_NZD_PER_M2,
+            retaining_wall_udv_incl_gst_nzd=ACT.retaining_wall_limit_nzd(1),
+            n_dwellings=1,
+        ),
+        policy=ACT,
+    )
+    assert bound.retaining_wall_contribution_nzd == pytest.approx(
+        exactly.retaining_wall_contribution_nzd
+    )
+    assert bound.retaining_wall_sub_cap_bound
+    assert not exactly.retaining_wall_sub_cap_bound
+
+
+def test_a_wall_only_claim_settles_on_the_undepreciated_value():
+    # Below the sub-cap the undepreciated value passes straight through to the
+    # settlement, less the excess: the repair cost never enters, because the
+    # cap is below it by construction.
+    udv = 30_000.0
+    result = settle(
+        DamagedClaim(
+            repair_cost_incl_gst_nzd=90_000.0,
+            damaged_area_m2=0.0,
+            land_rate_incl_gst_nzd_per_m2=LAND_RATE_NZD_PER_M2,
+            retaining_wall_udv_incl_gst_nzd=udv,
+            n_dwellings=1,
+        ),
+        policy=ACT,
+    )
+    assert not result.retaining_wall_sub_cap_bound
+    assert result.settlement_nzd == pytest.approx(udv - 500.0)
+
+
+def test_the_sub_cap_flags_come_back_per_claim_across_a_portfolio():
+    result = settle(
+        DamagedClaim(
+            repair_cost_incl_gst_nzd=np.array([120_000.0, 58_000.0]),
+            damaged_area_m2=np.array([0.0, DAMAGED_LAND_M2]),
+            land_rate_incl_gst_nzd_per_m2=LAND_RATE_NZD_PER_M2,
+            retaining_wall_udv_incl_gst_nzd=np.array([70_000.0, 30_000.0]),
+            n_dwellings=np.array([1.0, 1.0]),
+        ),
+        policy=ACT,
+    )
+    assert list(result.retaining_wall_sub_cap_bound) == [True, False]
+
+
+# ---------------------------------------------------------------------------
+# The area cap. Damaged land is valued over the lesser of the damaged area and
+# the cap, so damage beyond it is valued as though it stopped there.
+# ---------------------------------------------------------------------------
+
+
+def test_land_under_the_cap_is_valued_at_its_whole_area():
+    assert damaged_land_value_nzd(
+        DAMAGED_LAND_M2, LAND_RATE_NZD_PER_M2, policy=ACT
+    ) == pytest.approx(DAMAGED_LAND_NZD)
+
+
+def test_land_beyond_the_cap_is_valued_as_though_it_stopped_there():
+    # Ten times the cap is valued at the cap: the rate is unchanged, the area
+    # is what the Act limits.
+    value = damaged_land_value_nzd(40_000.0, LAND_RATE_NZD_PER_M2, policy=ACT)
+    assert value == pytest.approx(ACT.area_cap_m2 * LAND_RATE_NZD_PER_M2)
+
+
+def test_the_area_cap_is_four_thousand_square_metres_by_default():
+    assert ACT.area_cap_m2 == pytest.approx(4_000.0)
+
+
+def test_the_area_cap_binds_only_above_the_cap():
+    assert not area_cap_bound(DAMAGED_LAND_M2, policy=ACT)
+    assert not area_cap_bound(ACT.area_cap_m2, policy=ACT)
+    assert area_cap_bound(ACT.area_cap_m2 + 1.0, policy=ACT)
+
+
+def test_a_district_plan_minimum_below_four_thousand_binds_sooner():
+    # The cap is the lesser of the district plan minimum and 4,000 m2, so a
+    # scenario carrying a smaller minimum values less of the same damage.
+    small_site = PolicySettings(area_cap_m2=500.0)
+    assert damaged_land_value_nzd(
+        800.0, LAND_RATE_NZD_PER_M2, policy=small_site
+    ) == pytest.approx(500.0 * LAND_RATE_NZD_PER_M2)
+    assert area_cap_bound(800.0, policy=small_site)
+
+
+def test_settle_reports_the_land_value_and_whether_the_area_cap_bound():
+    result = settle(
+        DamagedClaim(
+            repair_cost_incl_gst_nzd=10_000_000.0,
+            damaged_area_m2=40_000.0,
+            land_rate_incl_gst_nzd_per_m2=LAND_RATE_NZD_PER_M2,
+            n_dwellings=1,
+        ),
+        policy=ACT,
+    )
+    assert result.area_cap_bound
+    assert result.damaged_land_value_nzd == pytest.approx(
+        ACT.area_cap_m2 * LAND_RATE_NZD_PER_M2
+    )
+    # The cap is the land value alone here, no structures being damaged.
+    assert result.land_cover_cap_nzd == pytest.approx(result.damaged_land_value_nzd)
+
+
+def test_a_claim_with_no_damaged_land_values_at_nothing():
+    result = settle(
+        DamagedClaim(
+            repair_cost_incl_gst_nzd=120_000.0,
+            damaged_area_m2=0.0,
+            land_rate_incl_gst_nzd_per_m2=LAND_RATE_NZD_PER_M2,
+            retaining_wall_udv_incl_gst_nzd=70_000.0,
+            n_dwellings=1,
+        ),
+        policy=ACT,
+    )
+    assert result.damaged_land_value_nzd == pytest.approx(0.0)
+    assert not result.area_cap_bound
+
+
+def test_a_negative_damaged_area_is_refused():
+    with pytest.raises(ValueError, match="damaged_area_m2 must be finite"):
+        damaged_land_value_nzd(-1.0, LAND_RATE_NZD_PER_M2, policy=ACT)
