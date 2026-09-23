@@ -6,9 +6,21 @@ rates NHC's own costing tool assesses a claim on, and the site multiplier it
 applies to them, so this study's pricing reproduces the tool's answer rather
 than arriving at one of its own.
 
-A wall's repair cost is::
+A wall gives two numbers, and the Act needs both. They come off the **same**
+square metre rate, which is how the costing tool works, so the whole of the
+difference between them is the site allowance::
 
     repair cost = m2 rate x wall face area x (1 + site multiplier)
+    udv         = m2 rate x wall face area
+
+Access, earthworks and constructability are what it costs to work on this
+particular site; they are not part of what the wall cost to build, so they have
+no place in undepreciated value. Two things follow. Repair cost can never come
+out below UDV, because the multiplier is never negative -- which is the
+direction the two are known to run, though here it holds by construction rather
+than by evidence. And nothing about age or condition enters UDV at all:
+undepreciated means no deduction for age, so a twenty-year-old wall and a new
+one of the same construction and size are worth the same.
 
 **The rates are per square metre of wall face and exclude GST.** The settlement
 arithmetic in :mod:`landloss.loss.settlement` works GST-inclusive, because that
@@ -18,23 +30,45 @@ use and every amount leaving this module is named ``_incl_gst_``.
 **The site multiplier is three ratings, not two.** The costing tool rates
 construction access, earthworks required, and constructability and
 reinstatement, each easy, moderate or difficult, and the combination is a
-markup on the wall cost. The tool carries all 27 combinations as a lookup
-table; every row of it is the sum of a per-rating markup of 0%, 5% and 10%, so
-:class:`SiteRatings` computes the figure rather than storing the table, and
+markup. The tool carries all 27 combinations as a lookup table; every row of it
+is the sum of a per-rating markup of 0%, 5% and 10%, so :class:`SiteRatings`
+computes the figure rather than storing the table, and
 ``tests/landloss/loss/test_pricing.py`` checks the formula against all 27 rows.
 An all-difficult site attracts 30%, which is also the ceiling the tool's own
 line items cap at.
 
+**It applies to the wall construction subtotal only** -- the square metre rate
+by the wall face area -- and to nothing else. ``nhc-costing-tool.md`` describes
+it as going on the Land SOW subtotal, which would take in inundation removal and
+land reinstatement as well; the narrower scope is the decision for this study.
+It also settles the grain: a markup on one wall's construction is a **per-wall**
+figure, so the three ratings belong beside ``rw_size`` and ``rw_length`` rather
+than on the claim.
+
+**Inundation removal is folded into the earthworks rating, not costed on its
+own.** Clearing spoil off inundated ground is the first line of the Land SOW,
+and it could be a cost in its own right -- a volume at a rate per cubic metre --
+or it could be what the earthworks rating is already expressing. This study
+takes the second reading for now: :func:`classify_inundation_earthworks` turns
+the volume into a rating and the volume buys nothing else. That is a
+**simplification, not a finding** (**L-33**), and it has a visible cost. The
+markup reaches wall construction alone, so a claim with inundated ground and no
+retaining wall on it currently attracts nothing at all for the clearing -- the
+work is real and the model prices it at zero. If inundation removal turns out to
+be its own line item, it wants a rate per cubic metre and a place in the repair
+cost rather than only a nudge to a multiplier.
+
 What this module does **not** yet do, each because a figure has not been
 obtained rather than because it was decided against:
 
-- **Undepreciated value.** The Act compares repair cost against undepreciated
-  value, and the two are different numbers: UDV is the cost to build the same
-  wall new *without* the additional items the square metre rates carry, and it
-  comes from its own sheet of set fees rather than from these rates. Until
-  those arrive, nothing here can produce the
-  ``retaining_wall_udv_incl_gst_nzd`` that
-  :func:`landloss.loss.settlement.settle` takes.
+- **Whether the replacement should be priced at a higher specification than
+  the wall it replaces.** One rate serving both numbers assumes the replacement
+  matches the wall that failed, and in practice a failed wall is often rebuilt
+  to a more substantial current standard, which would want a higher rate on the
+  repair side than on the UDV side. The bias runs one way: settlement is
+  ``min(repair, cap)`` less the excess, so understating repair can only lower a
+  settlement, never raise it. Carried as **L-34**; the same-rate approach is the
+  agreed basis meanwhile, not a stand-in for something better specified.
 - **Which wall type a modelled wall is.** The rates are keyed on construction
   type, and :mod:`landloss.exposure.rw.beta_population` emits a size class and
   an initial condition instead. Until the study settles that mapping, every
@@ -159,6 +193,42 @@ BETA_SIZE_CLASS_HEIGHT_M = {
     "large": 2.75,
 }
 
+# Inundation volume, in cubic metres, at which clearing the spoil stops being
+# one kind of job and becomes the next. They set the **earthworks required**
+# rating, which is the one of the three site ratings a land claim can answer
+# from its own geometry rather than having to be told.
+#
+# ---------------------------------------------------------------------------
+# THESE TWO NUMBERS ARE ASSUMED AND HAVE NOT BEEN CONFIRMED BY ANYONE AT NHC.
+# ---------------------------------------------------------------------------
+#
+# Nothing in the repository, and nothing said at the costing tool demo, attaches
+# a volume to the change of method. What is recorded is qualitative only:
+# `nhc-land-cover-and-settlement.md` and **L-28** give two rates per square
+# metre, "one for volumes a shovel and a truck can clear, one for volumes
+# needing an excavator". No cubic metre figure divides them there or anywhere
+# else. The thresholds below were reasoned from plant capability rather than
+# taken from a source, so they are **engineering judgement fitted to nothing**,
+# in the same class as the culvert and bridge split. They were adopted as a
+# working assumption on 2026-09-23 so the chain could run, and are the first
+# thing to replace when NHC give a figure (**Q-11**).
+#
+# They are not idle: through the earthworks rating they set the markup on any
+# retaining wall on the same property, so an error here moves wall costs too.
+#
+# The reasoning behind them:
+#
+# - **Easy, up to 20 m3.** Hand tools, a wheelbarrow and a truck. A labourer
+#   shifts of the order of a cubic metre an hour, so this is a job two people
+#   finish in a day or two and nobody hires a machine for.
+# - **Moderate, 20 to 200 m3.** A mini excavator, small enough to come through
+#   a residential gate or down a driveway. This is where most claims should sit.
+# - **Difficult, above 200 m3.** A full-size excavator and truck cartage, which
+#   needs proper site access and usually traffic management -- the largest
+#   single cost driver Chris Ewens named.
+EASY_INUNDATION_MAX_VOLUME_M3 = 20.0
+MODERATE_INUNDATION_MAX_VOLUME_M3 = 200.0
+
 
 def _as_markup(rating: np.ndarray | str, *, name: str) -> np.ndarray:
     """Return the markup a rating attracts, refusing anything else.
@@ -224,6 +294,77 @@ class SiteRatings:
                 name="constructability_reinstatement",
             )
         )
+
+
+def inundation_volume_m3(
+    inundated_area_m2: np.ndarray | float,
+    inundated_mean_depth_m: np.ndarray | float,
+) -> np.ndarray:
+    """Return the volume of spoil to be cleared off inundated ground.
+
+    `vul` sends the inundated insured area and the mean depth of what came to
+    rest on it, which is all a volume needs. Mean depth rather than maximum, so
+    this is the volume of the deposit as modelled and not a worst case.
+
+    Args:
+        inundated_area_m2: Insured area buried by material coming to rest.
+        inundated_mean_depth_m: How deep that material lies, on average.
+
+    Returns:
+        The volume in cubic metres.
+
+    Raises:
+        ValueError: If either is negative or not finite.
+    """
+    area = np.asarray(inundated_area_m2, dtype=float)
+    depth = np.asarray(inundated_mean_depth_m, dtype=float)
+    for name, values in (
+        ("inundated_area_m2", area),
+        ("inundated_mean_depth_m", depth),
+    ):
+        if not np.all(np.isfinite(values)) or np.any(values < 0):
+            msg = f"{name} must be finite and not negative"
+            raise ValueError(msg)
+    return area * depth
+
+
+def classify_inundation_earthworks(volume_m3: np.ndarray | float) -> np.ndarray:
+    """Return the earthworks rating the spoil volume implies.
+
+    The bands are :data:`EASY_INUNDATION_MAX_VOLUME_M3` and
+    :data:`MODERATE_INUNDATION_MAX_VOLUME_M3`. **Both are assumed and neither
+    has been confirmed**; what they rest on, which is nothing, is set out where
+    they are defined.
+
+    This rating is the *only* thing the spoil volume buys. Clearing it is not
+    costed as a line of its own, so on a claim with no retaining wall the
+    volume reaches no cost at all -- see the module docstring and **L-33**.
+
+    A claim with no inundation rates easy, which is the right answer rather
+    than a missing one: there is no spoil to clear.
+
+    Args:
+        volume_m3: Volume of spoil, from :func:`inundation_volume_m3`.
+
+    Returns:
+        ``"E"``, ``"M"`` or ``"D"`` per claim, ready for
+        :class:`SiteRatings`.
+
+    Raises:
+        ValueError: If any volume is negative or not finite.
+    """
+    volumes = np.asarray(volume_m3, dtype=float)
+    if not np.all(np.isfinite(volumes)) or np.any(volumes < 0):
+        msg = "volume_m3 must be finite and not negative"
+        raise ValueError(msg)
+    return np.select(
+        [
+            volumes <= EASY_INUNDATION_MAX_VOLUME_M3,
+            volumes <= MODERATE_INUNDATION_MAX_VOLUME_M3,
+        ],
+        [EASY, MODERATE],
+        default=DIFFICULT,
+    )
 
 
 def wall_rate_excl_gst_nzd_per_m2(wall_type: np.ndarray | str) -> np.ndarray:
@@ -331,19 +472,23 @@ def beta_wall_face_area_m2(
     return wall_face_area_m2(beta_wall_height_m(rw_size), length_m)
 
 
-def _repair_cost_incl_gst_nzd(
+def _wall_cost_incl_gst_nzd(
     rate_excl_gst_nzd_per_m2: np.ndarray | float,
     face_area_m2: np.ndarray | float,
     *,
-    ratings: SiteRatings,
+    site_multiplier: np.ndarray | float,
     policy: PolicySettings,
 ) -> np.ndarray:
-    """Return a wall's replacement cost from a rate, including GST.
+    """Return a wall's cost from a rate and a site allowance, including GST.
+
+    The one calculation behind both numbers this module produces. Repair cost
+    passes the site multiplier; undepreciated value passes zero, which is the
+    whole of the difference between them.
 
     Args:
         rate_excl_gst_nzd_per_m2: The square metre rate, excluding GST.
         face_area_m2: Area of wall face.
-        ratings: How hard the site is to work on.
+        site_multiplier: The site allowance, or zero for none.
         policy: The settings this scenario runs under.
 
     Returns:
@@ -356,7 +501,7 @@ def _repair_cost_incl_gst_nzd(
     if not np.all(np.isfinite(area)) or np.any(area < 0):
         msg = "face_area_m2 must be finite and not negative"
         raise ValueError(msg)
-    excl_gst = rate_excl_gst_nzd_per_m2 * area * (1.0 + ratings.multiplier)
+    excl_gst = rate_excl_gst_nzd_per_m2 * area * (1.0 + site_multiplier)
     return excl_gst * (1.0 + policy.gst_rate)
 
 
@@ -388,10 +533,62 @@ def wall_repair_cost_incl_gst_nzd(
         ValueError: If the area is negative or not finite, or if the wall type
             or any rating is not one the costing tool carries.
     """
-    return _repair_cost_incl_gst_nzd(
+    return _wall_cost_incl_gst_nzd(
         wall_rate_excl_gst_nzd_per_m2(wall_type),
         face_area_m2,
-        ratings=ratings,
+        site_multiplier=ratings.multiplier,
+        policy=policy,
+    )
+
+
+def wall_udv_incl_gst_nzd(
+    wall_type: np.ndarray | str,
+    face_area_m2: np.ndarray | float,
+    *,
+    policy: PolicySettings,
+) -> np.ndarray:
+    """Return a wall's undepreciated value, including GST.
+
+    What the same wall would have cost to build new, on the **same square metre
+    rate** the repair cost uses. The costing tool works this way, so the whole
+    of the difference between the two numbers is the site allowance: access,
+    earthworks and constructability are what it costs to work on this
+    particular site, not part of what the wall cost to build.
+
+    Two consequences worth holding on to. Repair cost can never come out below
+    UDV, because the multiplier is never negative -- the direction the two are
+    known to run, here by construction rather than by evidence. And **no age or
+    condition enters**: undepreciated means no deduction for age, so a
+    twenty-year-old wall and a new one of the same construction and size have
+    the same value.
+
+    The scope is the **whole insured wall** even where only part of it failed.
+    `vul` emits a binary replace per wall, so that holds by construction today,
+    but a partial damage state must not follow UDV down.
+
+    Pricing the replacement at the failed wall's specification is a known
+    limitation (**L-34**): walls are often rebuilt to a more substantial
+    current standard, which would want a higher rate on the repair side than on
+    this one.
+
+    Args:
+        wall_type: The construction type, scalar or array.
+        face_area_m2: Area of wall face, from :func:`wall_face_area_m2`.
+        policy: The settings this scenario runs under, which carry the rate the
+            GST-exclusive figures are grossed up at.
+
+    Returns:
+        The undepreciated value in GST-inclusive dollars, ready for
+        :class:`landloss.loss.settlement.DamagedClaim`.
+
+    Raises:
+        ValueError: If the area is negative or not finite, or the wall type is
+            not one the costing tool carries.
+    """
+    return _wall_cost_incl_gst_nzd(
+        wall_rate_excl_gst_nzd_per_m2(wall_type),
+        face_area_m2,
+        site_multiplier=0.0,
         policy=policy,
     )
 
@@ -424,9 +621,38 @@ def beta_wall_repair_cost_incl_gst_nzd(
         ValueError: If the area is negative or not finite, or any rating is not
             one the costing tool carries.
     """
-    return _repair_cost_incl_gst_nzd(
+    return _wall_cost_incl_gst_nzd(
         BETA_WALL_RATE_EXCL_GST_NZD_PER_M2,
         face_area_m2,
-        ratings=ratings,
+        site_multiplier=ratings.multiplier,
+        policy=policy,
+    )
+
+
+def beta_wall_udv_incl_gst_nzd(
+    face_area_m2: np.ndarray | float,
+    *,
+    policy: PolicySettings,
+) -> np.ndarray:
+    """Return the undepreciated value of a wall of unknown type, including GST.
+
+    :func:`wall_udv_incl_gst_nzd` on the beta flat rate, for the same reason
+    :func:`beta_wall_repair_cost_incl_gst_nzd` exists: nothing yet says which
+    of the tool's 29 construction types a modelled wall is.
+
+    Args:
+        face_area_m2: Area of wall face, from :func:`beta_wall_face_area_m2`.
+        policy: The settings this scenario runs under.
+
+    Returns:
+        The undepreciated value in GST-inclusive dollars.
+
+    Raises:
+        ValueError: If the area is negative or not finite.
+    """
+    return _wall_cost_incl_gst_nzd(
+        BETA_WALL_RATE_EXCL_GST_NZD_PER_M2,
+        face_area_m2,
+        site_multiplier=0.0,
         policy=policy,
     )

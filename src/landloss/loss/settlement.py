@@ -90,6 +90,72 @@ def _as_dwelling_count(value: np.ndarray | float) -> np.ndarray:
     return counts
 
 
+def damaged_land_value_nzd(
+    damaged_area_m2: np.ndarray | float,
+    land_rate_incl_gst_nzd_per_m2: np.ndarray | float,
+    *,
+    policy: PolicySettings,
+) -> np.ndarray | float:
+    """Return the assessed market value of the damaged insured land.
+
+    The Act values the **lesser of the damaged area and the area cap**, so
+    damage beyond the cap is valued as though it stopped there. The cap is the
+    lesser of the district plan minimum area and 4,000 m2, carried on the
+    scenario as :attr:`~landloss.loss.policy.PolicySettings.area_cap_m2`.
+
+    This is why the area and the rate are taken separately rather than as a
+    value already multiplied out: the cap acts on the area, so a pre-multiplied
+    value has already discarded what the cap needs.
+
+    Args:
+        damaged_area_m2: Area of damaged insured land, summed over the claim's
+            polygons. The union of the evacuated and inundated footprints where
+            a landslide caused it, not their sum.
+        land_rate_incl_gst_nzd_per_m2: The market rate the area is valued at,
+            including GST.
+        policy: The settings this scenario runs under.
+
+    Returns:
+        The value in GST-inclusive dollars.
+
+    Raises:
+        ValueError: If either is negative or not finite.
+
+    Examples:
+        The explainer's Example 2 -- 60 m2 valued at $750 per m2, well inside
+        the cap:
+
+        >>> from landloss.loss.policy import PolicySettings
+        >>> float(damaged_land_value_nzd(60.0, 750.0, policy=PolicySettings()))
+        45000.0
+    """
+    area = _as_amount(damaged_area_m2, name="damaged_area_m2")
+    rate = _as_amount(
+        land_rate_incl_gst_nzd_per_m2, name="land_rate_incl_gst_nzd_per_m2"
+    )
+    return np.minimum(area, policy.area_cap_m2) * rate
+
+
+def area_cap_bound(
+    damaged_area_m2: np.ndarray | float,
+    *,
+    policy: PolicySettings,
+) -> np.ndarray | bool:
+    """Return whether the area cap reduced the area that was valued.
+
+    Strictly greater, matching the sub-cap flags: damage of exactly the cap had
+    nothing taken off it.
+
+    Args:
+        damaged_area_m2: Area of damaged insured land.
+        policy: The settings this scenario runs under.
+
+    Returns:
+        Whether the cap bound, per claim.
+    """
+    return _as_amount(damaged_area_m2, name="damaged_area_m2") > policy.area_cap_m2
+
+
 def structure_contribution_nzd(
     udv_incl_gst_nzd: np.ndarray | float,
     limit_nzd: np.ndarray | float,
@@ -110,9 +176,37 @@ def structure_contribution_nzd(
     )
 
 
+def structure_sub_cap_bound(
+    udv_incl_gst_nzd: np.ndarray | float,
+    limit_nzd: np.ndarray | float,
+) -> np.ndarray | bool:
+    """Return whether the sub-cap reduced what a structure contributed.
+
+    Strictly greater, matching :attr:`Settlement.capped`: at exactly the limit
+    the sub-cap took nothing away, so it did not bind. An undamaged structure
+    has an undepreciated value of zero and never binds.
+
+    This cannot be recovered from the contribution afterwards. The contribution
+    is ``min(udv, limit)``, so a bound structure and one whose value happens to
+    equal the limit are the same number, and telling them apart by comparing
+    floats for equality is not something a caller should be left to do.
+
+    Args:
+        udv_incl_gst_nzd: Undepreciated value of the damaged structures of one
+            kind, including GST.
+        limit_nzd: The applicable sub-cap limit, already grossed up for GST.
+
+    Returns:
+        Whether the sub-cap bound, per claim.
+    """
+    return _as_amount(udv_incl_gst_nzd, name="udv_incl_gst_nzd") > _as_amount(
+        limit_nzd, name="limit_nzd"
+    )
+
+
 def land_cover_cap_nzd(
     *,
-    market_value_incl_gst_nzd: np.ndarray | float,
+    land_value_incl_gst_nzd: np.ndarray | float,
     retaining_wall_udv_incl_gst_nzd: np.ndarray | float = 0.0,
     bridge_culvert_udv_incl_gst_nzd: np.ndarray | float = 0.0,
     n_dwellings: np.ndarray | float,
@@ -120,9 +214,16 @@ def land_cover_cap_nzd(
 ) -> np.ndarray | float:
     """Return the most NHC could pay on a claim, before the excess.
 
+    This assembles the cap from parts already valued. The land's part comes
+    from :func:`damaged_land_value_nzd`, which is where the area cap is
+    applied, so passing a value worked out some other way passes the cap by.
+    :func:`settle` wires the two together and is the way in for a caller who
+    has a claim rather than a set of components.
+
     Args:
-        market_value_incl_gst_nzd: Assessed market value of the damaged insured
-            land areas, including GST. Zero where only structures are damaged.
+        land_value_incl_gst_nzd: Assessed market value of the damaged insured
+            land, from :func:`damaged_land_value_nzd`. Zero where only
+            structures are damaged.
         retaining_wall_udv_incl_gst_nzd: Undepreciated value of the damaged
             retaining walls, including GST.
         bridge_culvert_udv_incl_gst_nzd: Undepreciated value of the damaged
@@ -143,7 +244,7 @@ def land_cover_cap_nzd(
 
         >>> from landloss.loss.policy import PolicySettings
         >>> float(land_cover_cap_nzd(
-        ...     market_value_incl_gst_nzd=45_000.0,
+        ...     land_value_incl_gst_nzd=45_000.0,
         ...     retaining_wall_udv_incl_gst_nzd=70_000.0,
         ...     n_dwellings=1,
         ...     policy=PolicySettings(),
@@ -152,7 +253,7 @@ def land_cover_cap_nzd(
     """
     dwellings = _as_dwelling_count(n_dwellings)
     cap = (
-        _as_amount(market_value_incl_gst_nzd, name="market_value_incl_gst_nzd")
+        _as_amount(land_value_incl_gst_nzd, name="land_value_incl_gst_nzd")
         + structure_contribution_nzd(
             retaining_wall_udv_incl_gst_nzd,
             policy.retaining_wall_limit_nzd(dwellings),
@@ -177,11 +278,20 @@ class DamagedClaim:
     Scalars settle one claim; arrays of equal length settle a whole portfolio
     in one call, which is how the module is meant to be used against a frame.
 
+    The damaged land arrives as an **area and a rate** rather than as a value
+    already multiplied out, because the Act's area cap acts on the area. A
+    pre-multiplied value has discarded what the cap needs, and `vul` sends both
+    per land polygon in any case.
+
     Attributes:
         repair_cost_incl_gst_nzd: The cost of putting the damage right, summed
             over every cause on the claim.
-        market_value_incl_gst_nzd: Assessed market value of the damaged insured
-            land areas. Zero where only structures are damaged.
+        damaged_area_m2: Area of damaged insured land, summed over the claim's
+            polygons. Zero where only structures are damaged. The union of the
+            evacuated and inundated footprints where a landslide caused it, not
+            their sum.
+        land_rate_incl_gst_nzd_per_m2: The market rate the damaged area is
+            valued at.
         n_dwellings: Dwellings in the residential building, which is what both
             sub-caps are multiplied by.
         retaining_wall_udv_incl_gst_nzd: Undepreciated value of the damaged
@@ -191,7 +301,8 @@ class DamagedClaim:
     """
 
     repair_cost_incl_gst_nzd: np.ndarray | float
-    market_value_incl_gst_nzd: np.ndarray | float
+    damaged_area_m2: np.ndarray | float
+    land_rate_incl_gst_nzd_per_m2: np.ndarray | float
     n_dwellings: np.ndarray | float
     retaining_wall_udv_incl_gst_nzd: np.ndarray | float = 0.0
     bridge_culvert_udv_incl_gst_nzd: np.ndarray | float = 0.0
@@ -209,22 +320,43 @@ class Settlement:
     Attributes:
         land_cover_cap_nzd: The most that could have been paid, before excess.
         repair_cost_nzd: The repair cost the cap was compared against.
+        damaged_land_value_nzd: What the damaged land added to the cap, after
+            the area cap.
+        area_cap_bound: Whether the area cap reduced the area that was valued.
         retaining_wall_contribution_nzd: What the walls added to the cap.
         bridge_culvert_contribution_nzd: What the bridges and culverts added.
+        retaining_wall_sub_cap_bound: Whether the retaining wall sub-cap
+            reduced what the walls contributed.
+        bridge_culvert_sub_cap_bound: Whether the bridge and culvert sub-cap
+            reduced what they contributed.
         excess_nzd: The excess deducted.
         settlement_nzd: What is paid, never below zero.
     """
 
     land_cover_cap_nzd: np.ndarray | float
     repair_cost_nzd: np.ndarray | float
+    damaged_land_value_nzd: np.ndarray | float
+    area_cap_bound: np.ndarray | bool
     retaining_wall_contribution_nzd: np.ndarray | float
     bridge_culvert_contribution_nzd: np.ndarray | float
+    retaining_wall_sub_cap_bound: np.ndarray | bool
+    bridge_culvert_sub_cap_bound: np.ndarray | bool
     excess_nzd: np.ndarray | float
     settlement_nzd: np.ndarray | float
 
     @property
     def capped(self) -> np.ndarray | bool:
-        """Whether the land cover cap bound rather than the repair cost."""
+        """Whether the land cover cap bound rather than the repair cost.
+
+        Worth reading with care on a claim carrying no damaged land. There the
+        cap reduces to the structures' contribution, which is below the repair
+        cost by construction -- undepreciated value excludes the enabling works,
+        compliance items and site difficulty the repair cost carries -- so this
+        is true of every such claim and says nothing about it. What moved the
+        answer is the undepreciated value, and
+        :attr:`retaining_wall_sub_cap_bound` is what says whether the sub-cap
+        took anything off it.
+        """
         return np.asarray(self.land_cover_cap_nzd) < np.asarray(self.repair_cost_nzd)
 
 
@@ -248,7 +380,8 @@ def settle(claim: DamagedClaim, *, policy: PolicySettings) -> Settlement:
         >>> result = settle(
         ...     DamagedClaim(
         ...         repair_cost_incl_gst_nzd=58_000.0,
-        ...         market_value_incl_gst_nzd=45_000.0,
+        ...         damaged_area_m2=60.0,
+        ...         land_rate_incl_gst_nzd_per_m2=750.0,
         ...         retaining_wall_udv_incl_gst_nzd=30_000.0,
         ...         n_dwellings=1,
         ...     ),
@@ -262,16 +395,19 @@ def settle(claim: DamagedClaim, *, policy: PolicySettings) -> Settlement:
     dwellings = _as_dwelling_count(claim.n_dwellings)
     repair = _as_amount(claim.repair_cost_incl_gst_nzd, name="repair_cost_incl_gst_nzd")
 
+    land = damaged_land_value_nzd(
+        claim.damaged_area_m2, claim.land_rate_incl_gst_nzd_per_m2, policy=policy
+    )
+    wall_limit = policy.retaining_wall_limit_nzd(dwellings)
+    crossing_limit = policy.bridge_culvert_limit_nzd(dwellings)
     walls = structure_contribution_nzd(
-        claim.retaining_wall_udv_incl_gst_nzd,
-        policy.retaining_wall_limit_nzd(dwellings),
+        claim.retaining_wall_udv_incl_gst_nzd, wall_limit
     )
     crossings = structure_contribution_nzd(
-        claim.bridge_culvert_udv_incl_gst_nzd,
-        policy.bridge_culvert_limit_nzd(dwellings),
+        claim.bridge_culvert_udv_incl_gst_nzd, crossing_limit
     )
     cap = land_cover_cap_nzd(
-        market_value_incl_gst_nzd=claim.market_value_incl_gst_nzd,
+        land_value_incl_gst_nzd=land,
         retaining_wall_udv_incl_gst_nzd=claim.retaining_wall_udv_incl_gst_nzd,
         bridge_culvert_udv_incl_gst_nzd=claim.bridge_culvert_udv_incl_gst_nzd,
         n_dwellings=dwellings,
@@ -286,8 +422,16 @@ def settle(claim: DamagedClaim, *, policy: PolicySettings) -> Settlement:
     return Settlement(
         land_cover_cap_nzd=cap,
         repair_cost_nzd=repair,
+        damaged_land_value_nzd=land,
+        area_cap_bound=area_cap_bound(claim.damaged_area_m2, policy=policy),
         retaining_wall_contribution_nzd=walls,
         bridge_culvert_contribution_nzd=crossings,
+        retaining_wall_sub_cap_bound=structure_sub_cap_bound(
+            claim.retaining_wall_udv_incl_gst_nzd, wall_limit
+        ),
+        bridge_culvert_sub_cap_bound=structure_sub_cap_bound(
+            claim.bridge_culvert_udv_incl_gst_nzd, crossing_limit
+        ),
         excess_nzd=excess,
         settlement_nzd=settlement,
     )
