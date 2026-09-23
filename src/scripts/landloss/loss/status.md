@@ -4,7 +4,7 @@
 and tested. Nothing reads real data yet — no upstream module emits what it
 consumes.
 
-**Updated:** 2026-09-23
+**Updated:** 2026-09-24
 
 ## Approach
 
@@ -175,3 +175,61 @@ The settlement core is built and is the only part that needed no upstream data.
 - **Whether a total cap binds before or after the excess.** Applied before, on
   the reading that it caps cover rather than payment. Not confirmed.
 - The rest are in `.agents/plans/asset-pricing-approach.md`, section 8.
+
+## Questions outstanding
+
+Raised by Perrie Gilbert, 2026-09-24. Not yet numbered in
+`.agents/context/register.json`, and not yet put to NHC.
+
+**What the retaining wall rate covers.**
+
+- Is one square-metre rate fair for both *building* a wall and *valuing* one?
+  Repair cost and UDV both come off it today, separated only by the site
+  multiplier.
+- Does the rate carry non-construction costs at all — geotechnical fees, design,
+  building and resource consent, survey? If it does not, they are missing from
+  both numbers, and it needs saying where they are captured instead.
+- Should the Land SOW use a higher rate than UDV, on the basis that a failed wall
+  is rebuilt to a more substantial current standard? Recorded as **L-34** and
+  still open.
+
+**The site ratings, and the costs that sit outside them.**
+
+- How are constructability, construction access and earthworks required to be
+  determined for a synthetic population at all (**Q-10**)?
+- Is earthworks difficulty independent of the inundation volume? If it is,
+  clearing the spoil belongs as its own cost line rather than as a nudge to a
+  multiplier (**L-33**).
+- The same question for survey and any other flat cost: are they added, and if
+  so **before or after** the multiplier is applied? The two give different
+  answers.
+
+**The wall's condition, as a proxy for replacement specification.**
+
+- Should `initial_condition` — modern or poor — set the rate the replacement is
+  priced at? The interest is in it as a proxy for **specification, not age**: a
+  poor wall is likelier than a modern one to be rebuilt to a higher standard. So
+  it is a candidate mechanism for the gap **L-34** describes between the Land SOW
+  rate and the UDV rate, rather than a deduction from UDV, which undepreciated
+  value does not take.
+- Two things stand between it and that job. The attribute is defined as being
+  read off the **age of the dwelling** (`landloss.exposure.rw.beta_population`),
+  so using it for specification is a second inference laid on an age
+  classification — and in the beta it is not read off anything, but drawn at a
+  50% poor share. It also changes no number anywhere today: the beta fragility
+  is a flat 0.7 whatever the condition, and pricing never reads it. So the
+  premise is worth correcting — it is not "only used for vulnerability", it is
+  carried and unused, in vulnerability as much as in pricing.
+
+**Land damage and wall damage on the same claim.**
+
+- How is damaged land associated with a damaged wall? A settlement generally
+  assumes that repairing the wall also reinstates the land it retained.
+- Does that make the claim the right unit — one repair cost for the whole claim,
+  compared against the summed UDV and land value across it? That is what `settle`
+  does today, and it is an assumption rather than a finding.
+- When does land damage with no wall present call for a **new** wall to be built,
+  and at what size? Does that need the slope of the land?
+- Where one property carries both — a wall damaged in one place, and independent
+  land damage elsewhere on the same property that would need a new wall — how are
+  the two kept apart?
