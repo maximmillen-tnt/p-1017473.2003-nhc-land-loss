@@ -86,6 +86,12 @@ GWRC_SEVERITY_RANKS = {
 WCC_CUT_AREAS_LAYER_ID = 125307
 WCC_FILL_AREAS_LAYER_ID = 125311
 
+# https://ttgroup.koordinates.com/layer/125308-gns-slide-morphological-data/
+# GNS Science's mapped linear geomorphic features of urban Wellington -- scarps,
+# cliffs, breaks in slope, drainage lines and some retaining walls -- from the
+# MBIE-funded SLIDE programme, mirrored onto the T+T instance for this study.
+GNS_SLIDE_MORPHOLOGY_LAYER_ID = 125308
+
 # The supplied earthquake-induced landslide probability grid, below the
 # project's SourceMaterial folder on T:. Read by
 # landloss.io.source_material.get_eil_landslide_probability; forward slashes so

@@ -1,6 +1,6 @@
 """Join every hazard's damage onto one row per property.
 
-The vulnerability module ends in four separate files keyed on ``address_id`` --
+The vulnerability module ends in four separate files keyed on ``claim_id`` --
 liquefaction land damage, landslide areas, retaining wall states and crossing
 states -- and nothing brings them together. This step does:
 
@@ -62,7 +62,7 @@ if hasattr(sys.stdout, "reconfigure"):
 WORK_DIR = TEMP_DIR / "vul"
 OUT_STEM = "property-damage"
 
-ID_COLUMN = "address_id"
+ID_COLUMN = "claim_id"
 
 # What the landslide step contributes, and what a property it did not reach
 # carries instead. An area is zero because untouched ground is undamaged ground;

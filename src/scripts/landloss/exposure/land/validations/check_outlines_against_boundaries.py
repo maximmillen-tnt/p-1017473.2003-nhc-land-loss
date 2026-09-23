@@ -1,11 +1,10 @@
 """Check whether building outlines stay inside one property, or straddle several.
 
-The insured land extent is buffered off building outlines and keyed on
-addresses, and it assumes without checking that an outline belongs to one
-property. A terrace of townhouses captured as a single polygon across five
-freehold sections breaks that assumption, and breaks it in a way that matters:
-the sharing rule then attaches one outline to addresses on separate titles, and
-the ground around it is divided between properties that do not share it.
+The insured land extent splits a building that straddles a property boundary
+into one part per property, because a terrace of townhouses captured as a single
+polygon across five freehold sections really is five buildings on five pieces of
+land. This script measures how often that happens, and checks that the extent's
+threshold is catching the cases that matter.
 
     uv run --frozen python src/scripts/landloss/exposure/land/validations/check_outlines_against_boundaries.py
 
@@ -44,10 +43,10 @@ import pandas as pd
 
 from landloss.domain import constants
 from landloss.exposure.land.extent import (
-    ADDRESS_ID_COLUMN,
+    CLAIM_ID_COLUMN,
     OUTLINE_ID_COLUMN,
-    attach_buildings_to_addresses,
-    collapse_coincident_addresses,
+    assign_buildings_to_properties,
+    build_claim_properties,
 )
 from landloss.io.readers import get_nz_building_outlines, get_nz_property_boundaries
 from scripts.landloss.exposure.land.steps.s5_insured_land_extent import config
@@ -220,29 +219,29 @@ def describe_crossing_titles(crossing_ids, buildings, boundaries):
     )
 
 
-def describe_effect_on_sharing(crossing_ids, attached):
-    """Print how many crossing outlines the sharing rule attached to several addresses.
+def describe_effect_on_extent(crossing_ids, parts):
+    """Print how many crossing outlines the extent actually split.
 
-    This is the link between a fact about two LINZ layers and a defect in the
-    insured land extent. An outline that straddles two titles and carries an
-    address point on each is exactly how the sharing rule comes to merge
-    properties that do not share any land.
+    This is the link between a fact about two LINZ layers and what the insured
+    land extent does with it. An outline that straddles two properties is two
+    buildings on two pieces of land, and the extent is built to split it; an
+    outline that merely overhangs is left whole on the property holding most of
+    it. The two counts below say how often each happened.
     """
-    per_outline = attached.groupby(OUTLINE_ID_COLUMN)[ADDRESS_ID_COLUMN].nunique()
-    shared = set(per_outline[per_outline > 1].index)
+    per_outline = parts.groupby(OUTLINE_ID_COLUMN)[CLAIM_ID_COLUMN].nunique()
+    split = set(per_outline[per_outline > 1].index)
 
     print(RULE)
-    print(f"Outlines attached to more than one address: {len(shared):,}")
-    both = crossing_ids & shared
+    print(f"Outlines standing on a claim property: {len(per_outline):,}")
+    print(f"  {len(split):,} were split across more than one property")
+    missed = crossing_ids & set(per_outline.index) - split
     print(
-        f"  {len(both):,} of those properly cross a property boundary, so the "
-        "addresses sharing them are on separate pieces of land"
+        f"  {len(missed):,} cross a boundary by the measure above but were not "
+        "split, the second property carrying no dwelling and so no claim"
     )
-    if shared:
-        print(f"  which is {len(both) / len(shared):.0%} of the shared outlines")
     print(
-        f"  {len(crossing_ids - shared):,} crossing outlines carry one address "
-        "or none, so the extent never merged anything on them"
+        f"  {len(split - crossing_ids):,} were split although they do not cross "
+        "by that measure, which should be none"
     )
 
 
@@ -270,10 +269,10 @@ def main(*, pilot):
     crossing_ids = describe_crossings(coverage)
     describe_crossing_titles(crossing_ids, buildings, boundaries)
 
-    attached = attach_buildings_to_addresses(
-        buildings, collapse_coincident_addresses(addresses)
+    parts = assign_buildings_to_properties(
+        buildings, build_claim_properties(boundaries)
     )
-    describe_effect_on_sharing(crossing_ids, attached)
+    describe_effect_on_extent(crossing_ids, parts)
 
     print(RULE)
     print(

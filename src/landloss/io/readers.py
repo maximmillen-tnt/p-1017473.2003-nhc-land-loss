@@ -557,9 +557,17 @@ def get_wcc_cut_areas(
     "WCC Earthmoving - Cut Areas" at
     https://ttgroup.koordinates.com/layer/125307-wcc-earthmoving-cut-areas/,
     mirrored onto the T+T instance for this study. 203 polygons covering 2.8
-    km2, all of them in Wellington City's hill suburbs between Karori and
-    Churton Park; nothing in Porirua, Lower Hutt or Upper Hutt, and nothing on
-    the south coast or the eastern suburbs.
+    km2, all of them in Wellington City and nothing in Porirua, Lower Hutt or
+    Upper Hutt. Most sit in the northern suburbs (Johnsonville, Newlands,
+    Churton Park) and Karori, with smaller clusters in the southern suburbs
+    (Island Bay, Brooklyn) and on the Miramar peninsula (Seatoun Heights).
+
+    The record is far from a complete inventory of earthworked ground. Only
+    about 30% of the cut/fill line length GNS mapped independently from imagery
+    falls within 10 m of a WCC cut or fill polygon; see
+    ``src/scripts/landloss/hazard/landslide/research/
+    wcc_earthworks_completeness.md``. Ground with no polygon has not been shown
+    to be natural.
 
     This is an index of the earthworks records the council holds, not a terrain
     model. Every attribute is a pointer back to an archived plan --
@@ -615,8 +623,9 @@ def get_wcc_fill_areas(
     "WCC Earthmoving - Fill Areas" at
     https://ttgroup.koordinates.com/layer/125311-wcc-earthmoving-fill-areas/,
     the companion to :func:`get_wcc_cut_areas` and carrying the same attributes.
-    250 polygons covering 3.5 km2, over the same Wellington City hill suburbs
-    and with the same absence of coverage elsewhere in the study area. The
+    250 polygons covering 3.5 km2, spread over the same Wellington City suburbs
+    as the cut areas, with the same incompleteness and the same absence of
+    coverage in Porirua and the Hutt. The
     council describes it as the earthworks fill locations in Wellington City,
     predominantly carried out for subdivision purposes.
 
@@ -650,6 +659,67 @@ def get_wcc_fill_areas(
     """
     return get_koordinates_layer_extent(
         layer=constants.WCC_FILL_AREAS_LAYER_ID,
+        crs=crs,
+        bbox=bbox,
+        domain=constants.TTGROUP_DOMAIN,
+        use_cache=use_cache,
+    )
+
+
+def get_gns_slide_morphology(
+    bbox: tuple[float, float, float, float] | None = None,
+    crs: int | str = constants.DEFAULT_CRS,
+    *,
+    use_cache: bool = True,
+) -> gpd.GeoDataFrame:
+    """Load GNS Science's mapped linear geomorphic features of urban Wellington.
+
+    "GNS SLIDE Morphological Data" at
+    https://ttgroup.koordinates.com/layer/125308-gns-slide-morphological-data/,
+    from the "Geomorphological characterisation of the Wellington urban area"
+    study within the MBIE-funded SLIDE (Stability of Land In Dynamic
+    Environments) programme. 55,734 polylines totalling about 4,800 km, mapped
+    from imagery and elevation models over Wellington City only
+    (1,742,450 - 1,755,353 E, 5,420,845 - 5,439,977 N in NZTM); nothing in
+    Porirua, Lower Hutt or Upper Hutt.
+
+    Each line carries a ``Type`` and, for some types, a ``Subtype``. Breaks in
+    slope dominate: concave and convex, each split ``rounded`` or ``sharp``,
+    make up about two thirds of the mapped length. The rest are retaining walls
+    (11,288 short segments, about 280 km), obscured contacts, cut/fill lines,
+    drainage lines, ridgelines, streams, cliffs and a handful of tension
+    cracks. Although the layer description mentions recent landslide scarps, no
+    ``Type`` names them; the landslide bodies themselves are in the companion
+    "Genesis" polygon layer (125309), which this reader does not read.
+
+    The retaining walls are "some" rather than all, in GNS's own words: only
+    those visible from above were captured, so the layer cannot stand in for a
+    wall inventory. ``SHAPE_Length`` is the source's own length in metres and is
+    not recomputed after clipping.
+
+    Licence:
+        Creative Commons Attribution 4.0 International (CC BY 4.0), as recorded
+        on the layer's own metadata. Anything derived from it and published --
+        a figure, a table, a susceptibility layer -- must attribute GNS Science
+        and the SLIDE programme. Modification and redistribution are permitted.
+
+    Source:
+        GNS Science, SLIDE programme (MBIE), mirrored to the T+T Koordinates
+        instance in the "NHC WTGN Land Damage Model" group, September 2026. No
+        DOI.
+
+    Args:
+        bbox: The extent to clip to (minx, miny, maxx, maxy) in ``crs``. Omitting
+            it returns every mapped feature.
+        crs: The coordinate reference system to return the features in.
+        use_cache: Whether to read and write the clipped extent cache.
+
+    Returns:
+        A GeoDataFrame of geomorphic feature lines with ``Type``, ``Subtype``
+        and ``SHAPE_Length`` columns.
+    """
+    return get_koordinates_layer_extent(
+        layer=constants.GNS_SLIDE_MORPHOLOGY_LAYER_ID,
         crs=crs,
         bbox=bbox,
         domain=constants.TTGROUP_DOMAIN,

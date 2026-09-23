@@ -71,6 +71,20 @@ SMALL_WLG_PILOT = AreaOfInterest(
     north=-41.309796,
 )
 
+# A pilot box over Johnsonville, Newlands and Paparangi, for the slope failure
+# susceptibility work. SMALL_WLG_PILOT cannot be used for that: it sits over Mt
+# Victoria and Hataitai, and holds not one polygon of the Wellington City
+# earthworks record the slope modification factor is built from. This box is
+# where that record is densest -- about 190 of the 453 cut and fill polygons,
+# roughly 2.8 km2 of mapped earthworks in 16 km2 of hill suburb.
+WLG_EARTHWORKS_PILOT = AreaOfInterest(
+    name="Johnsonville and Newlands",
+    west=174.78881496861425,
+    south=-41.231493541571886,
+    east=174.83750131663035,
+    north=-41.194728870313334,
+)
+
 # The Canterbury earthquake sequence study area, covering Christchurch city and
 # the flat land around it. This is the extent the observed land damage evidence
 # is drawn from -- the only New Zealand dataset holding both settled land claims

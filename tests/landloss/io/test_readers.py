@@ -10,6 +10,7 @@ from landloss.domain import constants
 from landloss.io import readers
 from landloss.io.area_of_interest import SMALL_WLG_PILOT
 from landloss.io.readers import (
+    get_gns_slide_morphology,
     get_gwrc_slope_failure,
     get_koordinates_layer_extent,
     get_nz_addresses,
@@ -567,6 +568,34 @@ def test_nz_land_cover_layer_id_matches_lris() -> None:
 def test_lris_has_its_own_api_key_variable() -> None:
     """LRIS is a separate Koordinates account, so it needs its own key."""
     assert constants.API_KEY_ENV_VARS[constants.LRIS_DOMAIN] == "LRIS_API_KEY"
+
+
+# --- GNS SLIDE morphology --------------------------------------------------
+
+
+def test_get_gns_slide_morphology_requests_the_ttgroup_layer(
+    fake_koordinates: dict[str, object],
+) -> None:
+    """The mirror lives on the T+T instance, so the T+T key is the one used."""
+    get_gns_slide_morphology(bbox=BBOX)
+
+    assert fake_koordinates["layer_id"] == constants.GNS_SLIDE_MORPHOLOGY_LAYER_ID
+    assert fake_koordinates["conn"].domain == constants.TTGROUP_DOMAIN
+    assert fake_koordinates["conn"].api_key == "tnt-key"
+
+
+def test_gns_slide_morphology_layer_id_matches_koordinates() -> None:
+    """Guards the layer ID against an accidental edit."""
+    assert constants.GNS_SLIDE_MORPHOLOGY_LAYER_ID == 125308
+
+
+def test_get_gns_slide_morphology_applies_the_bbox(
+    fake_koordinates: dict[str, object],
+) -> None:
+    """The extent is passed through, rather than all of Wellington returned."""
+    result = get_gns_slide_morphology(bbox=BBOX)
+
+    assert "outside" not in set(result["name"])
 
 
 # --- WCC earthmoving ---------------------------------------------------------

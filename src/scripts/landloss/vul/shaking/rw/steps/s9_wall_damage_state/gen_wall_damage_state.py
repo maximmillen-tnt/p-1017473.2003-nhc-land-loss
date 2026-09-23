@@ -99,7 +99,7 @@ def describe_states(states):
 
     replaced = states[states[DAMAGE_STATE_COLUMN] == REPLACE]
     print(
-        f"  {replaced['address_id'].nunique():,} properties carry at least one "
+        f"  {replaced['claim_id'].nunique():,} properties carry at least one "
         "wall to replace"
     )
 
@@ -117,7 +117,7 @@ def main(*, pilot, realisation_ids):
         states = pd.DataFrame(
             {
                 "realisation_id": realisation_id,
-                "address_id": walls["address_id"].to_numpy(),
+                "claim_id": walls["claim_id"].to_numpy(),
                 ASSET_COLUMN: ASSET,
                 "size_class": walls["size_class"].to_numpy(),
                 "initial_condition": walls["initial_condition"].to_numpy(),

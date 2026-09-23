@@ -46,7 +46,7 @@ DRIVEWAY_HALF_WIDTH_M = 1.5
 # a real thing and this study's extent includes some.
 MAX_DRIVEWAY_LENGTH_M = 300.0
 
-ADDRESS_ID_COLUMN = "address_id"
+CLAIM_ID_COLUMN = "claim_id"
 DRIVEWAY_LENGTH_COLUMN = "driveway_length_m"
 
 
@@ -92,7 +92,7 @@ def generate_driveways(
     *,
     half_width_m: float = DRIVEWAY_HALF_WIDTH_M,
     max_length_m: float = MAX_DRIVEWAY_LENGTH_M,
-    id_column: str = ADDRESS_ID_COLUMN,
+    id_column: str = CLAIM_ID_COLUMN,
 ) -> gpd.GeoDataFrame:
     """Generate a driveway corridor per building.
 
@@ -158,7 +158,7 @@ def merge_driveways_into_extent(
     extent: gpd.GeoDataFrame,
     driveways: gpd.GeoDataFrame,
     *,
-    id_column: str = ADDRESS_ID_COLUMN,
+    id_column: str = CLAIM_ID_COLUMN,
 ) -> gpd.GeoDataFrame:
     """Add each property's driveways to its insured land polygon.
 

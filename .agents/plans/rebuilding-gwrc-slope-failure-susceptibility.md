@@ -295,45 +295,146 @@ A rebuild therefore reproduces the *scheme* faithfully and the *map*
 approximately. It would not reproduce the 1995 polygons and should not be
 presented as doing so.
 
+## Scope decisions, 23 September 2026
+
+Three calls taken after the first pass, which between them cut the outstanding
+list roughly in half.
+
+1. **Residential land only.** The product is not a wall-to-wall regional
+   susceptibility map. It is a susceptibility score on **insured land** — the
+   ground around dwellings — which is what the loss model settles on anyway.
+   This is the largest of the three changes and it is worked through below.
+2. **The geology factor is not worth mapping in detail.** Weathering state and
+   crushed/shattered zones are dropped; see below for why the source itself
+   supports this.
+3. **Validation is by visual comparison** against the GWRC layer where it has
+   coverage. The published values and weightings are adopted as they stand and
+   not re-tuned, so Hancox et al. (1994) stops being a blocker. Displaying the
+   ND layer unchanged beside our own is inside the licence, so this is also the
+   cheapest validation available.
+
+### What "residential only" removes
+
+- **Quarries, entirely.** Horokiwi, Kiwi Point and Owhiro Bay are not
+  residential ground. The booklets call quarry faces the least stable slopes in
+  the region, and it no longer matters to us.
+- **State highway and rail corridor cuts, mostly.** A Ngauranga Gorge cut face
+  does not damage insured residential land. The exception is the suburban road
+  cut — the booklets note that "all the suburban roads in the hilly areas
+  include significant cut slopes", and those form the uphill or downhill
+  boundary of real sections.
+- **The need for coverage over non-residential hill country**, which is most of
+  the area the 1995 map covers.
+
+What it does **not** remove is the coverage gap in Porirua, Lower Hutt and Upper
+Hutt. Those three have residential hill country too, and no earthworks records
+in hand.
+
+The useful consequence is that the WCC earthmoving layers are **subdivision**
+earthworks — exactly the residential population — so the one dataset we have is
+aimed at the one population we care about. And restricting the score to insured
+land makes the 1 m fine pass cheaper again, because it only has to run over the
+insured land extent rather than over whole hillsides.
+
+### How much residential ground the earthmoving layers actually reach
+
+Measured over the earthworks bounding box (1,743,714–1,755,067 E,
+5,421,193–5,442,304 N), which holds 100,997 LINZ addresses and 76,038 building
+outlines:
+
+| | Addresses on it | Buildings touching it |
+| --- | --- | --- |
+| Cut areas | 4,201 | 4,430 |
+| Fill areas | 4,408 | 4,904 |
+| Either | **8,533** (8.4%) | 8,061 |
+
+Against an 8 m buffer on every building as a stand-in for insured land: 37.38
+km² of proxy insured land in that box, of which **3.59 km², or 9.6%, sits on
+mapped earthworks**. Read the other way, **59% of the 6.08 km² of mapped
+earthworks is proxy insured land** — these layers are mostly residential ground,
+which confirms they are aimed at the population this study cares about.
+
+Two things follow, and the second is the important one.
+
+- **8,500 addresses is a population worth having.** It justifies the licence
+  conversation with the council on its own.
+- **The modification factor will reach only about one insured-land polygon in
+  ten, even inside the one area that has records.** The other nine score
+  F<sub>SM</sub> = 0 and so cannot reach High or Very High on modification at
+  all, while the 1995 rules put *every* modified slope in one of those two
+  zones. Our map will therefore come out systematically less severe than the
+  GWRC one, and the visual comparison in decision 3 will show exactly that. It
+  is a coverage artefact, not a modelling disagreement, and it has to be said
+  out loud or it will be misread as one.
+
+That second point also changes what the LiDAR fallback is for. It is not only
+for the three territorial authorities with no records — it is needed inside
+Wellington City too, because an archive of consented subdivision earthworks
+cannot capture the older suburbs. The booklets say as much: "Older subdivisions
+in the hills have fewer large-scale cuts and fills, but all the suburban roads
+in the hilly areas include significant cut slopes."
+
+Caveats on the numbers: the 8 m buffer is taken around every building outline,
+including garages and sheds, rather than around dwellings, and it skips the
+driveway and shared-ground handling the real insured land extent does; and the
+box is the earthworks extent, not all of Wellington City. Both make this a
+sizing exercise rather than an exposure result.
+
+### Why the geology factor can be a constant
+
+The source says so itself. Booklet section 4.2.3: geology "was less important
+for this study because of the relative uniformity of bedrock type in the
+Region", with the steep slopes "underlain by greywacke rock with a variable but
+generally thin (1 to 2 metre) surface layer of colluvium".
+
+The arithmetic agrees. The factor is weighted 2, the second lowest, so it spans
+0 to 20 of 150. And in Kingsbury's own five worked examples it contributes 4,
+4, 20, 20 and 20 — **a single value for everything Moderate and above**, which
+is all the ground that matters here.
+
+So: set F<sub>G</sub> to the colluvium-over-greywacke value on hill country, as
+Kingsbury effectively did, and read the colluvium/alluvium against greywacke
+split from QMAP if it is there. Do not chase weathering state, the
+crushed/shattered class, the NZ Active Faults Database proxy or the 1:50,000
+urban geological sheets. Expect QMAP at 1:250,000 not to resolve a 1–2 m
+colluvium veneer on hillslopes, so expect a constant in practice.
+
+A constant shifts every score equally, so it changes nothing about the ranking
+and only moves where the fixed band boundaries bite. State it as a limitation,
+and check it by re-running the score with the greywacke value instead and
+reporting how many properties change zone. That is a one-line sensitivity test,
+not a data programme.
+
 ## What is still missing, as at 23 September 2026
 
-With the WCC earthmoving layers in hand, this is the outstanding list, ordered
-by how much of the 150-point score it controls.
-
-1. **Modification outside Wellington City's subdivision earthworks — 40 points.**
-   Road, rail and quarry cuts everywhere; all modification in Porirua, Lower
-   Hutt and Upper Hutt; Wellington's south coast and eastern suburbs. Either
-   chase the equivalent records from the other three councils, NZTA and
-   KiwiRail, or detect cut faces from LiDAR along road and rail corridors and
-   around building platforms. The second is a real piece of work but it is
-   bounded, and it is the same work the retaining wall exposure needs.
-2. **Quarry extents — part of the same 40 points.** The booklets treat quarry
-   faces as the least stable slopes in the region and name Horokiwi, Kiwi Point
-   and Owhiro Bay. LINZ Topo50 publishes quarry polygons; confirm the layer and
-   its currency before relying on it.
+1. **Subdivision earthworks records for Porirua, Lower Hutt and Upper Hutt —
+   40 points, and now the main gap.** Ask those three councils for their
+   equivalent of the WCC earthmoving layers. This is a smaller and more likely
+   ask than the NZTA, KiwiRail and quarry chase it replaces, because it is the
+   same kind of record from the same kind of body.
+2. **Cut and fill detection from LiDAR, over the insured land extent only.**
+   Not just a fallback for the three councils with no records: the measurement
+   above shows the WCC archive reaches only about a tenth of insured land even
+   where it does cover, so this is needed inside Wellington City as well.
+   Bounded by construction, because the extent is already computed, and it is
+   the same terrain work the retaining wall exposure needs.
 3. **Whether a slope is retained, and whether the retaining is seismically
-   designed — a reclassification, not a score.** The mapping rules lift or drop
-   a slope on this alone. `data-sources.md` already records that no private
-   retaining wall dataset exists, so this is a known dead end rather than a new
-   one; the practical answer is to state the assumption and test the sensitivity.
+   designed.** The mapping rules lift or drop a slope on this alone.
+   `data-sources.md` records that no private retaining wall dataset exists, so
+   this is a known dead end; the newly mirrored GNS SLIDE morphology layer
+   (`GNS_SLIDE_MORPHOLOGY_LAYER_ID`) carries some retaining walls among its
+   mapped linear features and is worth testing as a partial answer.
 4. **A landslide inventory — 20 points.** The GNS New Zealand Landslide Database
-   is the obvious candidate and is not held; its availability and licence both
-   need checking. The old/active split the factor needs may not survive whatever
-   is obtainable.
-5. **Weathering state and crushed/shattered zones — up to 20 points.** QMAP
-   separates colluvium and alluvium from greywacke but does not map weathering.
-   Fault proximity from the NZ Active Faults Database is a reasonable proxy for
-   crushed and shattered ground; the 1:50,000 Wellington urban geological maps
-   would be better if they can be obtained.
-6. **The calibration target.** Hancox et al. (1994). Without it the published
-   values and weightings can be adopted but not checked.
-7. **A licence position on the WCC layers.** See below — this is a blocker on
+   is the obvious candidate and is not held; availability and licence both need
+   checking, and the old/active split may not survive whatever is obtainable.
+   The GNS SLIDE morphology layer's scarps and breaks in slope may substitute
+   for part of it.
+5. **A licence position on the WCC layers.** See below. This is a blocker on
    publishing anything derived, not a data gap.
 
-Nothing on this list blocks a first cut over Wellington City's hill suburbs,
-which is where the cut and fill records are and where the cut-and-fill failure
-mode the project cares about is concentrated. Items 1 and 2 are what stand
-between that and a study-area-wide layer.
+Nothing on this list blocks a first cut over Wellington City's residential hill
+suburbs, which is where the cut and fill records are and where the cut-and-fill
+failure mode the project cares about is concentrated.
 
 ## Options
 

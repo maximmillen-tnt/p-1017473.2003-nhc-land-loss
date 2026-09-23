@@ -174,6 +174,7 @@ each other:
 | `exposure/land/steps/s2_land_value/fig_land_value_map.py` | `report/exposure/land/land-value/fig/` |
 | `vul/liquefaction/land/report/fig_land_damage_maps.py` | `report/vul/liquefaction/land/fig/` |
 | `hazard/research/fig_cross_sections.py` | `research/hazard/cross_sections/fig/` |
+| `hazard/landslide/research/fig_wcc_earthworks_completeness.py` | `research/hazard/landslide/wcc_earthworks_completeness/fig/` |
 
 Report figures go under `report/`, exploratory ones under `research/`, and CSV
 tables under a `tab/` directory beside the `fig/`. Both roots are reached through

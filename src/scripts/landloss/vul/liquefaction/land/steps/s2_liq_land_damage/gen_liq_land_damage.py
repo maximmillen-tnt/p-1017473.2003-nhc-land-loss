@@ -79,7 +79,7 @@ def describe_damage(damage, properties, percentile):
     counts = (
         damage.loc[known]
         .groupby([STATE_COLUMN, "state_name"])
-        .agg(properties=("address_id", "size"), cost_nzd=("cost_nzd", "first"))
+        .agg(properties=("claim_id", "size"), cost_nzd=("cost_nzd", "first"))
     )
     print(f"By land damage state, at the {percentile}th percentile of settled cost:")
     print(counts.to_string())
@@ -103,7 +103,7 @@ def main(*, pilot, realisation_ids, cost_percentile):
         damage = pd.DataFrame(
             {
                 "realisation_id": realisation_id,
-                "address_id": insured["address_id"].to_numpy(),
+                "claim_id": insured["claim_id"].to_numpy(),
                 "cause": CAUSE,
                 STATE_COLUMN: states,
                 "state_name": pd.Series(states).map(names).to_numpy(),

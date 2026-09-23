@@ -29,7 +29,7 @@ import geopandas as gpd
 import numpy as np
 import pandas as pd
 
-ADDRESS_ID_COLUMN = "address_id"
+CLAIM_ID_COLUMN = "claim_id"
 LAND_CLASS_COLUMN = "land_class"
 DEPTH_COLUMN = "depth_m"
 
@@ -110,7 +110,7 @@ def damaged_area_per_property(
     insured: gpd.GeoDataFrame,
     landslides: gpd.GeoDataFrame,
     *,
-    id_column: str = ADDRESS_ID_COLUMN,
+    id_column: str = CLAIM_ID_COLUMN,
 ) -> pd.DataFrame:
     """Return the evacuated and inundated area on each property.
 
@@ -162,7 +162,7 @@ def check_within_insured_area(
     damaged: pd.DataFrame,
     insured: gpd.GeoDataFrame,
     *,
-    id_column: str = ADDRESS_ID_COLUMN,
+    id_column: str = CLAIM_ID_COLUMN,
     area_column: str = "area_m2",
 ) -> pd.DataFrame:
     """Return any property whose damaged ground exceeds its insured land.

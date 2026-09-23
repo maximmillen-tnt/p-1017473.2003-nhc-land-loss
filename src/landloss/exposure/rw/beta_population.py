@@ -65,7 +65,7 @@ BETA_LENGTH_SHARE = 0.5
 
 # The columns the population is keyed and sized on, fixed by the layer step 5
 # writes rather than varying per caller.
-ID_COLUMN = "address_id"
+ID_COLUMN = "claim_id"
 AREA_COLUMN = "area_m2"
 
 COLUMNS = (ID_COLUMN, "size_class", "initial_condition", "height_m", "length_m")
@@ -232,7 +232,7 @@ def beta_wall_population(
 
     return gpd.GeoDataFrame(
         {
-            "address_id": walls[ID_COLUMN].to_numpy(),
+            ID_COLUMN: walls[ID_COLUMN].to_numpy(),
             "size_class": classify_wall_size(height),
             "initial_condition": condition,
             "height_m": height,

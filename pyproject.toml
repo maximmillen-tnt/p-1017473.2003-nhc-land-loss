@@ -140,6 +140,8 @@ ignore = [
   "TD003",   # Too excessive for our purposes (TDO Links).
   "ISC001",  # Incompatible with the ruff formatter.
   "PIE804",  # This is controversial, some pandas APIs work better with dict approach.
+  "PLR0913", # Too many arguments; long argument lists are normal for models and plotting
+  "PLR0917", # Too many positional arguments; the companion to PLR0913
   "PLR2004", # Too strict for exploratory work
   "PLW2901", # Too many false positives.
   "PT003",   # Explicit is better than implicit
@@ -176,7 +178,6 @@ flake8-import-conventions.banned-from = ["ruru"]
   "ANN",     # We don't need annotations in tests
   "ARG",     # Fixtures used for their side effects, and stubs accepting any call
   "D",       # We don't need docstrings in tests
-  "PLR0913", # When we use fixtures, our test functions can have many arguments
   "S101",    # Using assert is fine in tests
   "FBT001",  # Fine for fixtures
   "INP",     # Tests don't need __init__.py files
@@ -214,7 +215,6 @@ flake8-import-conventions.banned-from = ["ruru"]
   "T201",    # Prints fine in scripts and notebooks
   "B018",    # "Useless" expressions are used for displaying cell outputs
   "FBT",     # Defensive programming techniques for function definitions are overkill
-  "PLR0913", # OK to have functions with many arguments in scripts and notebooks
 ]
 
 [tool.ruff.lint.pydocstyle]

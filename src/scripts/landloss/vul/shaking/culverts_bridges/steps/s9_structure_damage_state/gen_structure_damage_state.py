@@ -101,7 +101,7 @@ def describe_states(states):
 
     replaced = states[states[DAMAGE_STATE_COLUMN] == REPLACE]
     print(
-        f"  {replaced['address_id'].nunique():,} properties carry at least one "
+        f"  {replaced['claim_id'].nunique():,} properties carry at least one "
         "structure to replace"
     )
 
@@ -121,7 +121,7 @@ def main(*, pilot, realisation_ids):
         states = pd.DataFrame(
             {
                 "realisation_id": realisation_id,
-                "address_id": crossings["address_id"].to_numpy(),
+                "claim_id": crossings["claim_id"].to_numpy(),
                 # The kind of structure is the asset, because a culvert and a
                 # bridge are priced differently even though they share a sub-cap.
                 ASSET_COLUMN: crossings[STRUCTURE_COLUMN].to_numpy(),
