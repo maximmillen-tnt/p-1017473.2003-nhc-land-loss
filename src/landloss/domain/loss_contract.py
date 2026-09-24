@@ -24,6 +24,11 @@ BRIDGE_ID_COLUMN = "bridge_id"
 # Land table columns, asset-pricing-approach.md section 1.
 MARKET_VALUE_COLUMN = "$/m2 market value"
 LIQ_LD_STATE_COLUMN = "Liq_LD_state"
+# The Canterbury settled cost the state indexes, carried so that `loss` has a
+# land repair cost to compare a cap against. **2010/2011 dollars excluding
+# GST**, which is how the Canterbury rates are stated; the basis is in the name
+# because nothing else in the table says it and grossing up twice is silent.
+LIQ_LD_COST_COLUMN = "Liq_LD_cost_excl_gst_nzd"
 TOTAL_INSURED_LAND_AREA_COLUMN = "total_insured_land_area"
 LANDSLIDE_AREA_COLUMN = "land_slide_total_insured_land_area"
 INUNDATED_AREA_COLUMN = "inundated_insured_area"
@@ -46,6 +51,7 @@ LAND_COLUMNS = (
     CLAIM_ID_COLUMN,
     MARKET_VALUE_COLUMN,
     LIQ_LD_STATE_COLUMN,
+    LIQ_LD_COST_COLUMN,
     TOTAL_INSURED_LAND_AREA_COLUMN,
     LANDSLIDE_AREA_COLUMN,
     INUNDATED_AREA_COLUMN,

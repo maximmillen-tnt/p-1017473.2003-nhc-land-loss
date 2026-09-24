@@ -26,6 +26,7 @@ def test_tuples_hold_the_exact_contract_strings():
         "claim_id",
         "$/m2 market value",
         "Liq_LD_state",
+        "Liq_LD_cost_excl_gst_nzd",
         "total_insured_land_area",
         "land_slide_total_insured_land_area",
         "inundated_insured_area",

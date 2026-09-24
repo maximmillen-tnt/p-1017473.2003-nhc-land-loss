@@ -37,7 +37,13 @@ def insured():
 
 
 def liquefaction():
-    return pd.DataFrame({"land_id": ["1-L01", "2-L01"], "ld_state": [3, 1]})
+    return pd.DataFrame(
+        {
+            "land_id": ["1-L01", "2-L01"],
+            "ld_state": [3, 1],
+            "cost_nzd": [12_000.0, 0.0],
+        }
+    )
 
 
 def landslide():

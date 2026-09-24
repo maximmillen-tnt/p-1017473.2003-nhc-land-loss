@@ -39,6 +39,7 @@ from landloss.domain.loss_contract import (
     LAND_COLUMNS,
     LAND_ID_COLUMN,
     LANDSLIDE_AREA_COLUMN,
+    LIQ_LD_COST_COLUMN,
     LIQ_LD_STATE_COLUMN,
     MARKET_VALUE_COLUMN,
     RW_COLUMNS,
@@ -111,6 +112,7 @@ def build_land_table(
     landslide: pd.DataFrame,
     *,
     ld_state_column: str = "ld_state",
+    ld_cost_column: str = "cost_nzd",
 ) -> gpd.GeoDataFrame:
     """Assemble the land table, one row per insured land polygon.
 
@@ -118,11 +120,14 @@ def build_land_table(
         insured: The insured land, carrying ``land_id``, ``claim_id``, the land
             rate including GST, the polygon area and the dwelling count. Only
             the GST-inclusive rate is handed on, as the market value.
-        liquefaction: The liquefaction land damage state per ``land_id``. Land
-            without a row keeps a missing state.
+        liquefaction: The liquefaction land damage state and settled cost per
+            ``land_id``. Land without a row keeps a missing state and no cost.
+            The cost is 2010/2011 dollars excluding GST, as the Canterbury
+            rates are stated; `loss` puts it on the Act's basis.
         landslide: The landslide land step's areas and inundated depth per
             ``land_id``. Land without a row has no damaged area.
         ld_state_column: The damage state's column in ``liquefaction``.
+        ld_cost_column: The settled cost's column in ``liquefaction``.
 
     Returns:
         :data:`~landloss.domain.loss_contract.LAND_COLUMNS`, then the dwelling
@@ -142,7 +147,9 @@ def build_land_table(
         raise ValueError(msg)
 
     land_ids = insured[LAND_ID_COLUMN]
-    states = liquefaction.set_index(LAND_ID_COLUMN)[ld_state_column]
+    liquefied = liquefaction.set_index(LAND_ID_COLUMN)
+    states = liquefied[ld_state_column]
+    costs = liquefied[ld_cost_column]
     slides = landslide.set_index(LAND_ID_COLUMN)
 
     def from_slides(column: str, fill: float | None) -> pd.Series:
@@ -155,6 +162,7 @@ def build_land_table(
             CLAIM_ID_COLUMN: insured[CLAIM_ID_COLUMN],
             MARKET_VALUE_COLUMN: insured[LAND_RATE_INCL_GST_COLUMN].astype("float64"),
             LIQ_LD_STATE_COLUMN: land_ids.map(states),
+            LIQ_LD_COST_COLUMN: land_ids.map(costs).astype("float64").fillna(0.0),
             TOTAL_INSURED_LAND_AREA_COLUMN: insured[AREA_COLUMN].astype("float64"),
             LANDSLIDE_AREA_COLUMN: from_slides(UNION_AREA_COLUMN, 0.0),
             INUNDATED_AREA_COLUMN: from_slides(AREA_COLUMNS[INUNDATED], 0.0),
