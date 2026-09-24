@@ -128,16 +128,21 @@ def test_the_count_feeds_straight_into_a_settlement():
     # Four dwellings carry four times the wall sub-cap, and an excess of
     # $2,000 rather than $500.
     assert result.land_cover_cap_nzd == pytest.approx([57_500.0, 230_000.0])
-    assert result.excess_nzd == pytest.approx([500.0, 2_000.0])
+    # One excess per claim, a share of what is payable -- not per dwelling.
+    assert result.excess_nzd == pytest.approx(
+        [ACT.excess_nzd(amount) for amount in result.land_cover_cap_nzd]
+    )
     assert list(result.retaining_wall_sub_cap_bound) == [True, True]
 
 
-def test_the_excess_stops_growing_where_the_sub_caps_do_not():
-    # Ten dwellings reach the excess ceiling; the sub-caps keep scaling.
+def test_the_sub_caps_scale_with_dwellings_and_the_excess_does_not():
+    # The dwelling count reaches the sub-caps and nothing else. Since
+    # 2026-09-25 the excess is one per claim, a share of what is payable, so a
+    # twenty-dwelling property pays the same excess as a one-dwelling one.
     table = property_table({"c1": 20})
     counts = dwelling_counts(["c1"], table)
-    assert ACT.excess_nzd(counts) == pytest.approx(5_000.0)
     assert ACT.retaining_wall_limit_nzd(counts) == pytest.approx(20 * 57_500.0)
+    assert ACT.excess_nzd(6_000.0, counts) == pytest.approx(ACT.excess_nzd(6_000.0, 1))
 
 
 # ---------------------------------------------------------------------------

@@ -1,0 +1,373 @@
+<!doctype html>
+<html lang="en-NZ">
+<head>
+<meta charset="utf-8">
+<title>NHC land loss viewer</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+<style>
+  :root {
+    --ink: #1c1c1a; --muted: #6a6a66; --line: #dcdcd8; --surface: #fcfcfb;
+    --panel: #f4f4f1; --accent: #3b6e8f;
+    --liq: #2a78d6; --wall: #eb6834; --both: #1baf7a; --none: #b4b4b0;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--surface); color: var(--ink);
+    font: 14px/1.5 -apple-system, "Segoe UI", Arial, sans-serif;
+  }
+  header { padding: 16px 20px 8px; border-bottom: 1px solid var(--line); }
+  h1 { margin: 0; font-size: 19px; }
+  .sub { color: var(--muted); font-size: 12.5px; margin-top: 2px; }
+  main { display: grid; grid-template-columns: 250px 1fr; gap: 0; }
+  @media (max-width: 860px) { main { grid-template-columns: 1fr; } }
+  aside {
+    padding: 14px 16px 40px; background: var(--panel);
+    border-right: 1px solid var(--line);
+  }
+  section { padding: 16px 20px 40px; min-width: 0; }
+  h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em;
+       color: var(--muted); margin: 18px 0 8px; }
+  h2:first-child { margin-top: 0; }
+  label { display: block; font-size: 12.5px; margin: 9px 0 2px; }
+  input[type=number], select {
+    width: 100%; padding: 5px 7px; border: 1px solid var(--line);
+    border-radius: 4px; background: #fffbe6; font: inherit;
+  }
+  select { background: #fff; }
+  #drop {
+    border: 2px dashed var(--line); border-radius: 8px; padding: 26px 16px;
+    text-align: center; color: var(--muted); background: #fff; cursor: pointer;
+  }
+  #drop.over { border-color: var(--accent); background: #eef4f8; color: var(--ink); }
+  .tiles { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 4px; }
+  .tile { background: var(--panel); border-radius: 8px; padding: 9px 13px; min-width: 132px; }
+  .tile b { display: block; font-size: 19px; font-variant-numeric: tabular-nums; }
+  .tile span { font-size: 11.5px; color: var(--muted); }
+  .charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(330px, 1fr)); gap: 14px; }
+  .card { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px 4px; background: #fff; }
+  .card h3 { margin: 0 0 2px; font-size: 13px; }
+  .card p { margin: 0 0 4px; font-size: 11.5px; color: var(--muted); }
+  .legend { display: flex; gap: 12px; flex-wrap: wrap; font-size: 11.5px; margin: 4px 0 0; }
+  .legend i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; margin-right: 4px; }
+  .bar rect { shape-rendering: crispEdges; }
+  .axis text { font-size: 10.5px; fill: var(--muted); }
+  .axis path, .axis line { stroke: #cfcfca; }
+  .tip {
+    position: fixed; pointer-events: none; background: #23231f; color: #fff;
+    padding: 6px 9px; border-radius: 5px; font-size: 12px; opacity: 0;
+    transition: opacity .08s; max-width: 260px; z-index: 9;
+  }
+  .note { font-size: 11.5px; color: var(--muted); margin-top: 10px; }
+  code { background: var(--panel); padding: 1px 4px; border-radius: 3px; font-size: 11.5px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>NHC land loss viewer</h1>
+  <div class="sub">Drag a vulnerability CSV on. Every settlement is computed here, in the
+    browser &mdash; move a setting and the whole portfolio answers. Nothing is uploaded.</div>
+</header>
+
+<main>
+<aside>
+  <div id="drop">Drop the CSV here<br><span style="font-size:11.5px">or click to choose</span></div>
+  <input type="file" id="file" accept=".csv" hidden>
+
+  <h2>Cover</h2>
+  <label>Area cap (m²)<input type="number" id="areaCap" value="4000" step="100"></label>
+  <label>Retaining wall sub-cap, per dwelling, excl GST
+    <input type="number" id="rwSub" value="50000" step="1000"></label>
+  <label>Bridge / culvert sub-cap, per dwelling, excl GST
+    <input type="number" id="bcSub" value="25000" step="1000"></label>
+  <label>Total cap per claim ($, blank = none)
+    <input type="number" id="totalCap" placeholder="none" step="10000"></label>
+
+  <h2>Excess</h2>
+  <label>Share of what is payable
+    <input type="number" id="exRate" value="0.10" step="0.01" min="0" max="1"></label>
+  <label>Floor ($)<input type="number" id="exFloor" value="500" step="100"></label>
+  <label>Ceiling ($)<input type="number" id="exCeil" value="5000" step="500"></label>
+
+  <h2>Costs</h2>
+  <label>GST rate<input type="number" id="gst" value="0.15" step="0.01"></label>
+  <label>Replacement spec uplift
+    <input type="number" id="spec" value="0.20" step="0.05"></label>
+  <label>Professional fees per wall claim, excl GST
+    <input type="number" id="fees" value="5100" step="100"></label>
+  <label>Spoil removal ($/m³, excl GST)
+    <input type="number" id="spoilRate" value="150" step="10"></label>
+
+  <h2>Map colour</h2>
+  <select id="colourBy">
+    <option value="type">Claim type</option>
+    <option value="basis">How it settled</option>
+    <option value="settlement">Settlement amount</option>
+    <option value="cap">Land cover cap</option>
+    <option value="has_damaged_wall">Has a damaged retaining wall</option>
+    <option value="has_new_wall">Needs a new wall built</option>
+    <option value="has_liquefaction">Has liquefaction damage</option>
+    <option value="access">Construction access rating</option>
+  </select>
+  <div class="note">Yellow fields are the policy settings. Everything else in the CSV is
+    fixed by exposure and vulnerability.</div>
+</aside>
+
+<section>
+  <div class="tiles" id="tiles"></div>
+  <div class="charts">
+    <div class="card">
+      <h3>Claims by settlement</h3><p>Stacked by claim type.</p>
+      <div id="hSettle"></div><div class="legend" id="legend"></div>
+    </div>
+    <div class="card"><h3>Claims by repair cost</h3><p>What it costs to put right.</p><div id="hRepair"></div></div>
+    <div class="card"><h3>Claims by land cover cap</h3><p>The ceiling the Act builds.</p><div id="hCap"></div></div>
+    <div class="card"><h3>Repair cost by line</h3><p>Where the money goes.</p><div id="hLines"></div></div>
+  </div>
+  <div class="card" style="margin-top:14px">
+    <h3>Where the claims are</h3>
+    <p id="mapNote">Each dot is a claim. Scroll to zoom, drag to pan.</p>
+    <div id="map"></div><div class="legend" id="mapLegend"></div>
+  </div>
+</section>
+</main>
+<div class="tip" id="tip"></div>
+
+<script>
+const TYPE = {liq: "Liquefaction only", wall: "Retaining wall only", both: "Both", none: "No damage"};
+const TYPE_FILL = {[TYPE.liq]: "var(--liq)", [TYPE.wall]: "var(--wall)", [TYPE.both]: "var(--both)", [TYPE.none]: "var(--none)"};
+const STACK = [TYPE.liq, TYPE.wall, TYPE.both];
+const tip = d3.select("#tip");
+let RAW = [];
+
+const num = id => +document.getElementById(id).value;
+const nz = d => d == null || d === "" ? 0 : +d;
+const money = d3.format("$,.0f");
+const count = d3.format(",.0f");
+
+function settings() {
+  const raw = document.getElementById("totalCap").value;
+  return {
+    areaCap: num("areaCap"), rwSub: num("rwSub"), bcSub: num("bcSub"),
+    totalCap: raw === "" ? null : +raw,
+    exRate: num("exRate"), exFloor: num("exFloor"), exCeil: num("exCeil"),
+    gst: num("gst"), spec: num("spec"), fees: num("fees"), spoilRate: num("spoilRate"),
+  };
+}
+
+// The same arithmetic landloss.loss.settlement does. Kept deliberately literal
+// so it can be read against the module rather than trusted.
+function settle(r, s) {
+  const gst = 1 + s.gst, spec = 1 + s.spec, mult = 1 + nz(r.site_multiplier);
+  const dwellings = Math.max(1, nz(r.dwellings));
+
+  const udv = nz(r.wall_face_m2) * nz(r.wall_rate_excl_gst) * gst;
+  const wall = udv * mult * spec;
+  const newWall = nz(r.new_wall_face_m2) * nz(r.new_wall_rate_excl_gst) * gst * mult * spec;
+  const spoil = nz(r.spoil_m3) * s.spoilRate * gst;
+  const walled = nz(r.has_damaged_wall) > 0 || nz(r.has_new_wall) > 0;
+  const fees = walled ? s.fees * mult * gst : 0;
+  const liq = nz(r.liq_cost_excl_gst) * gst;
+  const crossing = nz(r.has_crossing) > 0 ? s.bcSub * gst * dwellings : 0;
+
+  const landValue = Math.min(nz(r.damaged_area_m2), s.areaCap) * nz(r.land_rate_incl_gst);
+  const rwLimit = s.rwSub * gst * dwellings;
+  let cap = landValue + Math.min(udv, rwLimit) + crossing;
+  if (s.totalCap != null) cap = Math.min(cap, s.totalCap);
+
+  const repair = wall + newWall + spoil + fees + liq + crossing;
+  const payable = Math.min(repair, cap);
+  const excess = payable > 0
+    ? Math.min(Math.max(payable * s.exRate, s.exFloor), s.exCeil) : 0;
+  const settlement = Math.max(0, payable - excess);
+
+  const type = liq > 0 && walled ? TYPE.both : liq > 0 ? TYPE.liq : walled ? TYPE.wall : TYPE.none;
+  const basis = settlement <= 0 ? "Excess took it all"
+    : repair <= cap ? "Paid the repair cost" : "Capped";
+  return {...r, udv, wall, newWall, spoil, fees, liq, crossing,
+          landValue, cap, repair, payable, excess, settlement, type, basis};
+}
+
+// ---- charts -------------------------------------------------------------
+function bands(values, edges) {
+  const label = v => v >= 1e6 ? `${+(v / 1e6).toFixed(2)}m` : `${+(v / 1e3).toFixed(2)}k`;
+  const out = [];
+  edges.forEach((hi, i) => {
+    const lo = i === 0 ? 0 : edges[i - 1];
+    out.push({key: (lo >= 1e6) === (hi >= 1e6)
+      ? `${+( (lo >= 1e6 ? lo / 1e6 : lo / 1e3).toFixed(2))}-${label(hi)}`
+      : `${label(lo)}-${label(hi)}`, lo, hi});
+  });
+  out.push({key: `over ${label(edges[edges.length - 1])}`, lo: edges[edges.length - 1], hi: Infinity});
+  return out;
+}
+
+function stacked(sel, rows, value, edges, splitByType) {
+  const box = d3.select(sel).html("");
+  const W = box.node().clientWidth || 360, H = 190;
+  const m = {t: 6, r: 8, b: 44, l: 44};
+  const bs = bands(rows, edges).map(b => {
+    const inside = rows.filter(r => value(r) > b.lo - 1e-9 && value(r) <= b.hi);
+    const o = {key: b.key, total: inside.length};
+    STACK.forEach(t => o[t] = splitByType ? inside.filter(r => r.type === t).length : 0);
+    if (!splitByType) o.total = d3.sum(inside, value);
+    return o;
+  });
+  const svg = box.append("svg").attr("width", W).attr("height", H);
+  const x = d3.scaleBand().domain(bs.map(d => d.key)).range([m.l, W - m.r]).padding(0.04);
+  const y = d3.scaleLinear().domain([0, d3.max(bs, d => d.total) || 1]).nice()
+              .range([H - m.b, m.t]);
+  svg.append("g").attr("class", "axis").attr("transform", `translate(0,${H - m.b})`)
+     .call(d3.axisBottom(x)).selectAll("text")
+     .attr("transform", "rotate(-32)").style("text-anchor", "end");
+  svg.append("g").attr("class", "axis").attr("transform", `translate(${m.l},0)`)
+     .call(d3.axisLeft(y).ticks(4).tickFormat(splitByType ? count : d3.format("$~s")));
+
+  if (splitByType) {
+    const series = d3.stack().keys(STACK)(bs);
+    svg.append("g").selectAll("g").data(series).join("g")
+      .attr("fill", d => TYPE_FILL[d.key])
+      .selectAll("rect").data(d => d.map(v => ({...v, key: d.key}))).join("rect")
+        .attr("class", "bar").attr("x", d => x(d.data.key)).attr("width", x.bandwidth())
+        .attr("y", d => y(d[1])).attr("height", d => Math.max(0, y(d[0]) - y(d[1])))
+        .attr("stroke", "#fff").attr("stroke-width", 1)
+        .on("mousemove", (e, d) => show(e, `${d.key}<br>${count(d[1] - d[0])} claims in ${d.data.key}`))
+        .on("mouseleave", hide);
+  } else {
+    svg.append("g").selectAll("rect").data(bs).join("rect")
+      .attr("class", "bar").attr("fill", "var(--accent)")
+      .attr("x", d => x(d.key)).attr("width", x.bandwidth())
+      .attr("y", d => y(d.total)).attr("height", d => Math.max(0, y(0) - y(d.total)))
+      .on("mousemove", (e, d) => show(e, `${d.key}<br>${money(d.total)}`)).on("mouseleave", hide);
+  }
+}
+
+function lines(sel, rows) {
+  const parts = [
+    ["Walls replaced", d3.sum(rows, r => r.wall)],
+    ["New walls", d3.sum(rows, r => r.newWall)],
+    ["Spoil", d3.sum(rows, r => r.spoil)],
+    ["Fees", d3.sum(rows, r => r.fees)],
+    ["Liquefaction", d3.sum(rows, r => r.liq)],
+    ["Crossings", d3.sum(rows, r => r.crossing)],
+  ];
+  const box = d3.select(sel).html("");
+  const W = box.node().clientWidth || 360, H = 190, m = {t: 6, r: 8, b: 44, l: 52};
+  const svg = box.append("svg").attr("width", W).attr("height", H);
+  const x = d3.scaleBand().domain(parts.map(d => d[0])).range([m.l, W - m.r]).padding(0.18);
+  const y = d3.scaleLinear().domain([0, d3.max(parts, d => d[1]) || 1]).nice().range([H - m.b, m.t]);
+  svg.append("g").attr("class", "axis").attr("transform", `translate(0,${H - m.b})`)
+     .call(d3.axisBottom(x)).selectAll("text")
+     .attr("transform", "rotate(-32)").style("text-anchor", "end");
+  svg.append("g").attr("class", "axis").attr("transform", `translate(${m.l},0)`)
+     .call(d3.axisLeft(y).ticks(4).tickFormat(d3.format("$~s")));
+  svg.append("g").selectAll("rect").data(parts).join("rect")
+    .attr("fill", "var(--accent)").attr("x", d => x(d[0])).attr("width", x.bandwidth())
+    .attr("y", d => y(d[1])).attr("height", d => Math.max(0, y(0) - y(d[1])))
+    .on("mousemove", (e, d) => show(e, `${d[0]}<br>${money(d[1])}`)).on("mouseleave", hide);
+}
+
+// ---- map ----------------------------------------------------------------
+function drawMap(rows) {
+  const box = d3.select("#map").html("");
+  const W = box.node().clientWidth || 700, H = 430;
+  const svg = box.append("svg").attr("width", W).attr("height", H);
+  const g = svg.append("g");
+  const lon = d3.extent(rows, r => +r.lon), lat = d3.extent(rows, r => +r.lat);
+  const pad = 14;
+  // Hold the aspect so Wellington is not stretched: one scale for both axes.
+  const sx = (W - pad * 2) / Math.max(1e-9, lon[1] - lon[0]);
+  const sy = (H - pad * 2) / Math.max(1e-9, lat[1] - lat[0]);
+  const k = Math.min(sx, sy * Math.cos(lat[0] * Math.PI / 180));
+  const px = d => pad + (+d.lon - lon[0]) * k;
+  const py = d => H - pad - (+d.lat - lat[0]) * k / Math.cos(lat[0] * Math.PI / 180);
+
+  const mode = document.getElementById("colourBy").value;
+  let fill, legend;
+  if (mode === "type") {
+    fill = d => TYPE_FILL[d.type];
+    legend = STACK.concat(TYPE.none).map(t => [t, TYPE_FILL[t]]);
+  } else if (mode === "basis") {
+    const cats = ["Paid the repair cost", "Capped", "Excess took it all"];
+    const c = d3.scaleOrdinal().domain(cats).range(["var(--liq)", "var(--wall)", "var(--none)"]);
+    fill = d => c(d.basis); legend = cats.map(t => [t, c(t)]);
+  } else if (mode === "settlement" || mode === "cap") {
+    const key = mode === "settlement" ? "settlement" : "cap";
+    const max = d3.quantile(rows.map(r => r[key]).sort(d3.ascending), 0.97) || 1;
+    const c = d3.scaleSequential(d3.interpolateBlues).domain([0, max]);
+    fill = d => c(Math.min(d[key], max));
+    legend = [[`$0`, c(0)], [`${money(max / 2)}`, c(max / 2)], [`${money(max)}+`, c(max)]];
+  } else {
+    const vals = Array.from(new Set(rows.map(r => String(r[mode])))).sort();
+    const c = d3.scaleOrdinal().domain(vals)
+      .range(["var(--none)", "var(--liq)", "var(--wall)", "var(--both)"]);
+    fill = d => c(String(d[mode])); legend = vals.map(v => [v, c(v)]);
+  }
+
+  g.selectAll("circle").data(rows).join("circle")
+    .attr("cx", px).attr("cy", py).attr("r", 2.6)
+    .attr("fill", fill).attr("fill-opacity", 0.82)
+    .on("mousemove", (e, d) => show(e,
+      `<b>${d.type}</b><br>settled ${money(d.settlement)}<br>` +
+      `repair ${money(d.repair)} &middot; cap ${money(d.cap)}<br>` +
+      `${d.basis}${+d.has_damaged_wall ? " &middot; damaged wall" : ""}`))
+    .on("mouseleave", hide);
+
+  svg.call(d3.zoom().scaleExtent([1, 24]).on("zoom", e => g.attr("transform", e.transform)));
+  d3.select("#mapLegend").html(legend.map(([t, c]) =>
+    `<span><i style="background:${c}"></i>${t}</span>`).join(""));
+}
+
+function show(e, html) {
+  tip.html(html).style("opacity", 1)
+     .style("left", (e.clientX + 13) + "px").style("top", (e.clientY + 13) + "px");
+}
+const hide = () => tip.style("opacity", 0);
+
+// ---- render -------------------------------------------------------------
+function render() {
+  if (!RAW.length) return;
+  const s = settings();
+  const rows = RAW.map(r => settle(r, s));
+  const paid = rows.filter(r => r.settlement > 0);
+
+  d3.select("#tiles").html([
+    [count(rows.length), "claims"],
+    [count(paid.length), "paid anything"],
+    [money(d3.sum(rows, r => r.settlement)), "total settlement"],
+    [money(d3.sum(rows, r => r.repair)), "total repair cost"],
+    [count(rows.filter(r => r.basis === "Capped").length), "settled at the cap"],
+    [count(rows.filter(r => r.repair > 0 && r.settlement === 0).length), "zeroed by the excess"],
+  ].map(([v, l]) => `<div class="tile"><b>${v}</b><span>${l}</span></div>`).join(""));
+
+  const moneyEdges = [500, 1000, 2500, 5000, 10000, 25000, 50000];
+  stacked("#hSettle", paid, r => r.settlement, moneyEdges, true);
+  stacked("#hRepair", rows.filter(r => r.repair > 0), r => r.repair, moneyEdges, true);
+  stacked("#hCap", rows.filter(r => r.cap > 0), r => r.cap,
+          [100000, 250000, 500000, 750000, 1e6, 2e6], true);
+  lines("#hLines", rows);
+  drawMap(rows);
+  d3.select("#legend").html(STACK.map(t =>
+    `<span><i style="background:${TYPE_FILL[t]}"></i>${t}</span>`).join(""));
+}
+
+function load(text) {
+  RAW = d3.csvParse(text, d3.autoType);
+  document.getElementById("drop").textContent = `${RAW.length.toLocaleString()} claims loaded`;
+  render();
+}
+
+const drop = document.getElementById("drop"), file = document.getElementById("file");
+drop.onclick = () => file.click();
+file.onchange = e => e.target.files[0].text().then(load);
+["dragenter", "dragover"].forEach(n => drop.addEventListener(n, e => {
+  e.preventDefault(); drop.classList.add("over");
+}));
+["dragleave", "drop"].forEach(n => drop.addEventListener(n, e => {
+  e.preventDefault(); drop.classList.remove("over");
+}));
+drop.addEventListener("drop", e => e.dataTransfer.files[0].text().then(load));
+d3.selectAll("aside input, aside select").on("input", render);
+window.addEventListener("resize", () => RAW.length && render());
+</script>
+</body>
+</html>

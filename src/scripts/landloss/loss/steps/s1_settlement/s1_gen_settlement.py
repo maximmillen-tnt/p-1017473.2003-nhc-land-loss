@@ -488,7 +488,8 @@ def describe_settlement(claims, policy):
     zeroed = int((damaged & (claims[SETTLEMENT_COLUMN] == 0)).sum())
     print(
         f"  {zeroed:,} claims have damage but pay nothing, the excess of "
-        f"{policy.excess_per_dwelling_nzd:,.0f} NZD per dwelling, capped at "
+        f"{policy.excess_rate:.0%} of what was payable, floored at "
+        f"{policy.excess_min_nzd:,.0f} and capped at "
         f"{policy.excess_max_nzd:,.0f} NZD, having taken all of it"
     )
 

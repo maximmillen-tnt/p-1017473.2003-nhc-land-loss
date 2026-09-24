@@ -15,6 +15,14 @@ from landloss.loss.settlement import (
 # these settings, so they are the baseline the worked-example tests run against.
 ACT = PolicySettings()
 
+# The explainer states a flat "$500 per dwelling, capped at $5,000" and works
+# all three of its examples that way. Virginie Lacrosse described 10% of what is
+# payable, per claim, which is what `PolicySettings` now defaults to -- and the
+# two disagree by $4,500 on the explainer's own first example (**Q-12**). The
+# worked examples are run against the explainer's rule because that is the
+# document they come from; the default is exercised separately below.
+EXPLAINER = PolicySettings(excess_per_dwelling_nzd=500.0)
+
 # $50,000 + GST, the applicable retaining wall limit for a single dwelling. The
 # explainer states this figure, which is what pins the GST rate at 15%.
 ONE_DWELLING_WALL_LIMIT = 57_500.0
@@ -48,7 +56,7 @@ def test_worked_example_1_wall_only_settles_on_the_sub_cap():
             retaining_wall_udv_incl_gst_nzd=70_000.0,
             n_dwellings=1,
         ),
-        policy=ACT,
+        policy=EXPLAINER,
     )
     assert result.land_cover_cap_nzd == pytest.approx(ONE_DWELLING_WALL_LIMIT)
     assert result.settlement_nzd == pytest.approx(ONE_DWELLING_WALL_LIMIT - 500.0)
@@ -66,7 +74,7 @@ def test_worked_example_2_land_and_wall_settle_on_the_cap():
             retaining_wall_udv_incl_gst_nzd=70_000.0,
             n_dwellings=1,
         ),
-        policy=ACT,
+        policy=EXPLAINER,
     )
     assert result.land_cover_cap_nzd == pytest.approx(102_500.0)
     assert result.settlement_nzd == pytest.approx(102_000.0)
@@ -85,7 +93,7 @@ def test_worked_example_3_a_modest_wall_settles_on_the_repair_cost():
             retaining_wall_udv_incl_gst_nzd=30_000.0,
             n_dwellings=1,
         ),
-        policy=ACT,
+        policy=EXPLAINER,
     )
     assert result.land_cover_cap_nzd == pytest.approx(75_000.0)
     assert result.settlement_nzd == pytest.approx(57_500.0)
@@ -133,14 +141,35 @@ def test_the_sub_caps_multiply_by_dwellings():
 # ---------------------------------------------------------------------------
 
 
-def test_the_excess_is_per_dwelling():
-    assert ACT.excess_nzd(1) == pytest.approx(500.0)
-    assert ACT.excess_nzd(4) == pytest.approx(2_000.0)
+def test_the_excess_is_a_share_of_what_is_payable():
+    # Virginie Lacrosse's own examples: $1,000 of damage takes the $500 floor
+    # because 10% of it is less, and $6,000 takes 10%, which is $600.
+    assert ACT.excess_nzd(1_000.0) == pytest.approx(500.0)
+    assert ACT.excess_nzd(6_000.0) == pytest.approx(600.0)
 
 
-def test_the_excess_stops_growing_at_ten_dwellings():
-    assert ACT.excess_nzd(10) == pytest.approx(5_000.0)
-    assert ACT.excess_nzd(40) == pytest.approx(5_000.0)
+def test_the_excess_is_per_claim_not_per_dwelling():
+    # The whole point of the 2026-09-25 correction. A property with
+    # twenty-nine dwellings and one claim pays one excess.
+    assert ACT.excess_nzd(6_000.0, 1) == pytest.approx(ACT.excess_nzd(6_000.0, 29))
+
+
+def test_the_excess_stops_growing_at_fifty_thousand_payable():
+    assert ACT.excess_nzd(50_000.0) == pytest.approx(5_000.0)
+    assert ACT.excess_nzd(500_000.0) == pytest.approx(5_000.0)
+
+
+def test_a_claim_paid_nothing_is_charged_no_excess():
+    # Otherwise an undamaged claim acquires a $500 debt.
+    assert ACT.excess_nzd(0.0) == pytest.approx(0.0)
+
+
+def test_the_explainers_rule_is_still_available_and_is_per_dwelling():
+    # The two contradict each other (**Q-12**), so both can be run. This is the
+    # explainer's: a flat amount per dwelling, taking no notice of what is paid.
+    assert EXPLAINER.excess_nzd(6_000.0, 1) == pytest.approx(500.0)
+    assert EXPLAINER.excess_nzd(6_000.0, 4) == pytest.approx(2_000.0)
+    assert EXPLAINER.excess_nzd(6_000.0, 40) == pytest.approx(5_000.0)
 
 
 def test_a_claim_below_the_excess_settles_at_nothing_rather_than_owing():
@@ -176,7 +205,7 @@ def test_a_total_cap_binds_before_the_excess():
     result = settle(claim, policy=PolicySettings(total_cap_nzd=80_000.0))
     # Example 2's $102,500 cap, cut to the total cap, then the excess.
     assert result.land_cover_cap_nzd == pytest.approx(80_000.0)
-    assert result.settlement_nzd == pytest.approx(79_500.0)
+    assert result.settlement_nzd == pytest.approx(80_000.0 - ACT.excess_nzd(80_000.0))
 
 
 def test_a_generous_total_cap_changes_nothing():
@@ -209,7 +238,10 @@ def test_a_portfolio_settles_in_one_call():
         ),
         policy=ACT,
     )
-    assert result.settlement_nzd == pytest.approx([57_000.0, 102_000.0, 57_500.0])
+    payable = [57_500.0, 102_500.0, 58_000.0]
+    assert result.settlement_nzd == pytest.approx(
+        [amount - ACT.excess_nzd(amount) for amount in payable]
+    )
     assert result.capped.tolist() == [True, True, False]
 
 
@@ -398,7 +430,7 @@ def test_a_wall_only_claim_settles_on_the_undepreciated_value():
         policy=ACT,
     )
     assert not result.retaining_wall_sub_cap_bound
-    assert result.settlement_nzd == pytest.approx(udv - 500.0)
+    assert result.settlement_nzd == pytest.approx(udv - ACT.excess_nzd(udv))
 
 
 def test_the_sub_cap_flags_come_back_per_claim_across_a_portfolio():
