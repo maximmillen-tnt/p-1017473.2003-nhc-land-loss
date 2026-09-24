@@ -1,14 +1,16 @@
-"""Tests for reading the National Liquefaction Model's scenario release rasters.
+"""Tests for reading the National Liquefaction Model's release tree.
 
-Every raster here is written to ``tmp_path`` by the test that reads it, and the
-resolver that would go to the T: drive is replaced. Nothing touches the network
-or the network drive.
+Every raster or vector layer here is written to ``tmp_path`` by the test that
+reads it, and the resolver that would go to the T: drive is replaced. Nothing
+touches the network or the network drive.
 """
 
+import geopandas as gpd
 import numpy as np
 import pytest
 import rioxarray  # noqa: F401  # registers the .rio accessor
 import xarray as xr
+from shapely.geometry import Point
 
 from landloss.io import nlm
 
@@ -161,3 +163,25 @@ def test_nlm_release_path_appends_the_relative_path_and_caches(
 
     assert asked_for == [nlm.NLM_RELEASES_DIR / "core/v1/scenario/grid.tif"]
     assert result == tmp_path / "cached.tif"
+
+
+def test_the_flatland_helper_reads_its_hardcoded_path(tmp_path, monkeypatch) -> None:
+    """The path is built off FLATLAND_NLM_VERSION rather than CORE_NLM_VERSION."""
+    path = tmp_path / "flatland.gpkg"
+    flatland = gpd.GeoDataFrame({"geometry": [Point(0, 0)]}, crs="EPSG:2193")
+    flatland.to_file(path, driver="GPKG")
+    asked_for = []
+
+    def record(relative_path, **_):
+        asked_for.append(relative_path)
+        return path
+
+    monkeypatch.setattr(nlm, "nlm_release_path", record)
+
+    result = nlm.get_nlm_flatland()
+
+    assert asked_for == [
+        f"flatland/{nlm.FLATLAND_NLM_VERSION}/_v0p5_slen200m_smoothed.gpkg"
+    ]
+    assert len(result) == 1
+    assert result.crs.to_epsg() == 2193

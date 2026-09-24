@@ -35,6 +35,7 @@ Two things the scheme does that are easy to miss:
 
 import numpy as np
 import numpy.typing as npt
+import pandas as pd
 
 # Table 4 weightings. Slope angle and slope modification carry 4 each, so
 # between them they are 80 of the 150 points available -- which is why the
@@ -96,6 +97,74 @@ LANDSLIDES_ACTIVE = 10.0
 GROUNDWATER_WELL_DRAINED = 0.0
 GROUNDWATER_POORLY_DRAINED = 5.0
 GROUNDWATER_SATURATED = 10.0
+
+# Depth to groundwater, in metres below ground, at which each class is entered.
+# Kingsbury names his three classes and never says what depth they are, so these
+# are this study's reading of them against the failure the scheme is about.
+#
+# The booklets put earthquake-induced surficial failures in "a variable but
+# generally thin (1 to 2 metre) surface layer of colluvium", failing "at the
+# bedrock interface". So a water table inside that layer is the saturated case;
+# one just below it is the poorly drained case, because prolonged rain lifts it
+# into the failing material -- which is the condition the source says the factor
+# was generalised to reflect; and one well below it drains.
+GROUNDWATER_SATURATED_DEPTH_M = 1.0
+GROUNDWATER_POORLY_DRAINED_DEPTH_M = 3.0
+
+# Ordered deepest first, because the classes fall as depth rises.
+GROUNDWATER_DEPTH_BREAKS_M = (
+    GROUNDWATER_SATURATED_DEPTH_M,
+    GROUNDWATER_POORLY_DRAINED_DEPTH_M,
+)
+GROUNDWATER_DEPTH_VALUES = (
+    GROUNDWATER_SATURATED,
+    GROUNDWATER_POORLY_DRAINED,
+    GROUNDWATER_WELL_DRAINED,
+)
+
+# Kingsbury's geology classes against the National Liquefaction Model's ``l3_yp``
+# material class, which is the finest of the model's three nested
+# classifications that this study has a use for. The coarser ``l2_geomorphology``
+# was read first and is not enough: it rolls talus in with landslide debris, and
+# it has no class at all for open water, so a harbour scores as alluvium.
+#
+# The outcome is still close to binary -- basement rock against everything
+# unconsolidated -- and saying so is more honest than dressing it up. That is a
+# limit of the source, not of the field chosen: Kingsbury's four classes turn on
+# weathering grade and shearing, and the model maps neither, so his unweathered
+# and his crushed-and-shattered classes are never reached however finely the
+# landform is read.
+#
+# Water is mapped to NaN rather than to a value. Open water is not ground that
+# can fail, and scoring it would put a susceptibility on a harbour.
+#
+# The fill classes here are the model's own mapped fill, a regional geological
+# unit. They are not the Wellington City earthworks fill that the slope
+# modification factor reads, which is a different dataset at a different scale,
+# and the two are scored by different factors.
+NLM_MATERIAL_GEOLOGY_VALUES: dict[str, float] = {
+    # Basement rock. In this region that is Torlesse greywacke, which the model
+    # labels "sandstone" or "greywacke" in ``main_rock`` -- two lithology names
+    # for the same basement, not a difference the scheme scores.
+    "Sedimentary": GEOLOGY_HIGHLY_TO_COMPLETELY_WEATHERED,
+    "Metamorphic": GEOLOGY_HIGHLY_TO_COMPLETELY_WEATHERED,
+    "Igneous": GEOLOGY_HIGHLY_TO_COMPLETELY_WEATHERED,
+    # Material moved downslope, which is Kingsbury's colluvium in everything but
+    # the name.
+    "Talus": GEOLOGY_COLLUVIUM_OR_ALLUVIUM,
+    "Colluvium": GEOLOGY_COLLUVIUM_OR_ALLUVIUM,
+    "Loess": GEOLOGY_COLLUVIUM_OR_ALLUVIUM,
+    # Water-laid deposits.
+    "River channel": GEOLOGY_COLLUVIUM_OR_ALLUVIUM,
+    "Floodplain": GEOLOGY_COLLUVIUM_OR_ALLUVIUM,
+    "Foreshore": GEOLOGY_COLLUVIUM_OR_ALLUVIUM,
+    "Swamp": GEOLOGY_COLLUVIUM_OR_ALLUVIUM,
+    # Placed ground.
+    "Uncompacted fill": GEOLOGY_COLLUVIUM_OR_ALLUVIUM,
+    "Compacted fill": GEOLOGY_COLLUVIUM_OR_ALLUVIUM,
+    # Not land.
+    "Water body": float("nan"),
+}
 
 # Table 5 zone bands, and the ranks they map to. The ranks are the published
 # layer's own SEVERITY classes, so a rebuilt zone and a source zone are the same
@@ -208,6 +277,62 @@ def slope_height_value(
     applies = slope_degrees >= SLOPE_HEIGHT_MIN_SLOPE_DEGREES
     scored = np.where(applies, scored, 0.0)
     return np.where(np.isnan(slope_degrees), np.nan, scored)
+
+
+def groundwater_value(
+    depth_m: npt.NDArray[np.floating],
+) -> npt.NDArray[np.floating]:
+    """Score the groundwater factor, F_groundwater, from depth to water.
+
+    The scheme names three drainage conditions and never says what depth each
+    one is; the thresholds are this study's, and the reasoning behind them is
+    with :data:`GROUNDWATER_SATURATED_DEPTH_M`.
+
+    Shallow water scores high, so the classes fall as depth rises -- the reverse
+    of every other factor here, which is the one thing worth checking twice when
+    reading this.
+
+    Args:
+        depth_m: Depth to groundwater in metres below ground. A caller holding a
+            grid that covers only part of its extent fills the gap before
+            calling rather than passing NaN: ground the model does not cover is
+            not ground with an unknown water table.
+
+    Returns:
+        The factor value, 0 (well drained) to 10 (saturated), NaN where the
+        depth is NaN.
+    """
+    return _classify(depth_m, GROUNDWATER_DEPTH_BREAKS_M, GROUNDWATER_DEPTH_VALUES)
+
+
+def geology_value_from_material(materials: pd.Series) -> pd.Series:
+    """Score the geology factor, F_geology, from NLM material classes.
+
+    Args:
+        materials: The ``l3_yp`` column of the National Liquefaction Model's
+            geomorphology polygons. This is the field to read, not the coarser
+            ``l2_geomorphology`` and not ``main_rock``: the reasons are with
+            :data:`NLM_MATERIAL_GEOLOGY_VALUES`.
+
+    Returns:
+        The factor value for each polygon, on the caller's own index. NaN where
+        the polygon is open water, which is deliberately left unscored.
+
+    Raises:
+        ValueError: If a material is not one this study has decided a class for,
+            which means the upstream model has gained a class and somebody has
+            to make the decision rather than have it defaulted.
+    """
+    unknown = set(materials.dropna().unique()) - set(NLM_MATERIAL_GEOLOGY_VALUES)
+    if unknown:
+        known = ", ".join(repr(name) for name in sorted(NLM_MATERIAL_GEOLOGY_VALUES))
+        msg = (
+            f"No geology class is assigned for the material(s) "
+            f"{', '.join(repr(name) for name in sorted(unknown))}. Known: {known}"
+        )
+        raise ValueError(msg)
+
+    return materials.map(NLM_MATERIAL_GEOLOGY_VALUES)
 
 
 def susceptibility_rating(

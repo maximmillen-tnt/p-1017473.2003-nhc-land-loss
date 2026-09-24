@@ -52,6 +52,35 @@
   follows a residential building. A bare section belongs in that group; so does
   a property whose address point LINZ placed just outside its own boundary, and
   only the second is an error.
+- **A building that cannot be a home is dropped**, by
+  `drop_non_residential_buildings` in `landloss.exposure.land.extent`, before
+  anything is buffered. Two tests, both of which rule buildings out and neither
+  of which can rule one in:
+  - **The name.** The outlines layer's `use` column names schools, hospitals,
+    supermarkets, huts and shelters and says `Unknown` for everything else —
+    3,209,472 of 3,236,141 outlines nationally. Anything named is dropped rather
+    than a fixed list being excluded, so a use LINZ adds later is handled without
+    editing the filter.
+  - **The size.** A footprint over `MAX_DWELLING_FOOTPRINT_M2`, 500 m², is a
+    warehouse, a mall or an office block rather than a house. The pilot's
+    outlines run to a median of 120 m² and a 95th percentile of 290, so the
+    threshold sits well clear of a large house. It is measured on the outline as
+    served, before anything is cut to a property, so a terrace captured as one
+    large polygon is judged whole — the same outline has to be ruled in or out
+    consistently for every property it touches.
+
+  `describe_building_filter()` in `gen_insured_land.py` prints what each test
+  removed. A property left with no building then carries no insured land, which
+  is how a school site or a retail park leaves the portfolio without a rule of
+  its own.
+- **The size test is the crude half, and it costs dwellings.** An apartment
+  block is residential and has the footprint of a warehouse, so it is dropped
+  with them and the flats inside it lose their insured land. That is why
+  `describe_extent()` counts the dwellings on occupied properties that ended up
+  with no building rather than leaving them to be inferred. Neither test says a
+  building *is* residential, so what remains is still houses, offices and small
+  commercial units together: this is a tidy-up, not the residential filter the
+  study needs, which is step 1's Phase 3.
 - **Every building inside the property sets the extent**, buffered by
   `INSURED_LAND_BUFFER_M` and the buffers merged by `buffer_buildings`. A
   garage, a sleepout and a shed are **appurtenant structures and are buffered
@@ -77,13 +106,26 @@
   neighbours on whichever building was nearest.
 - `describe_extent()` in `gen_insured_land.py` re-measures the result against
   its own dissolve, so a run states rather than assumes how much ground is
-  claimed twice. Over the pilot that residual is 0.2 ha in 225.7, and it comes
+  claimed twice. Over the pilot that residual is 0.23 ha in 172.7, and it comes
   from property boundaries that overlap each other.
 - Over the Wellington pilot: 11,352 boundaries reduce to 7,498 claim properties,
-  4,494 of which carry a dwelling and 4,388 of those a building. The result is
-  225.7 ha of insured land over 4,388 claims covering **8,438 of the 8,591
+  4,494 of which carry a dwelling and 4,295 of those a building. Of the 10,256
+  building outlines read, 322 cannot be a home and are dropped — 127 named (94
+  schools, 27 hospitals, 6 supermarkets) and 241 over 500 m², with 46 failing
+  both tests. The 9,934 kept have a median footprint of 118 m². The result is
+  172.7 ha of insured land over 4,295 claims covering **7,926 of the 8,591
   dwellings**. The insured land is 93% of the property at the median, because
   the 8 m line reaches the boundary on a typical Wellington section.
+- What the two filters cost the pilot, against 4,388 claims and 225.7 ha with
+  neither: the name test took 14 claims, 18.4 ha and 58 dwellings; the size test
+  took a further 79 claims, 34.6 ha and 454 dwellings. The area is out of
+  proportion to the 3.1% of outlines removed because a school block, a hospital
+  ward and a warehouse are large buildings on large sites, and the 8 m apron
+  goes with the footprint.
+- **665 of the 8,591 pilot dwellings now stand on a property carrying no insured
+  land**, against 153 before either filter. Most of that increase is apartment
+  blocks caught by the size test, and it is the number to watch if the threshold
+  is revisited.
 
 Potential future improvements see
 `s5_insured_land_extent_implementation_plan.md`.

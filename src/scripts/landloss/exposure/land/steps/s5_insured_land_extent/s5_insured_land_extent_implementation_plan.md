@@ -114,10 +114,28 @@ dwellings of 8,591**, on 4,388 claims.
 ## Potential future improvements
 
 - Distinguish a dwelling from a garage or a shed. The outline layer's `use`
-  column is populated for very few residential buildings, so the extent is
-  buffered off every structure on a property. That is the right answer for
-  appurtenant structures and the wrong one for a building a dwelling-triggered
-  cover would not reach.
+  column now takes the named institutions out — schools, hospitals,
+  supermarkets, huts and shelters, 1.2% of the pilot's outlines — and a 500 m²
+  footprint cap takes the warehouses and office blocks, a further 1.9%. But the
+  column says `Unknown` for every other building and a shed is small, so the
+  extent is still buffered off every remaining structure on a property. That is
+  the right answer for appurtenant structures and the wrong one for a building a
+  dwelling-triggered cover would not reach. Separating a house from a shed needs
+  something the layer does not carry.
+- Recover the apartment blocks the 500 m² footprint cap removes. It is the crude
+  half of the filter: a block of flats is residential and has the footprint of a
+  warehouse, and the cap costs the pilot 454 dwellings' insured land against 58
+  for the name test. A property carrying many address points on one large
+  outline is an apartment block rather than a warehouse, so `dwelling_count`
+  from step 3 is the obvious thing to exempt on, and the threshold itself
+  (`MAX_DWELLING_FOOTPRINT_M2`) should be checked against the footprint
+  distribution in a flatter authority before the full run.
+- Narrow the population to residential properties, which is step 1's Phase 3 and
+  the bigger half of the same problem: the use filter removes named
+  institutions, not the shops, offices and warehouses that carry no `use` value.
+  The route is `valuation_reference` on the property boundaries, populated on
+  90.8% of the pilot's polygons, joined to a council rating information database
+  for the property category under the Rating Valuations Rules.
 - Speed. The extent is now one overlay and one clip rather than a Voronoi
   diagram over every contested outline, so the partitioning cost that made the
   address-keyed model slow has gone.

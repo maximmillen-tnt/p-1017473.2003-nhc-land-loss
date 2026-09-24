@@ -47,24 +47,20 @@ FINE_RESOLUTION_M = 1
 # report it at all.
 SLOPE_HEIGHT_WINDOW_M = 50.0
 
-# The three factors supplied as constants rather than mapped, with the class
-# each is fixed at. All three are Kingsbury's own values from the Table 6 worked
-# examples for moderate ground and above.
+# What depth to groundwater to assume where the National Liquefaction Model's
+# grid does not reach, in metres below ground. That grid is built for flat land
+# and carries a value over about 7% of its cells; the rest is hill country,
+# where it is silent rather than unknown. Four metres puts that ground in the
+# well drained class, which is the point: a hillside drains.
 #
-# Geology: the source says geology mattered least "because of the relative
-# uniformity of bedrock type in the Region", with steep slopes "underlain by
-# greywacke rock with a variable but generally thin (1 to 2 metre) surface layer
-# of colluvium". Every worked example from moderate upwards scores it 10.
-GEOLOGY_VALUE = susceptibility.GEOLOGY_COLLUVIUM_OR_ALLUVIUM
+# It sits just outside the modelled range in the other direction too -- 97% of
+# the cells that do carry a value are at 4 m or shallower -- so assuming it
+# cannot make unmodelled ground score higher than modelled ground does.
+DEFAULT_GROUNDWATER_DEPTH_M = 4.0
 
 # Landslides: no inventory is held, so no cell can be told apart from any other.
 # Zero is the honest value; it is not a statement that there are no landslides.
 LANDSLIDE_VALUE = susceptibility.LANDSLIDES_NONE
-
-# Groundwater: the source generalises this factor "to reflect extreme
-# conditions, with maximum effects during prolonged heavy rainfall", and scores
-# it 10 in all five worked examples.
-GROUNDWATER_VALUE = susceptibility.GROUNDWATER_SATURATED
 
 # Whether to reuse an already-fetched elevation model for this extent. Set False
 # to fetch it again.

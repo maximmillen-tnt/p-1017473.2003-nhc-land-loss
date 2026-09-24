@@ -1,13 +1,16 @@
 """Tests for the Kingsbury (1995) slope failure susceptibility scheme."""
 
 import numpy as np
+import pandas as pd
 import pytest
 
 from landloss.domain import constants
 from landloss.hazard.landslide.susceptibility import (
     GEOLOGY_COLLUVIUM_OR_ALLUVIUM,
     GEOLOGY_HIGHLY_TO_COMPLETELY_WEATHERED,
+    GROUNDWATER_POORLY_DRAINED,
     GROUNDWATER_SATURATED,
+    GROUNDWATER_WELL_DRAINED,
     LANDSLIDES_ACTIVE,
     LANDSLIDES_NONE,
     LANDSLIDES_OLD,
@@ -16,10 +19,15 @@ from landloss.hazard.landslide.susceptibility import (
     ZONE_LABELS,
     ZONE_RANKS,
     cut_angle_value,
+    geology_value_from_material,
+    groundwater_value,
     slope_angle_value,
     slope_height_value,
     susceptibility_rating,
     susceptibility_zone,
+)
+from landloss.hazard.landslide.susceptibility import (
+    GEOLOGY_HIGHLY_TO_COMPLETELY_WEATHERED as GEOLOGY_HW_CW,
 )
 
 
@@ -200,3 +208,118 @@ def test_a_lesser_geology_class_lowers_the_rating():
     )
 
     assert colluvium - weathered_rock == 12.0
+
+
+# --- groundwater, from depth to water ----------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("depth_m", "expected"),
+    [
+        (0.0, GROUNDWATER_SATURATED),
+        (0.9, GROUNDWATER_SATURATED),
+        (1.0, GROUNDWATER_POORLY_DRAINED),
+        (2.9, GROUNDWATER_POORLY_DRAINED),
+        (3.0, GROUNDWATER_WELL_DRAINED),
+        (4.0, GROUNDWATER_WELL_DRAINED),
+        (16.0, GROUNDWATER_WELL_DRAINED),
+    ],
+)
+def test_groundwater_class_falls_as_the_water_table_deepens(depth_m, expected):
+    """This factor runs the opposite way to every other one, so it is worth pinning."""
+    assert groundwater_value(np.array([depth_m]))[0] == expected
+
+
+def test_the_assumed_off_footprint_depth_is_well_drained():
+    """A hillside outside the NLM's flat-land grid has to score as draining."""
+    assumed = 4.0
+
+    assert groundwater_value(np.array([assumed]))[0] == GROUNDWATER_WELL_DRAINED
+
+
+def test_unknown_groundwater_depth_stays_unknown():
+    """A caller filling the gap is a decision; NaN passing through is not."""
+    assert np.isnan(groundwater_value(np.array([np.nan]))[0])
+
+
+# --- geology, from NLM material classes ---------------------------------------
+#
+# The classes below are every value of l3_yp present over the four territorial
+# authorities, read off the layer. If the model gains another the lookup raises
+# rather than defaulting, which is what the last test guards.
+
+STUDY_AREA_MATERIALS = (
+    "Sedimentary",
+    "River channel",
+    "Foreshore",
+    "Floodplain",
+    "Uncompacted fill",
+    "Water body",
+    "Metamorphic",
+    "Igneous",
+    "Talus",
+    "Loess",
+    "Colluvium",
+    "Compacted fill",
+)
+
+BASEMENT_MATERIALS = ("Sedimentary", "Metamorphic", "Igneous")
+
+
+def test_every_material_in_the_study_area_has_a_geology_class():
+    """A missing one would stop a full run part way through, not degrade it."""
+    scored = geology_value_from_material(pd.Series(STUDY_AREA_MATERIALS))
+
+    # Water is the one deliberate NaN; everything else has to carry a value.
+    assert scored.drop(index=STUDY_AREA_MATERIALS.index("Water body")).notna().all()
+
+
+def test_basement_rock_scores_below_unconsolidated_ground():
+    """The split between rock and loose material is the whole of this factor."""
+    scored = geology_value_from_material(pd.Series(STUDY_AREA_MATERIALS))
+    by_material = dict(zip(STUDY_AREA_MATERIALS, scored, strict=True))
+
+    for material in BASEMENT_MATERIALS:
+        assert by_material[material] == GEOLOGY_HW_CW
+
+    loose = set(STUDY_AREA_MATERIALS) - set(BASEMENT_MATERIALS) - {"Water body"}
+    for material in loose:
+        assert by_material[material] == GEOLOGY_COLLUVIUM_OR_ALLUVIUM
+
+
+def test_open_water_is_left_unscored():
+    """A harbour is not ground that can fail, so it gets no susceptibility."""
+    scored = geology_value_from_material(pd.Series(["Water body"]))
+
+    assert np.isnan(scored.iloc[0])
+
+
+def test_talus_is_read_as_colluvium():
+    """The coarser l2 field rolls talus in with landslide debris; l3 does not."""
+    scored = geology_value_from_material(pd.Series(["Talus"]))
+
+    assert scored.iloc[0] == GEOLOGY_COLLUVIUM_OR_ALLUVIUM
+
+
+def test_an_unmapped_material_is_refused():
+    """A new class upstream is a decision for somebody, not a silent default."""
+    with pytest.raises(ValueError, match="No geology class is assigned"):
+        geology_value_from_material(pd.Series(["Volcanic cone"]))
+
+
+def test_hill_country_can_still_reach_the_lowest_zone():
+    """Gentle, well drained bedrock has to be able to score very low.
+
+    With geology and groundwater held constant this was impossible: the two
+    together put every cell above the 20 point band before any terrain was read.
+    """
+    rating = rating_of(
+        slope=0.0,
+        modification=0.0,
+        height=0.0,
+        geology=GEOLOGY_HW_CW,
+        landslides=LANDSLIDES_NONE,
+        groundwater=GROUNDWATER_WELL_DRAINED,
+    )
+
+    assert zone_of(rating) == 1

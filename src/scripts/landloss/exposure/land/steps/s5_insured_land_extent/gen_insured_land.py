@@ -22,6 +22,15 @@ Four things are worth watching in the run output.
   follows a residential building. A bare section belongs in that group; a
   property whose address point LINZ placed outside its own boundary does not,
   and only the count makes the second case visible.
+- **Buildings that cannot be a home.** Two tests run before anything is
+  buffered, because cover follows a residential building: LINZ's ``use`` column
+  names schools, hospitals, supermarkets, huts and shelters, and a footprint
+  over ``MAX_DWELLING_FOOTPRINT_M2`` is a warehouse, a mall or an office block.
+  The run prints how many went under each test. Two things to watch: if the
+  named share ever became large it would mean LINZ had started populating the
+  ``use`` column properly and the filter would need rewriting the other way
+  round; and the size test takes apartment blocks with the warehouses, so the
+  dwellings it leaves uncovered are printed with the extent below.
 - **Buildings split across a boundary.** A terrace captured as one outline is
   two buildings on two properties, and the run says how many were split.
 - **The insured area against the property area.** The 8 m buffer reaches the
@@ -49,19 +58,23 @@ from landloss.exposure.land.extent import (
     AREA_COLUMN,
     BOUNDARY_ROW_COLUMN,
     BUILDING_COUNT_COLUMN,
+    BUILDING_USE_COLUMN,
     CLAIM_ID_COLUMN,
     DWELLING_COUNT_COLUMN,
     LAND_RATE_EXCL_GST_COLUMN,
     LAND_RATE_INCL_GST_COLUMN,
+    MAX_DWELLING_FOOTPRINT_M2,
     MIN_CROSSING_AREA_M2,
     MIN_CROSSING_SHARE,
     OUTLINE_ID_COLUMN,
     PROPERTY_AREA_COLUMN,
     TITLE_TYPE_COLUMN,
+    UNNAMED_BUILDING_USE,
     assign_buildings_to_properties,
     build_claim_properties,
     build_insured_land_extent,
     count_dwellings,
+    drop_non_residential_buildings,
 )
 from landloss.io.readers import (
     get_nz_address_roads,
@@ -226,6 +239,42 @@ def describe_dwellings(addresses, dwellings, properties):
     )
 
 
+def describe_building_filter(outlines, buildings):
+    """Print the outlines that cannot be a home, under each of the two tests.
+
+    Args:
+        outlines: The building outlines as LINZ served them.
+        buildings: What is left after :func:`drop_non_residential_buildings`.
+    """
+    print(RULE)
+    uses = outlines[BUILDING_USE_COLUMN].fillna(UNNAMED_BUILDING_USE)
+    named = uses != UNNAMED_BUILDING_USE
+    oversized = outlines.geometry.area > MAX_DWELLING_FOOTPRINT_M2
+    dropped = len(outlines) - len(buildings)
+    share = 100 * dropped / len(outlines) if len(outlines) else 0.0
+    print(
+        f"Building outlines that cannot be a home: {dropped:,} of "
+        f"{len(outlines):,} ({share:.1f}%)"
+    )
+    if named.any():
+        print(
+            f"  named by LINZ: {int(named.sum()):,} -- "
+            + ", ".join(f"{k} {v:,}" for k, v in uses[named].value_counts().items())
+        )
+    print(
+        f"  over {MAX_DWELLING_FOOTPRINT_M2:,.0f} m2: {int(oversized.sum()):,}, of "
+        f"which {int((oversized & named).sum()):,} were already named"
+    )
+    print(
+        f"  kept: {len(buildings):,}, median footprint "
+        f"{buildings.geometry.area.median():,.0f} m2"
+    )
+    print(
+        "  neither test can say a building is residential, so what is left is "
+        "still houses, offices and small commercial units together"
+    )
+
+
 def describe_buildings(buildings, parts):
     """Print how the building outlines were cut to the properties."""
     print(RULE)
@@ -246,7 +295,7 @@ def describe_buildings(buildings, parts):
     )
 
 
-def describe_extent(extent, occupied, addresses):
+def describe_extent(extent, occupied, addresses, dwellings):
     """Print the insured land, and confirm the extents do not overlap."""
     print(RULE)
     print(
@@ -254,7 +303,16 @@ def describe_extent(extent, occupied, addresses):
         f"{len(extent):,} claims, {int(extent[DWELLING_COUNT_COLUMN].sum()):,} "
         "dwellings"
     )
-    print(f"  {len(occupied) - len(extent):,} occupied properties carry no building")
+    # The dwellings on those properties are what the building filters cost, so
+    # they are counted rather than left to be inferred from the difference.
+    counts = dwellings.groupby(CLAIM_ID_COLUMN).size()
+    uncovered = counts[~counts.index.isin(set(extent[CLAIM_ID_COLUMN]))]
+    print(
+        f"  {len(occupied) - len(extent):,} occupied properties carry no "
+        f"building, holding {int(uncovered.sum()):,} dwellings between them: a "
+        "bare section, or one whose only buildings the use and size filters "
+        "removed"
+    )
 
     # Confirmed rather than assumed, because everything downstream sums area per
     # claim and would double count silently if it were not true.
@@ -317,10 +375,17 @@ def main(*, pilot, use_cached_extent):
     )
     boundaries = boundaries.set_geometry(boundaries.geometry.make_valid())
     print("Fetching the building outlines ...", flush=True)
-    buildings = get_nz_building_outlines(
+    outlines = get_nz_building_outlines(
         bbox=bbox, crs=constants.DEFAULT_CRS, use_cache=use_cached_extent
     )
-    buildings = buildings.set_geometry(buildings.geometry.make_valid())
+    outlines = outlines.set_geometry(outlines.geometry.make_valid())
+    # Cover follows a residential building, so the schools, hospitals,
+    # supermarkets, huts and shelters LINZ has named go before anything is
+    # buffered. A property left with no building carries no insured land, which
+    # is how a school site drops out of the portfolio altogether.
+    buildings = drop_non_residential_buildings(outlines)
+
+    describe_building_filter(outlines, buildings)
 
     properties = build_claim_properties(boundaries)
     describe_properties(boundaries, properties)
@@ -349,7 +414,7 @@ def main(*, pilot, use_cached_extent):
     print(RULE)
     print(f"Roads: {len(roads):,}")
     print(describe_driveways(driveways, len(parts)).to_string())
-    describe_extent(extent, occupied, addresses)
+    describe_extent(extent, occupied, addresses, dwellings)
 
     # The rate rides along with the polygon so that the vulnerability step reads
     # one layer rather than joining two. It is the same rate step 2 modelled;

@@ -190,9 +190,8 @@ def worked_values(claim: pd.Series, policy: PolicySettings) -> dict[int, float]:
         Column number to value.
     """
     dwellings = float(claim["dwelling_count"])
-    land_value = (
-        min(float(claim["damaged_area_m2"]), policy.area_cap_m2)
-        * float(claim["land_rate_incl_gst_nzd_per_m2"])
+    land_value = min(float(claim["damaged_area_m2"]), policy.area_cap_m2) * float(
+        claim["land_rate_incl_gst_nzd_per_m2"]
     )
     udv = (
         float(claim["wall_height_m"])
@@ -273,9 +272,9 @@ def write_calculation(sheet, chosen: pd.DataFrame, policy: PolicySettings) -> No
         cell.fill = HEAD_FILL
         cell.alignment = Alignment(wrap_text=True, vertical="center")
         sheet.column_dimensions[get_column_letter(index)].width = width
-    sheet.cell(row=HEADER_ROW, column=len(COLUMNS) + 1, value="Why this claim").font = (
-        HEAD
-    )
+    sheet.cell(
+        row=HEADER_ROW, column=len(COLUMNS) + 1, value="Why this claim"
+    ).font = HEAD
     sheet.cell(row=HEADER_ROW, column=len(COLUMNS) + 1).fill = HEAD_FILL
     sheet.column_dimensions[get_column_letter(len(COLUMNS) + 1)].width = 28
     sheet.row_dimensions[HEADER_ROW].height = 30
@@ -392,9 +391,7 @@ def write_repair(sheet, chosen: pd.DataFrame) -> None:
             cell.font = INPUT
             if fmt:
                 cell.number_format = fmt
-        total = sheet.cell(
-            row=row, column=10, value=f"=B{row}+G{row}+H{row}+I{row}"
-        )
+        total = sheet.cell(row=row, column=10, value=f"=B{row}+G{row}+H{row}+I{row}")
         total.font = FORMULA
         total.number_format = MONEY
 
@@ -509,9 +506,9 @@ def main(*, pilot, realisation_ids):
     # The height the size class is priced at, written out rather than looked up
     # in a formula: a reviewer can see size, height and length multiply out to
     # the value, and no cell depends on matching a word.
-    claims["landslide_area_m2"] = landslide_area(realisation_id, pilot=pilot).reindex(
-        claims.index
-    ).fillna(0.0)
+    claims["landslide_area_m2"] = (
+        landslide_area(realisation_id, pilot=pilot).reindex(claims.index).fillna(0.0)
+    )
     claims["wall_height_m"] = (
         claims["wall_size"].map(BETA_SIZE_CLASS_HEIGHT_M).fillna(0.0)
     )

@@ -46,7 +46,11 @@ from shapely.geometry import box
 
 from landloss.common.utils.plot import style_basemap_ax
 from landloss.domain import constants
-from landloss.exposure.land.extent import AREA_COLUMN, INSURED_LAND_BUFFER_M
+from landloss.exposure.land.extent import (
+    AREA_COLUMN,
+    INSURED_LAND_BUFFER_M,
+    drop_non_residential_buildings,
+)
 from landloss.io.readers import get_nz_building_outlines
 from scripts.landloss.exposure.land.steps.s5_insured_land_extent import config
 from scripts.landloss.exposure.land.steps.s5_insured_land_extent.gen_insured_land import (
@@ -187,6 +191,9 @@ def main(*, pilot, close_up_m, use_cached_extent):
         crs=constants.DEFAULT_CRS,
         use_cache=use_cached_extent,
     )
+    # The same filter the extent was built with, so the outlines drawn on the
+    # close-up are the ones that were actually buffered.
+    buildings = drop_non_residential_buildings(buildings)
 
     print(f"Buffer: {INSURED_LAND_BUFFER_M:,.0f} m from every building outline")
     fig = build_figure(extent, buildings, window)

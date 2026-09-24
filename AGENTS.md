@@ -31,6 +31,52 @@ deriving the study area boundaries from that layer is a `gen_`.
 `gen_` and `get_` apply to functions as well as to filenames, so a function that
 retrieves a layer is `get_`, not `load_` or `fetch_`.
 
+## Changelog fragments
+
+Changelog fragments in `doc/whatsnew/` are named
+`{initials}.{type}.{yymmddhhmm}.md`, for example `mm.feature.2609251430.md`, and
+towncrier assembles them into `CHANGELOG.md` at release. The initials are those of
+the developer writing the fragment and the timestamp is when they wrote it.
+
+The scheme exists because the earlier `{issue_num}.{type}.md` names were in
+practice a running counter, not JIRA numbers: two branches in progress at once
+each took the next free number, so every merge between them collided on the same
+filenames. Initials keep two people's names apart, and the timestamp keeps one
+person's names apart across branches. Towncrier reads the part before the type as
+the issue and prints it beside the entry, so the changelog shows who made each
+change, and it reads the digits after the type as a counter that orders entries
+by date.
+
+- Write a new fragment for every change. Do not append to an existing fragment,
+  even one on the same topic: two branches appending to one file conflicts
+  whatever the file is called.
+- The type is one of the `[[tool.towncrier.type]]` directories in
+  `pyproject.toml`.
+- The timestamp has to be digits only. Towncrier ignores a non-numeric suffix,
+  and two such names with the same initials and type then abort the build.
+- Two hooks in `.pre-commit-config.yaml` enforce this. `whatsnew-fragment-name`
+  rejects an old numbered name or one missing its timestamp. `towncrier-draft`
+  runs `towncrier build --draft`, which rejects initials not in `issue_pattern`
+  and two fragments that resolve to the same name.
+
+To add a contributor, add their initials to `issue_pattern` under
+`[tool.towncrier]` in `pyproject.toml` (for example `"mm|pg|ab"`). If two people
+share initials, give one of them a third letter.
+
+To change the naming scheme again, rename every existing fragment in one commit
+with `git mv`, so history follows the files and git's rename detection can carry
+edits from other branches across. Do it straight after the open branches have
+been merged together, when no one has fragments in flight, and tell the other
+developers before they write their next fragment. Take each fragment's author and
+date from the commit that added it
+(`git log --diff-filter=A --format='%an|%ad' -- <file>`). A fragment first created
+in a merge commit, where a conflict was resolved by renumbering, has no add commit
+on its own branch. Attribute it by searching for its code with
+`git log --all -S"<identifier>"`. Build `towncrier build --draft` before and after
+the rename and check the entry count is unchanged. On Windows, run it with
+`PYTHONUTF8=1` or `python -X utf8`, because the default console encoding cannot
+print the macrons in the fragments.
+
 ## Koordinates readers
 
 Every reader of a Koordinates layer must record that layer's data licence in its

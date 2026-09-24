@@ -43,6 +43,18 @@ Four decisions the module makes, each of which costs something:
 - **Roads and water are not claims.** Boundaries sourced from the road and hydro
   parcel layers are dropped by :data:`NON_CLAIM_SOURCES`; they are land with no
   dwelling on it and no residential cover over it.
+- **A building LINZ has named, or one too large to be a house, is not a
+  dwelling.** :func:`drop_non_residential_buildings` applies both tests. The
+  outlines layer carries a ``use`` column that names schools, hospitals,
+  supermarkets, huts and shelters and says ``Unknown`` for everything else, so
+  it cannot confirm that a building is residential but it can rule one out; and
+  a footprint over :data:`MAX_DWELLING_FOOTPRINT_M2` is a warehouse, a mall or
+  an office block rather than a house, the pilot's outlines running to a median
+  of 120 m2 and a 95th percentile of 290. A property left with no building at
+  all then carries no extent, which is how a school site or a retail park leaves
+  the portfolio without a rule of its own. Neither test can say a building *is*
+  residential, so this is a tidy-up rather than the residential filter the study
+  still needs.
 - **A property with no address point carries no insured land.** Cover follows a
   residential building, and a dwelling count of zero is the model saying it
   cannot see one. A bare section, a garage on its own title, and a property
@@ -92,6 +104,22 @@ NON_CLAIM_SOURCES = (
     "NZ Primary Parcels - Road",
     "NZ Primary Parcels - Hydro",
 )
+
+# The building outlines layer's ``use`` column, and the value it carries when
+# LINZ has not named the building. Nationally 3,209,472 of 3,236,141 outlines are
+# "Unknown" and the remainder are School, Hospital, Supermarket, Hut and Shelter,
+# so the column is a gazetteer of named institutions rather than a land use
+# classification: it can say a building is *not* a dwelling and never that it is.
+BUILDING_USE_COLUMN = "use"
+UNNAMED_BUILDING_USE = "Unknown"
+
+# The largest footprint a building is taken to be a dwelling at. Over the pilot
+# the outlines run to a median of 120 m2 and a 95th percentile of 290, so this
+# sits well clear of a large house and cuts in where the warehouses, the malls
+# and the office blocks are. It is a threshold on this study's own model rather
+# than a line NHC draws, and it is the crude half of the filter: an apartment
+# block is residential and has a footprint like a warehouse, so it goes too.
+MAX_DWELLING_FOOTPRINT_M2 = 500.0
 
 ADDRESS_ID_COLUMN = "address_id"
 AREA_COLUMN = "area_m2"
@@ -157,6 +185,72 @@ def _check_frames(properties: gpd.GeoDataFrame, other: gpd.GeoDataFrame) -> None
         raise ValueError(msg)
 
     _check_projected(properties.crs)
+
+
+def drop_non_residential_buildings(
+    buildings: gpd.GeoDataFrame,
+    *,
+    use_column: str = BUILDING_USE_COLUMN,
+    unnamed_use: str = UNNAMED_BUILDING_USE,
+    max_area_m2: float = MAX_DWELLING_FOOTPRINT_M2,
+) -> gpd.GeoDataFrame:
+    """Drop the building outlines that cannot be a home.
+
+    NHC land cover follows a residential building, and nothing in the address,
+    property or building layers says which buildings those are. Two tests are
+    applied, and both rule buildings out rather than ruling them in.
+
+    **The name.** The outlines layer's ``use`` column is the one field that says
+    anything about a building's purpose, and it only ever says the opposite: it
+    names schools, hospitals, supermarkets, huts and shelters, and leaves every
+    other building -- 99.2% of the country -- as ``unnamed_use``. Everything
+    named is dropped, rather than a list of known values being excluded, so a
+    use LINZ adds to the layer later is excluded without this having to be
+    edited. The cost of that choice is that it would drop the whole layer if
+    LINZ ever populated the column properly, which is why the caller reports
+    what it removed instead of removing it silently.
+
+    **The size.** A footprint over ``max_area_m2`` is a warehouse, a mall or an
+    office block rather than a house. It is measured on the outline as served,
+    before anything is cut to a property, so a terrace captured as one large
+    polygon is judged whole -- the split into one building per property happens
+    downstream, in :func:`assign_buildings_to_properties`, and this runs first
+    because the same outline has to be ruled in or out consistently for every
+    property it touches.
+
+    The size test is the crude one. An apartment block is residential and has
+    the footprint of a warehouse, so it goes with them, and the dwellings inside
+    it lose their insured land. The population left behind is still houses,
+    offices and small commercial units together.
+
+    Args:
+        buildings: The LINZ NZ Building Outlines layer, carrying ``use_column``.
+        use_column: The column naming the building's use.
+        unnamed_use: The value the column carries when LINZ has not named it.
+            A missing or blank value is treated the same way.
+        max_area_m2: The largest footprint a building is taken to be a dwelling
+            at.
+
+    Returns:
+        A new GeoDataFrame holding only the outlines that pass both tests,
+        re-indexed from zero. The caller's frame is left untouched.
+
+    Raises:
+        ValueError: If the outlines carry no ``use_column``, or are in a
+            geographic coordinate reference system, where the footprints this
+            measures would be in square degrees.
+    """
+    _check_projected(buildings.crs)
+    if use_column not in buildings.columns:
+        msg = (
+            f"the building outlines carry no {use_column!r} column, so the "
+            "named non-residential buildings cannot be identified"
+        )
+        raise ValueError(msg)
+
+    uses = buildings[use_column].fillna(unnamed_use).replace("", unnamed_use)
+    keep = (uses == unnamed_use) & (buildings.geometry.area <= max_area_m2)
+    return buildings[keep].reset_index(drop=True)
 
 
 def build_claim_properties(

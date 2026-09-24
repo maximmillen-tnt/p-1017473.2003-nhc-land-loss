@@ -47,6 +47,7 @@ from landloss.exposure.land.extent import (
     OUTLINE_ID_COLUMN,
     assign_buildings_to_properties,
     build_claim_properties,
+    drop_non_residential_buildings,
 )
 from landloss.io.readers import get_nz_building_outlines, get_nz_property_boundaries
 from scripts.landloss.exposure.land.steps.s5_insured_land_extent import config
@@ -259,6 +260,10 @@ def main(*, pilot):
     # Both layers carry the odd self-intersecting ring, which overlay refuses.
     buildings = buildings.set_geometry(buildings.geometry.make_valid())
     boundaries = boundaries.set_geometry(boundaries.geometry.make_valid())
+    # The same use filter the extent is built with, for the same reason the
+    # claim properties are used below rather than the raw boundaries: this has
+    # to measure the population that is actually buffered.
+    buildings = drop_non_residential_buildings(buildings)
     buildings = buildings.reset_index(drop=True)
     buildings[OUTLINE_ID_COLUMN] = np.arange(len(buildings))
 

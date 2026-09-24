@@ -59,16 +59,43 @@
   `to_coarse_maximum()`, following the source's statement that a steep component
   controls the stability of the whole slope it sits on. One steep fine cell
   therefore lifts its whole coarse cell.
-- **Geology, existing landslides and groundwater are constants**, set in
-  `config.py` and printed by `describe_constants()` on every run. Geology and
-  groundwater are fixed at the values Kingsbury used in his own worked examples
-  for moderate ground and above, so they shift every cell equally and change no
-  ranking. The landslide factor is zero because no inventory is held, which
+- **Geology** is read from the National Liquefaction Model's geomorphology
+  polygons by `geology_factor()`, which maps the **`l3_yp` material class** to a
+  factor value through `NLM_MATERIAL_GEOLOGY_VALUES` and burns it onto the
+  coarse grid. `l3_yp` is the field read, not the coarser `l2_geomorphology` and
+  not `main_rock`; the constant's comment says why. Open water is mapped to NaN
+  and left unscored rather than given a value. In substance the mapping is still
+  binary — basement rock takes the highly to completely weathered greywacke
+  class, everything unconsolidated takes colluvium and alluvium — because the
+  model maps neither weathering nor shearing, so two of Kingsbury's four classes
+  are never reached whatever field is read. A material with no class assigned
+  raises rather than defaulting. The extent is taken from the grid rather than
+  passed in, so the working margin is scored too.
+- **Groundwater** is read from the National Liquefaction Model's median depth
+  grid by `groundwater_factor()`, and converted to a factor value by
+  `groundwater_value()`. The depth thresholds are this study's, not the
+  source's, and the reasoning is in the comment on
+  `GROUNDWATER_SATURATED_DEPTH_M`: a water table inside the one to two metre
+  colluvium layer the booklets say fails is the saturated case, one just below
+  it the poorly drained case, one well below it drains. This is the only factor
+  that scores lower as its measurement rises.
+- The groundwater grid **covers flat land only**, about a third of the pilot
+  extent and 7% of its own cells nationally. Off that footprint the depth is
+  filled with `DEFAULT_GROUNDWATER_DEPTH_M`, 4 m, which puts hill country in the
+  well drained class; the alternative, carrying NaN through, would leave every
+  hillside unscored. It is resampled by nearest neighbour rather than bilinear,
+  because the edge of the modelled footprint is a hard boundary and
+  interpolating across it would spread NaN inland.
+- Both NLM layers are project data from the same team that built this study, so
+  they are read without an attribution or permission step; the layers themselves
+  stay inside T+T. The readers say so.
+- **The landslide factor is the only constant left**, at zero, because no
+  inventory is held. `describe_landslide_constant()` says so on every run; it
   removes up to 20 of the 150 points.
-- Those constants put every cell at 30 points before any terrain is read, which
-  is above the 20 point band boundary. **The very low zone is therefore
-  unreachable**, and flat ground comes back one zone more severe than the
-  published map puts it. The run says so.
+- `describe_baseline()` prints what a cell scores before any terrain is read.
+  Over the pilot that is 8 to 25 points, median 8, and about nine tenths of the
+  extent starts below the 20 point band — so the very low zone is reachable,
+  which it was not while geology and groundwater were held constant.
 - The 1995 generalisation rules are not applied. The published product is
   generalised polygons — steep facets expanded to the whole slope, a downslope
   runout allowance added, every modified slope forced into the high or very high

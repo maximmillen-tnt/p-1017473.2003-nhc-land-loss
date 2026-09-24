@@ -20,6 +20,7 @@ from landloss.common.utils.terrain import (
     SLOPE_NAME,
     TOPOGRAPHIC_POSITION_NAME,
     azimuth_offsets,
+    block_mean,
     cell_size,
     downhill_azimuth_degrees,
     sample_at_points,
@@ -192,6 +193,70 @@ def test_a_non_positive_cell_size_is_rejected() -> None:
 
     with pytest.raises(ValueError, match="positive"):
         slope_degrees(dem, resolution=0.0)
+
+
+# --- block mean ---------------------------------------------------------------
+
+
+@ignore_affine_matmul
+def test_a_block_mean_is_the_mean_of_the_cells_it_covers() -> None:
+    """Each coarse cell averages its whole block, not the cell at its centre."""
+    dem = make_dem(np.arange(36, dtype=float).reshape(6, 6))
+
+    coarse = block_mean(dem, 3).to_numpy()
+
+    assert coarse.shape == (2, 2)
+    assert coarse[0, 0] == pytest.approx(np.mean([0, 1, 2, 6, 7, 8, 12, 13, 14]))
+
+
+@ignore_affine_matmul
+def test_a_block_mean_sets_the_coarse_cell_size_and_keeps_the_corner() -> None:
+    """The coarse grid has to line up with the fine one it was built from."""
+    dem = make_dem(np.zeros((10, 10)), resolution=10.0)
+
+    coarse = block_mean(dem, 5)
+
+    assert cell_size(coarse) == pytest.approx(50.0)
+    assert coarse.rio.bounds() == pytest.approx(dem.rio.bounds())
+    assert coarse.rio.crs == dem.rio.crs
+
+
+@ignore_affine_matmul
+def test_a_block_mean_drops_a_part_block_rather_than_averaging_it() -> None:
+    """Seven cells at a factor of three leave one over, which is not a block."""
+    dem = make_dem(np.zeros((7, 7)))
+
+    assert block_mean(dem, 3).shape == (2, 2)
+
+
+@ignore_affine_matmul
+def test_a_block_mostly_of_nodata_carries_no_mean() -> None:
+    """One cell of land in a block of nodata is not the block's elevation."""
+    elevation = np.full((4, 4), np.nan)
+    elevation[0, 0] = 5.0
+    elevation[2:, 2:] = 1.0
+    elevation[3, 3] = np.nan
+
+    coarse = block_mean(make_dem(elevation), 2).to_numpy()
+
+    assert np.isnan(coarse[0, 0])
+    assert coarse[1, 1] == pytest.approx(1.0)
+
+
+@ignore_affine_matmul
+def test_a_planar_ramp_keeps_its_slope_when_block_averaged() -> None:
+    """Averaging a plane leaves a plane, so the slope survives coarsening."""
+    dem = make_dem(ramp(30, rise_per_cell=10.0), resolution=10.0)
+
+    coarse = block_mean(dem, 3)
+
+    assert interior(slope_degrees(coarse, cell_size(coarse))) == pytest.approx(45.0)
+
+
+def test_a_block_mean_factor_under_one_is_rejected() -> None:
+    """A block has to cover at least the cell it stands for."""
+    with pytest.raises(ValueError, match="at least one cell"):
+        block_mean(make_dem(np.zeros((4, 4))), 0)
 
 
 # --- downhill direction -------------------------------------------------------

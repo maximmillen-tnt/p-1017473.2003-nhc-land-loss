@@ -15,12 +15,15 @@ from landloss.exposure.land.extent import (
     CLAIM_ID_COLUMN,
     DWELLING_COUNT_COLUMN,
     INSURED_LAND_BUFFER_M,
+    MAX_DWELLING_FOOTPRINT_M2,
     OUTLINE_ID_COLUMN,
     PROPERTY_AREA_COLUMN,
+    UNNAMED_BUILDING_USE,
     assign_buildings_to_properties,
     build_claim_properties,
     build_insured_land_extent,
     count_dwellings,
+    drop_non_residential_buildings,
 )
 
 # Two 40 m square sections side by side, each holding a 10 m square building in
@@ -48,10 +51,13 @@ def make_boundaries(polygons, sources=None, ids=None, crs=constants.DEFAULT_CRS)
     )
 
 
-def make_buildings(polygons, crs=constants.DEFAULT_CRS):
+def make_buildings(polygons, uses=None, crs=constants.DEFAULT_CRS):
     """Build a building outline frame."""
     return gpd.GeoDataFrame(
-        {"building_id": list(range(len(polygons)))},
+        {
+            "building_id": list(range(len(polygons))),
+            "use": uses or [UNNAMED_BUILDING_USE] * len(polygons),
+        },
         geometry=list(polygons),
         crs=crs,
     )
@@ -300,3 +306,78 @@ def test_boundaries_without_a_source_are_refused():
 
     with pytest.raises(ValueError, match="carry no"):
         build_claim_properties(boundaries)
+
+
+def test_a_named_building_is_not_a_dwelling():
+    # The use column names institutions and says nothing about a house, so the
+    # filter has to rule out rather than rule in.
+    buildings = make_buildings(
+        [BUILDING_A, BUILDING_B], uses=[UNNAMED_BUILDING_USE, "School"]
+    )
+
+    kept = drop_non_residential_buildings(buildings)
+
+    assert len(kept) == 1
+    assert kept.geometry.iloc[0].equals(BUILDING_A)
+
+
+def test_a_use_linz_adds_later_is_dropped_without_editing_the_filter():
+    buildings = make_buildings([BUILDING_A, BUILDING_B], uses=["Church", None])
+
+    kept = drop_non_residential_buildings(buildings)
+
+    assert len(kept) == 1
+    assert kept.geometry.iloc[0].equals(BUILDING_B)
+
+
+def test_a_school_site_carries_no_insured_land():
+    boundaries = make_boundaries([SECTION_A, SECTION_B])
+    buildings = make_buildings(
+        [BUILDING_A, BUILDING_B], uses=[UNNAMED_BUILDING_USE, "School"]
+    )
+    addresses = make_addresses([("a", 20, 20), ("b", 60, 20)])
+
+    extent = build(boundaries, drop_non_residential_buildings(buildings), addresses)
+
+    assert extent[CLAIM_ID_COLUMN].tolist() == ["p0"]
+
+
+def test_building_outlines_without_a_use_are_refused():
+    buildings = make_buildings([BUILDING_A]).drop(columns="use")
+
+    with pytest.raises(ValueError, match="carry no"):
+        drop_non_residential_buildings(buildings)
+
+
+def test_a_footprint_too_large_for_a_house_is_dropped():
+    # 30 x 30 m is 900 m2, well over the threshold; the 10 m squares are not.
+    warehouse = box(0, 0, 30, 30)
+    buildings = make_buildings([BUILDING_A, warehouse])
+
+    kept = drop_non_residential_buildings(buildings)
+
+    assert len(kept) == 1
+    assert kept.geometry.iloc[0].equals(BUILDING_A)
+
+
+def test_the_size_test_is_inclusive_of_the_threshold():
+    # 25 x 20 m is exactly 500 m2, and exactly in floating point too, so this
+    # tests the boundary rather than the rounding.
+    assert MAX_DWELLING_FOOTPRINT_M2 == 500.0
+    buildings = make_buildings([box(0, 0, 25, 20)])
+
+    assert len(drop_non_residential_buildings(buildings)) == 1
+
+
+def test_the_size_threshold_can_be_moved():
+    buildings = make_buildings([box(0, 0, 30, 30)])
+
+    assert len(drop_non_residential_buildings(buildings, max_area_m2=1000)) == 1
+
+
+def test_a_geographic_crs_is_refused_by_the_building_filter():
+    # Areas in square degrees would put every building under any threshold.
+    buildings = make_buildings([BUILDING_A], crs="EPSG:4326")
+
+    with pytest.raises(ValueError, match="geographic"):
+        drop_non_residential_buildings(buildings)

@@ -273,15 +273,21 @@ level above this project's own folder, shared across every subproject) through
 T: path locally with no `DATA_VERSION`/`SOURCE_MATERIAL_DIR` concept attached —
 the same read-only, no-save, no-local-mode contract as `get_source_mat`.
 
-`CORE_NLM_VERSION` is the single pin for that tree: the scenario grids
+`CORE_NLM_VERSION` is the single pin for the `core` sub-tree: the scenario grids
 `landloss.io.nlm` reads, the mapped observations the vul steps read, and
-anything else reaching into `new_versioned_releases` all resolve through it, so
-two sub-trees cannot quietly end up on different releases. The releases
-themselves are the `NlmRelease` enum beside it, which exists because the folder
-names are inconsistently punctuated (`v2025p0_rc4` against `v2026p0rc4`) and so
-are easy to mistype into a path. A reader that genuinely has to stay on an older
-release names the enum member at the point of use rather than adding a second
-project-wide constant.
+anything else reaching into `new_versioned_releases/core` all resolve through
+it, so two readers of that sub-tree cannot quietly end up on different
+releases. The releases themselves are the `NlmRelease` enum beside it, which
+exists because the folder names are inconsistently punctuated (`v2025p0_rc4`
+against `v2026p0rc4`) and so are easy to mistype into a path. A reader that
+genuinely has to stay on an older release names the enum member at the point of
+use rather than adding a second project-wide constant.
+
+The `flatland` sub-tree is cut and versioned on its own schedule, unrelated to
+`core`'s, so it is pinned separately as `FLATLAND_NLM_VERSION` (e.g. `V0p5`)
+rather than reusing `CORE_NLM_VERSION`. `landloss.io.nlm.get_nlm_flatland`
+reads it, and is distinct from `landloss.exposure.land.landform.get_flatland`,
+which reads an earlier flatland cut mirrored to Koordinates.
 
 ## Causes of financial land loss
 

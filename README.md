@@ -116,8 +116,15 @@ created.
 
 ## Adding to changelog
 
-Add a new file at `doc/whatsnew/{issue_num}.{entry_type}.md` where `{issue_num}` is
-the JIRA issue number being worked on, and `{entry_type}` is one of `feature`, `bugfix`,
-`doc`, `removal`, `newhome`, `test`, or `devconfig`.
+Add a new file at `doc/whatsnew/{initials}.{entry_type}.{yymmddhhmm}.md`, for example
+`doc/whatsnew/mm.feature.2609251430.md`, where `{initials}` are your own, `{entry_type}`
+is one of `feature`, `bugfix`, `doc`, `removal`, `newhome`, `test`, or `devconfig`, and
+`{yymmddhhmm}` is the time you wrote it. In PowerShell:
+
+```Powershell
+New-Item "doc/whatsnew/mm.feature.$(Get-Date -Format yyMMddHHmm).md"
+```
 
 In the file provide a description of the change that will appear in the changelog.
+Write a new fragment for each change rather than appending to an existing one. See
+"Changelog fragments" in `AGENTS.md` for why, and for adding a new contributor.

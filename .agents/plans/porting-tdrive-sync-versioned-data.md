@@ -402,7 +402,7 @@ this done, per `CLAUDE.md`.
 - **`.agents/context/code-structure.md`** — add a short section on
   `tdrive_sync`/`versioned_store.py` alongside the existing "Koordinates
   access and caching" section.
-- Changelog entry: `doc/whatsnew/<issue_num>.feature.md`.
+- Changelog entry: `doc/whatsnew/<initials>.feature.<yymmddhhmm>.md`.
 - Docstrings throughout `tdrive_sync` (Google-style, fully typed — the
   package is linted with `select = ["ALL"]` same as `landloss`).
 

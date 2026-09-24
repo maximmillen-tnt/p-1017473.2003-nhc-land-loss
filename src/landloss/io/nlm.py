@@ -9,8 +9,10 @@ versioned by this study. This is therefore a different tree from
 derives and writes out itself.
 
 Which release is read is ``CORE_NLM_VERSION`` in ``landloss.domain.constants``,
-the single pin every part of this study reads the NLM at -- the scenario grids
-here, and the hazard, exposure and vul steps alike.
+the single pin every part of this study reads the NLM's ``core`` release tree
+at -- the scenario grids here, and the hazard, exposure and vul steps alike.
+The flatland product under ``flatland`` is cut on its own schedule and carries
+its own version number, pinned separately as ``FLATLAND_NLM_VERSION``.
 
 Reads are read-only and cached locally through ``tdrive_sync.get_cached``, the
 same "fetch once from T:, then read the local copy" behaviour
@@ -21,11 +23,12 @@ someone else publishes has no local, disposable stand-in.
 
 from pathlib import Path
 
+import geopandas as gpd
 import rioxarray
 import xarray as xr
 
 import tdrive_sync
-from landloss.domain.constants import CORE_NLM_VERSION
+from landloss.domain.constants import CORE_NLM_VERSION, FLATLAND_NLM_VERSION
 
 # The root of the NLM's own release tree, shared across every subproject under
 # 1017473. Not to be confused with this project's own versioned data store
@@ -126,3 +129,30 @@ def get_nlm_scenario_pga_2500yr_site_class_5() -> xr.DataArray:
         f"core/{CORE_NLM_VERSION}/scenario/return_period/seismic_standard/"
         "pga_2500yr_site_class_5.tif"
     )
+
+
+def get_nlm_flatland(*, copy_to_local: bool = True) -> gpd.GeoDataFrame:
+    """Read the NLM's flatland polygons from its own release tree.
+
+    This is the flatland product's own delivery under ``flatland`` in the NLM's
+    release tree, smoothed to a 200 m spatial length -- distinct from
+    ``landloss.exposure.land.landform.get_flatland``, which reads the mirror of
+    an (earlier) flatland cut published to Koordinates as
+    ``landloss.domain.constants.NLM_FLATLAND_LAYER_ID``.
+
+    Source:
+        National Liquefaction Model flatland release
+        :data:`landloss.domain.constants.FLATLAND_NLM_VERSION`, under
+        ``flatland`` in the NLM's release tree on T:.
+
+    Args:
+        copy_to_local: Whether to mirror the file into the local cache.
+
+    Returns:
+        The flat land polygons, as delivered, in their native CRS.
+    """
+    path = nlm_release_path(
+        f"flatland/{FLATLAND_NLM_VERSION}/_v0p5_slen200m_smoothed.gpkg",
+        copy_to_local=copy_to_local,
+    )
+    return gpd.read_file(path)

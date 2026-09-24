@@ -527,6 +527,63 @@ def local_relief(dem: xr.DataArray, resolution: float, window_m: float) -> xr.Da
     return result
 
 
+def block_mean(
+    dem: xr.DataArray, factor: int, *, min_valid_share: float = 0.5
+) -> xr.DataArray:
+    """Coarsen a DEM by averaging whole blocks of cells.
+
+    Each coarse cell is the mean elevation of the ``factor`` by ``factor`` block
+    of fine cells it covers, so it stands for all the ground inside it. That is
+    the point of doing it here rather than asking for a coarse grid from the
+    source: LINZ's elevation loader resamples bilinearly, which going from 1 m to
+    100 m reads a handful of points per cell and hands back an aliased surface
+    whose slope is noise.
+
+    Blocks are counted from the grid's top-left corner, so every coarse cell edge
+    falls on a fine cell edge and coarse grids built from the same fine grid by
+    factors that divide one another nest exactly. Rows and columns left over at
+    the bottom and right that do not fill a whole block are dropped rather than
+    averaged over part of a block.
+
+    Args:
+        dem: Ground elevation in metres, with dimensions :data:`RASTER_DIMS` and
+            a spatial reference.
+        factor: How many fine cells along each side one coarse cell spans.
+        min_valid_share: The share of a block that must be real ground for the
+            block to carry a mean. Anything less comes back as NaN, because a
+            mean of the one land cell in a block of nodata is not the elevation
+            of that block.
+
+    Returns:
+        The coarsened DEM, carrying the same coordinate reference system and a
+        transform recomputed for the coarse cell size.
+
+    Raises:
+        ValueError: If ``dem`` is not oriented (y, x), or if ``factor`` is under
+            one.
+    """
+    _check_dims(dem)
+
+    if factor < 1:
+        msg = f"A block has to span at least one cell, not {factor}."
+        raise ValueError(msg)
+
+    blocks = {"y": factor, "x": factor}
+    mean = dem.coarsen(blocks, boundary="trim").mean(skipna=True)
+    valid_share = np.isfinite(dem).coarsen(blocks, boundary="trim").mean()
+    result = mean.where(valid_share >= min_valid_share)
+
+    # coarsen averages the coordinates as well, which puts each one on the
+    # centre of its block. The transform cached on the spatial reference still
+    # describes the fine grid, so it is recomputed from those coordinates rather
+    # than trusted.
+    result = result.rio.write_crs(dem.rio.crs)
+    result = result.rio.write_transform(result.rio.transform(recalc=True))
+    result.attrs.pop("_FillValue", None)
+    result.name = dem.name
+    return result
+
+
 def sample_at_points(raster_path: Path | str, points: gpd.GeoSeries) -> pd.Series:
     """Read a raster value at each of a set of points.
 

@@ -142,6 +142,14 @@ NLM_FLATLAND_LAYER_ID = 120641
 # liquefaction susceptibility the exposure attributes are built from.
 NLM_GEOMORPHOLOGY_LAYER_ID = 121398
 
+# https://ttgroup.koordinates.com/layer/120794-gwd-median-depth/
+# The National Liquefaction Model's median current groundwater depth, in metres
+# below ground. A 100 m grid, national in extent but carrying a value over only
+# the flat land the model covers -- about 7% of its cells -- so anything reading
+# it has to decide what to assume off that footprint rather than treat the gap
+# as nodata.
+GWD_MEDIAN_DEPTH_LAYER_ID = 120794
+
 
 class Cause(StrEnum):
     """The causes of financial land loss the model carries a damage measure for.
@@ -198,6 +206,12 @@ class NlmRelease(StrEnum):
 # instead -- ``NlmRelease.V2025P0_RC4`` -- so that it is visible at the point of
 # use rather than hidden in a second constant.
 CORE_NLM_VERSION = NlmRelease.V2026P0_RC6
+
+# The NLM's flatland product, under ``flatland`` in the same release tree as
+# ``CORE_NLM_VERSION`` but cut on its own schedule and versioned separately from
+# it -- ``V0p5``, not the ``core`` tree's ``v2026p0rc6`` -- so it needs its own
+# pin rather than reusing ``CORE_NLM_VERSION``.
+FLATLAND_NLM_VERSION = "V0p5"
 
 # The cell size the study works at when deriving terrain attributes, in metres.
 # The LINZ LiDAR is 1 m, but the study area is 59 by 54 km: at 1 m that is about

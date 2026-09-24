@@ -727,6 +727,121 @@ def get_gns_slide_morphology(
     )
 
 
+def get_nlm_geomorphology(
+    bbox: tuple[float, float, float, float] | None = None,
+    crs: int | str = constants.DEFAULT_CRS,
+    *,
+    use_cache: bool = True,
+) -> gpd.GeoDataFrame:
+    """Load the National Liquefaction Model's geomorphology polygons for an extent.
+
+    "NLM Geomorphology" at
+    https://ttgroup.koordinates.com/layer/121398-nlm-geomorphology/, 133,845
+    polygons nationally. Each carries a landform class in ``l2_geomorphology``,
+    the dominant material in ``main_rock``, a geological ``epoch``, a
+    ``geomorph_liq_susc`` liquefaction susceptibility and a ``confidence``.
+
+    Over the four territorial authorities the landform classes are "Hills,
+    ranges and mountains" (72% by area), "Alluvial plains and river flats"
+    (18%), "Coastal lowlands" (5%), "Loess", "Fill", "Landslide" and
+    "Colluvium". That is 1,045 polygons over 3,200 km2, so it is a regional
+    model rather than an engineering geology map -- ample for telling bedrock
+    hill country from unconsolidated deposits, and far too coarse to say
+    anything about a particular slope.
+
+    Licence:
+        Tonkin + Taylor Group project data licensing statement,
+        https://ttgroup.koordinates.com/license/tonkin--taylor-group--project-data-licensing-statement/.
+        This is T+T's own data rather than open data, and the National
+        Liquefaction Model is built by the same team as this study, so it is
+        used here as project data: no attribution obligation and no permission
+        step. Nothing outside T+T may be given the layer itself.
+
+    Source:
+        Tonkin + Taylor, National Liquefaction Model, on the T+T Koordinates
+        instance. No DOI.
+
+    Args:
+        bbox: The extent to clip to (minx, miny, maxx, maxy) in ``crs``. Omitting
+            it returns the whole country.
+        crs: The coordinate reference system to return the polygons in.
+        use_cache: Whether to read and write the clipped extent cache.
+
+    Returns:
+        A GeoDataFrame of geomorphology polygons.
+    """
+    return get_koordinates_layer_extent(
+        layer=constants.NLM_GEOMORPHOLOGY_LAYER_ID,
+        crs=crs,
+        bbox=bbox,
+        domain=constants.TTGROUP_DOMAIN,
+        use_cache=use_cache,
+    )
+
+
+def get_koordinates_raster(layer: int, domain: str = constants.TTGROUP_DOMAIN) -> Path:
+    """Download a Koordinates raster layer and return the file it is in.
+
+    The sibling of :func:`get_koordinates_layer_extent` for grids. A path rather
+    than an array, because a grid is reprojected onto whatever grid the caller
+    is working on and doing that from a file is what rioxarray expects; and
+    because ttpy already caches the download, which is the expensive part.
+
+    There is no bounding box. ttpy fetches the layer whole and caches it by
+    version, so clipping belongs to the caller, after it has decided which grid
+    the values are wanted on.
+
+    Args:
+        layer: The Koordinates ID of the layer to download.
+        domain: The Koordinates domain to download from; the matching API key is
+            chosen from it.
+
+    Returns:
+        The path to the downloaded raster.
+
+    Raises:
+        ValueError: If no API key is set for ``domain``.
+    """
+    conn = KoordinatesConnection(api_key=resolve_api_key(domain), domain=domain)
+    try:
+        return get_latest_layer(conn=conn, layer_id=layer)
+    finally:
+        conn.close()
+
+
+def get_gwd_median_depth() -> Path:
+    """Download the National Liquefaction Model's median groundwater depth grid.
+
+    "GWD median depth" at
+    https://ttgroup.koordinates.com/layer/120794-gwd-median-depth/: the median
+    current depth to groundwater in metres below ground, on a 100 m grid in
+    NZGD2000 / NZTM.
+
+    **It covers flat land only.** The grid spans the country, 1,048,576 to
+    2,097,176 E and 4,718,600 to 6,226,800 N, but carries a value over about 7%
+    of its cells -- the flat land the model is built for. Hill country is NaN,
+    and that absence is a statement about the model's scope rather than missing
+    data, so a caller has to decide what to assume off the footprint rather than
+    propagate the gap.
+
+    Where it does carry a value the depths run 0 to 16 m, median 2.7 m, with 97%
+    of cells at 4 m or shallower.
+
+    Licence:
+        Tonkin + Taylor Group project data licensing statement, as for
+        :func:`get_nlm_geomorphology`. Project data from the same team as this
+        study, so used freely here; the layer itself stays inside T+T.
+
+    Source:
+        Tonkin + Taylor, National Liquefaction Model, on the T+T Koordinates
+        instance. No DOI.
+
+    Returns:
+        The path to the grid, as a GeoTIFF with NaN nodata.
+    """
+    return get_koordinates_raster(constants.GWD_MEDIAN_DEPTH_LAYER_ID)
+
+
 def get_nz_land_cover(
     bbox: tuple[float, float, float, float] | None = None,
     crs: int | str = constants.DEFAULT_CRS,

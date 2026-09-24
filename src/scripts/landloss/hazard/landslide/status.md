@@ -3,7 +3,7 @@
 **Status:** A first cut of the extend-ESNZ route is running; the route is still
 not formally chosen.
 
-**Updated:** 2026-09-22
+**Updated:** 2026-09-24
 
 ## Approach
 
@@ -101,7 +101,8 @@ cannot be signed off while they are open.
 - **T-11**, **T-19**, **T-20** — retaining wall and cut-and-fill data. The
   Kaikōura inventory is natural slopes and the losses here are expected on
   modified ones, so a second population conditioned on this data is the plan's
-  own largest technical risk.
+  own largest technical risk. The raw source area and debris trail polygons are
+  now readable, via `landloss.io.kaikoura` — the fit itself is still to do.
 
 Step-level detail lives in each step's implementation plan and method file under
 `steps/`.

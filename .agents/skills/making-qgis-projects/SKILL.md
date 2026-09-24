@@ -74,6 +74,15 @@ guess. A layer names a **store** plus a file, or an explicit `path`:
 | `temp` | `temp/<sub_dirs>/<fname>` in the repo | gitignored working layers, e.g. the landslide realisation |
 | *(none — give `path`)* | as written | anything else, including `.koopcache/dem/*.tif` and Koordinates extents |
 
+A **basemap** is not a store at all. `{"basemap": "osm", "checked": true}` adds the
+OpenStreetMap XYZ tile service, read live over the network and reprojected to the project
+CRS by QGIS. Put it **last in the `layers` list** so it sits at the bottom of the legend
+and draws under everything, and tick it — a basemap you have to switch on is not doing its
+job. Two consequences worth saying out loud when you build one: the project then needs an
+internet connection to draw, which an offline or field project does not want; and
+OpenStreetMap is ODbL, so anything published over it credits OpenStreetMap contributors.
+Other services go in `BASEMAPS` in the builder, with their attribution beside them.
+
 `temp` has no T: side, so `source` does not apply to it — a `temp` layer always gets the
 local path, and a project mixing `temp` layers with `t_drive` ones cannot be opened by
 anybody else. Say so if you build one.
@@ -113,6 +122,20 @@ categorised renderer, which is what the outputs with a class column need:
  "fname": "landslide-realisation.geoparquet",
  "field": "land_class", "categories": "land_class"}
 ```
+
+For a **continuous** field — a value, a rate, a slope per feature — give `cmap` and
+`field` instead of `categories`, which builds a graduated renderer:
+
+```json
+{"field": "land_rate_nzd_per_m2", "cmap": "turbo", "bins": 8, "bin_mode": "quantile"}
+```
+
+`bin_mode` is `quantile` (equal counts, the default) or `equal` (equal widths). Prefer
+quantile for anything skewed or clustered, which is most money and most terrain: equal
+widths put nearly every feature in one or two classes and waste the ramp on empty range.
+The breaks are read off the file at build time, so a graduated layer pointing at a file
+this machine cannot open needs `min` and `max` in the spec instead, and then gets equal
+intervals.
 
 `categories` is either a name from `colors.py` (`land_class`, `gwrc_severity`) or an
 explicit `{value: [colour, label]}` map, and `field` is the column it reads. Both are

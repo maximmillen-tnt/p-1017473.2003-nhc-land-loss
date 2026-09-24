@@ -48,6 +48,30 @@ STORES = ("versioned", "source_material", "temp")
 # symbol loads, reports valid, and draws nothing.
 GEOMETRY_NAMES = {"linestring": "line", "linearring": "line"}
 
+# The QGIS provider each kind of layer is read through. The legend entry and the
+# map layer have to agree on this or the layer silently drops out of the tree.
+PROVIDERS = {"raster": "gdal", "vector": "ogr", "basemap": "wms"}
+
+# Tile basemaps, by the name a layer spec asks for them with. These are XYZ tile
+# services read live over the network rather than files, so nothing about them
+# resolves through a store and nothing is cached: a project carrying one needs an
+# internet connection to draw it, which a project meant for offline work does not
+# want.
+#
+# The braces in the URL are percent-encoded because the datasource is a query
+# string and QGIS parses it before it substitutes the tile numbers.
+BASEMAPS = {
+    "osm": {
+        "name": "OpenStreetMap",
+        "url": "https://tile.openstreetmap.org/%7Bz%7D/%7Bx%7D/%7By%7D.png",
+        "zmin": 0,
+        "zmax": 19,
+        # https://www.openstreetmap.org/copyright -- ODbL. Anything published
+        # over this basemap has to credit OpenStreetMap contributors.
+        "attribution": "© OpenStreetMap contributors",
+    },
+}
+
 
 # -------------------------------------------------------------------------------------
 # Colour handling
@@ -409,12 +433,103 @@ def _symbol_xml(
     )
 
 
+def graduated_breaks(values: list[float], bins: int, mode: str) -> list[float]:
+    """Choose the class edges for a graduated renderer.
+
+    Args:
+        values: The field's values, with nulls already removed.
+        bins: How many classes to cut them into.
+        mode: ``"quantile"`` for equal counts per class, ``"equal"`` for equal
+            widths.
+
+    Returns:
+        ``bins + 1`` edges, ascending.
+
+    Raises:
+        ValueError: If the mode is not one of the two, or there is nothing to cut.
+    """
+    import numpy as np
+
+    array = np.asarray(values, dtype=float)
+    array = array[np.isfinite(array)]
+    if array.size == 0:
+        msg = "The field has no finite values, so it cannot be graduated."
+        raise ValueError(msg)
+
+    if mode == "quantile":
+        # Equal counts per class. Right for a skewed or clustered field, which is
+        # most money and most terrain: equal widths would put nearly every
+        # feature in one or two classes and waste the ramp on empty ground.
+        edges = np.quantile(array, np.linspace(0, 1, bins + 1))
+    elif mode == "equal":
+        edges = np.linspace(array.min(), array.max(), bins + 1)
+    else:
+        msg = f"bin_mode must be 'quantile' or 'equal', got {mode!r}."
+        raise ValueError(msg)
+
+    # Duplicate edges come out of a field with a heavy repeated value, and an
+    # empty class renders nothing while still taking a legend row.
+    return sorted({float(e) for e in edges})
+
+
+def _graduated_renderer(layer: dict[str, Any], geometry: str, **symbol: Any) -> str:
+    """Build a graduated renderer, colouring features by a continuous field.
+
+    Args:
+        layer: The layer spec, carrying ``field``, ``cmap`` and ``breaks``.
+        geometry: The geometry type the symbols are built for.
+        **symbol: The remaining symbol arguments, passed through.
+
+    Returns:
+        The ``<renderer-v2>`` block.
+
+    Raises:
+        ValueError: If the breaks could not be worked out, which happens when the
+            file was unreadable and the spec gave no ``min`` and ``max``.
+    """
+    from matplotlib import colormaps
+    from matplotlib.colors import to_hex
+
+    edges = layer.get("breaks")
+    if not edges:
+        msg = (
+            f"Layer {layer['name']!r} asks for a graduated render of "
+            f"{layer.get('field')!r} but the file could not be read to find its "
+            f"range. Give 'min' and 'max' in the spec, or point the project at a "
+            f"readable copy."
+        )
+        raise ValueError(msg)
+
+    cmap = colormaps[layer.get("cmap", "viridis")]
+    count = len(edges) - 1
+    ranges, symbols = [], []
+    for idx in range(count):
+        low, high = edges[idx], edges[idx + 1]
+        colour = to_hex(cmap(idx / max(count - 1, 1)))
+        ranges.append(
+            f'<range lower="{low:.6f}" upper="{high:.6f}" symbol="{idx}" '
+            f'label={quoteattr(f"{low:,.0f} - {high:,.0f}")} render="true"/>'
+        )
+        symbols.append(_symbol_xml(str(idx), geometry, color=colour, **symbol))
+
+    return f"""<renderer-v2 type="graduatedSymbol" forceraster="0" symbollevels="0"
+                  attr={quoteattr(layer["field"])} graduatedMethod="GraduatedColor">
+        <ranges>
+          {"\n          ".join(ranges)}
+        </ranges>
+        <symbols>
+          {"\n          ".join(symbols)}
+        </symbols>
+      </renderer-v2>"""
+
+
 def _vector_renderer(layer: dict[str, Any]) -> str:
-    """Build the renderer for a vector layer, single symbol or categorised.
+    """Build the renderer for a vector layer: single symbol, categorised or graduated.
 
     A categorised renderer is what this study's landslide and zonation outputs need:
     one polygon set carrying a class column, which has to arrive in QGIS already
-    coloured by that column or the legend says nothing.
+    coloured by that column or the legend says nothing. A graduated one is the same
+    argument for a continuous field -- a land value or a slope per feature.
 
     Args:
         layer: The layer spec.
@@ -423,13 +538,29 @@ def _vector_renderer(layer: dict[str, Any]) -> str:
         The ``<renderer-v2>`` block.
 
     Raises:
-        ValueError: If ``categories`` is given with no ``field`` to read them from.
+        ValueError: If ``categories`` or ``cmap`` is given with no ``field`` to
+            read them from.
     """
     geometry = layer.get("geometry", "polygon")
     width = layer.get("width", 0.3)
     size = layer.get("size", 2)
     outline = layer.get("outline", "#232323")
     marker = layer.get("centroid_marker")
+    symbol_args = {
+        "outline": outline,
+        "width": width,
+        "size": size,
+        "centroid_marker": marker,
+    }
+
+    if layer.get("cmap"):
+        if not layer.get("field"):
+            msg = (
+                f"Layer {layer['name']!r} gives 'cmap' but no 'field' to grade by. "
+                f"Name the numeric column the colours run over."
+            )
+            raise ValueError(msg)
+        return _graduated_renderer(layer, geometry, **symbol_args)
 
     if not layer.get("categories"):
         symbol = _symbol_xml(
@@ -513,9 +644,25 @@ def _maplayer(layer: dict[str, Any], authid: str) -> str:
     Returns:
         The map layer element.
     """
-    is_raster = layer["kind"] == "raster"
-    body = (
-        f"""<noData><noDataList bandNo="1" useSrcNoData="1"/></noData>
+    kind = layer["kind"]
+    is_raster = kind in {"raster", "basemap"}
+
+    if kind == "basemap":
+        # A tile service has no band of values to classify, so it takes the
+        # pass-through renderer rather than one of the ones above; its own CRS is
+        # web mercator and QGIS reprojects it to the project's on the fly.
+        body = """<pipe>
+        <rasterrenderer type="singlebandcolordata" band="1" opacity="1"
+                        alphaBand="-1" nodataColor=""/>
+        <brightnesscontrast brightness="0" contrast="0" gamma="1"/>
+        <huesaturation saturation="0" grayscaleMode="0" colorizeOn="0"/>
+        <rasterresampler maxOversampling="2"/>
+      </pipe>
+      <blendMode>0</blendMode>"""
+        provider = "wms"
+        srs_authid = "EPSG:3857"
+    elif is_raster:
+        body = f"""<noData><noDataList bandNo="1" useSrcNoData="1"/></noData>
       <pipe>
         {_raster_renderer(layer)}
         <brightnesscontrast brightness="0" contrast="0" gamma="1"/>
@@ -523,10 +670,13 @@ def _maplayer(layer: dict[str, Any], authid: str) -> str:
         <rasterresampler maxOversampling="2"/>
       </pipe>
       <blendMode>0</blendMode>"""
-        if is_raster
-        else f"""{_vector_renderer(layer)}
+        provider = "gdal"
+        srs_authid = authid
+    else:
+        body = f"""{_vector_renderer(layer)}
       <blendMode>0</blendMode>"""
-    )
+        provider = "ogr"
+        srs_authid = authid
 
     return f"""<maplayer type="{"raster" if is_raster else "vector"}"
              geometry="{"" if is_raster else layer.get("geometry", "Polygon")}"
@@ -537,9 +687,9 @@ def _maplayer(layer: dict[str, Any], authid: str) -> str:
       <layername>{escape(layer["name"])}</layername>
       {_extent_block(layer.get("bounds"))}
       <srs>
-        {_srs_block(authid)}
+        {_srs_block(srs_authid)}
       </srs>
-      <provider>{"gdal" if is_raster else "ogr"}</provider>
+      <provider>{provider}</provider>
       <map-layer-style-manager current="default">
         <map-layer-style name="default"/>
       </map-layer-style-manager>
@@ -568,7 +718,7 @@ def build_xml(
     tree = "\n      ".join(
         f'<layer-tree-layer id="{lyr["id"]}" name={quoteattr(lyr["name"])} '
         f"source={quoteattr(lyr['source'])} "
-        f'providerKey="{"gdal" if lyr["kind"] == "raster" else "ogr"}" '
+        f'providerKey="{PROVIDERS[lyr["kind"]]}" '
         f'checked="{"Qt::Checked" if lyr.get("checked", True) else "Qt::Unchecked"}" '
         f'expanded="0"><customproperties><Option/></customproperties></layer-tree-layer>'
         for lyr in layers
@@ -664,6 +814,21 @@ def _resolve(layer: dict[str, Any], source: str) -> tuple[str, Path | None]:
     import tdrive_sync
     from scripts.landloss.paths import TEMP_DIR
 
+    if "basemap" in layer:
+        key = layer["basemap"]
+        if key not in BASEMAPS:
+            msg = (
+                f"Unknown basemap {key!r}. Use one of {sorted(BASEMAPS)}, or add "
+                f"the tile service to BASEMAPS with its attribution."
+            )
+            raise ValueError(msg)
+        tiles = BASEMAPS[key]
+        source = (
+            f"crs=EPSG:3857&format&type=xyz&url={tiles['url']}"
+            f"&zmax={tiles['zmax']}&zmin={tiles['zmin']}"
+        )
+        return source, None
+
     if "path" in layer:
         path = Path(layer["path"])
         if not path.is_absolute():
@@ -697,6 +862,37 @@ def _resolve(layer: dict[str, Any], source: str) -> tuple[str, Path | None]:
 
     target = base if source == "t_drive" else local
     return str(target), local if local.exists() else None
+
+
+def _field_values(path: Path, field: str) -> list[float]:
+    """Read one numeric column off a vector file, for choosing graduated breaks.
+
+    Read separately from the rest of the metadata rather than threaded through it,
+    because only a graduated layer needs it and only a vector can supply it.
+
+    Args:
+        path: A readable local path.
+        field: The column to read.
+
+    Returns:
+        The column's non-null values.
+
+    Raises:
+        ValueError: If the file has no such column. Naming the columns it does
+            have saves a round trip, since a wrong field name otherwise renders
+            as a layer in one flat colour.
+    """
+    import geopandas as gpd
+
+    read = (
+        gpd.read_parquet if path.suffix.lower() in PARQUET_SUFFIXES else gpd.read_file
+    )
+    gdf = read(path)
+    if field not in gdf.columns:
+        columns = sorted(c for c in gdf.columns if c != gdf.geometry.name)
+        msg = f"{path.name} has no column {field!r} to grade by. It has: {columns}."
+        raise ValueError(msg)
+    return gdf[field].dropna().to_numpy().tolist()
 
 
 def _read_meta(path: Path, kind: str) -> dict[str, Any]:
@@ -740,6 +936,68 @@ def _read_meta(path: Path, kind: str) -> dict[str, Any]:
     }
 
 
+def _prepare_layer(
+    layer: dict[str, Any], source: str
+) -> tuple[dict[str, Any], str, Path | None]:
+    """Resolve one layer's path, and fill in everything that is read off the file.
+
+    Args:
+        layer: The layer spec, which this mutates and returns.
+        source: ``"local"`` or ``"t_drive"``.
+
+    Returns:
+        ``(layer, path written into the project, a readable local path or None)``.
+    """
+    written, readable = _resolve(layer, source)
+    layer["source"] = written
+
+    if "basemap" in layer:
+        # A tile service, not a file: no suffix to infer a kind from, no extent
+        # to read and nothing to report as missing, so it skips the whole
+        # metadata step.
+        layer["kind"] = "basemap"
+        layer.setdefault("name", BASEMAPS[layer["basemap"]]["name"])
+        layer["id"] = f"{layer['basemap']}_{uuid4().hex}"
+        return layer, written, None
+
+    layer["id"] = f"{Path(written).stem}_{uuid4().hex}"
+    layer.setdefault(
+        "kind",
+        "raster" if Path(written).suffix.lower() in RASTER_SUFFIXES else "vector",
+    )
+    layer.setdefault("name", Path(written).stem)
+
+    graded = layer.get("field") if layer.get("cmap") else None
+
+    if readable is None:
+        # A graduated layer pointing at a file this machine cannot open has no
+        # range to work from, so the spec has to supply one. Equal intervals,
+        # since there are no values to take quantiles of.
+        if graded and layer.get("min") is not None:
+            import numpy as np
+
+            layer["breaks"] = np.linspace(
+                float(layer["min"]),
+                float(layer["max"]),
+                int(layer.get("bins", 8)) + 1,
+            ).tolist()
+        return layer, written, None
+
+    meta = _read_meta(readable, layer["kind"])
+    if meta["bounds"] is not None:
+        layer["bounds"] = meta["bounds"]
+    layer.setdefault("crs", meta["authid"])
+    if layer["kind"] == "vector" and meta.get("geometry"):
+        layer.setdefault("geometry", meta["geometry"])
+    if graded:
+        layer["breaks"] = graduated_breaks(
+            _field_values(readable, graded),
+            int(layer.get("bins", 8)),
+            layer.get("bin_mode", "quantile"),
+        )
+    return layer, written, readable
+
+
 def run(spec: dict[str, Any]) -> Path:
     """Build the project described by a spec and write it out.
 
@@ -761,23 +1019,8 @@ def run(spec: dict[str, Any]) -> Path:
     unreadable: list[str] = []
 
     for raw in spec["layers"]:
-        layer = dict(raw)
-        written, readable = _resolve(layer, source)
-        layer["source"] = written
-        layer["id"] = f"{Path(written).stem}_{uuid4().hex}"
-        layer.setdefault(
-            "kind",
-            "raster" if Path(written).suffix.lower() in RASTER_SUFFIXES else "vector",
-        )
-        layer.setdefault("name", Path(written).stem)
-        if readable is not None:
-            meta = _read_meta(readable, layer["kind"])
-            if meta["bounds"] is not None:
-                layer["bounds"] = meta["bounds"]
-            layer.setdefault("crs", meta["authid"])
-            if layer["kind"] == "vector" and meta.get("geometry"):
-                layer.setdefault("geometry", meta["geometry"])
-        else:
+        layer, written, readable = _prepare_layer(dict(raw), source)
+        if readable is None and layer["kind"] != "basemap":
             unreadable.append(written)
         layers.append(layer)
 

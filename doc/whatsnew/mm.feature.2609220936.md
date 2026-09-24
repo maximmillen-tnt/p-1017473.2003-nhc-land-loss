@@ -54,3 +54,18 @@ size is the wrong thing to put on the map. `verify_qgis_project.py` also takes `
 and now renders at 1600x1100 by default rather than 500x400: at the smaller size a
 metre-scale feature is half a pixel and reads as a blank layer when on screen it is a
 visible speck, which is a fault in the check rather than in the project.
+
+A layer can now be a tile basemap rather than a file: `{"basemap": "osm"}` adds the
+OpenStreetMap XYZ service, which QGIS reads live and reprojects to the project CRS.
+Registered services live in `BASEMAPS` in the builder with their attribution beside them,
+because OpenStreetMap is ODbL and anything published over it has to credit OpenStreetMap
+contributors. A basemap resolves through no store, has no extent to read and is not
+reported as unreadable, and it belongs last in the layer list so it draws under everything
+else.
+
+A vector layer can also be graduated over a continuous field: `cmap` plus `field` builds a
+graduated renderer, with `bins` classes cut by `bin_mode` of `quantile` or `equal`. The
+breaks are read off the file at build time, so the classes fit the data rather than a
+guessed range, and a layer whose file cannot be opened falls back to equal intervals over
+a `min` and `max` given in the spec. The modelled land value per address is now drawn this
+way, on turbo over eight quantile classes of dollars per square metre.

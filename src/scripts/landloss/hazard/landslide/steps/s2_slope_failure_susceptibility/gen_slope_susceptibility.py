@@ -21,12 +21,24 @@ The rating is a weighted sum of six factors, each scored 0 to 10::
 and bands into five zones at 20, 60, 100 and 140. The scoring lives in
 ``landloss.hazard.landslide.susceptibility``; this script supplies the inputs.
 
-Three of the six are constants set in ``config.py`` rather than mapped, and one
-of the three matters more than it looks. **The landslide factor is zero
+Five of the six factors are mapped. **The landslide factor is zero
 everywhere**, because no inventory is held -- that is the honest value, not a
 statement that there are no landslides, and it removes up to 20 of the 150
-points. Geology and groundwater are fixed at the values Kingsbury used in his
-own worked examples, so they shift every cell equally and change no ranking.
+points.
+
+Geology and groundwater both come from the National Liquefaction Model:
+
+- **Geology** from the landform classes of the NLM geomorphology polygons. In
+  substance that is a split between bedrock hill country and unconsolidated
+  deposits, which is the distinction Kingsbury's factor turns on; the model maps
+  neither weathering nor shearing, so two of his four classes are never reached.
+- **Groundwater** from the NLM median depth grid, which is built for flat land
+  and carries a value over about 7% of its cells. Off that footprint the depth
+  is assumed rather than left as nodata, because otherwise every hillside --
+  which is all the ground this step is about -- would come back unscored.
+
+Both are the project's own data -- the National Liquefaction Model is built by
+the same team -- so they are used here without a permission step.
 
 The two that are mapped are read at two different resolutions, and that is
 deliberate rather than an optimisation:
@@ -74,7 +86,13 @@ from landloss.common.utils.terrain import (
 from landloss.domain import constants
 from landloss.hazard.landslide import susceptibility
 from landloss.io.area_of_interest import WLG_EARTHWORKS_PILOT, get_study_areas
-from landloss.io.readers import get_dem, get_wcc_cut_areas, get_wcc_fill_areas
+from landloss.io.readers import (
+    get_dem,
+    get_gwd_median_depth,
+    get_nlm_geomorphology,
+    get_wcc_cut_areas,
+    get_wcc_fill_areas,
+)
 from scripts.landloss.hazard.landslide.steps.s2_slope_failure_susceptibility import (
     config,
 )
@@ -371,47 +389,179 @@ def describe_extent(name, bbox, earthworks):
         )
 
 
-def describe_constants(*, geology_value, landslide_value, groundwater_value):
-    """Print the three factors supplied as constants and what they contribute."""
+def geology_factor(template):
+    """Score the geology factor on the coarse grid from NLM landform classes.
+
+    The National Liquefaction Model's geomorphology is the only regional mapping
+    this study holds that separates bedrock hill country from unconsolidated
+    deposits, which is the distinction Kingsbury's geology factor turns on. The
+    ``l3_yp`` material class is the field read; see
+    ``NLM_MATERIAL_GEOLOGY_VALUES`` for the mapping, for why the coarser
+    ``l2_geomorphology`` is not enough, and for why the outcome is close to
+    binary whatever field is read.
+
+    The extent is taken from ``template`` rather than passed in, because the
+    grid carries a working margin beyond the extent asked for and reading the
+    two from different boxes would leave that margin unscored.
+
+    Args:
+        template: The coarse grid to burn onto.
+
+    Returns:
+        ``(factor, landforms)``: the factor value on ``template``'s cells, NaN
+        where the model maps nothing, and the polygons it came from.
+    """
+    west, south, east, north = template.rio.bounds()
+    landforms = get_nlm_geomorphology(bbox=(west, south, east, north))
+    values = susceptibility.geology_value_from_material(landforms["l3_yp"])
+
+    burned = rasterize(
+        zip(landforms.geometry, values, strict=True),
+        out_shape=template.shape,
+        transform=template.rio.transform(),
+        fill=np.nan,
+        dtype="float64",
+    )
+    return _as_grid(burned, template, "geology_value"), landforms
+
+
+def groundwater_factor(template, *, default_depth_m):
+    """Score the groundwater factor on the coarse grid from depth to water.
+
+    The National Liquefaction Model's groundwater grid is built for flat land
+    and carries a value over about 7% of its cells. Off that footprint it is
+    silent rather than unknown, so the gap is filled with ``default_depth_m``
+    before scoring instead of being carried through as nodata -- otherwise every
+    hillside, which is all the ground this step is about, would come back
+    unscored.
+
+    Resampled by nearest neighbour rather than bilinear. The depth field itself
+    is smooth, but the edge of the modelled footprint is a hard boundary, and
+    interpolating across it would spread NaN inland over ground the model does
+    cover.
+
+    Args:
+        template: The coarse grid to score on.
+        default_depth_m: The depth to assume off the modelled footprint.
+
+    Returns:
+        ``(factor, modelled)``: the factor value on ``template``'s cells, and a
+        boolean array of where the depth was modelled rather than assumed.
+    """
+    print("Reading the NLM groundwater depth grid ...", flush=True)
+    depth_path = get_gwd_median_depth()
+    print(f"  {depth_path}")
+
+    west, south, east, north = template.rio.bounds()
+    with rioxarray.open_rasterio(depth_path, masked=True) as opened:
+        # Clip before loading: the source is a national 100 m grid and there is
+        # no reason to hold all of it to read one city.
+        clipped = opened.squeeze(drop=True).rio.clip_box(
+            minx=west, miny=south, maxx=east, maxy=north
+        )
+        on_template = clipped.load().rio.reproject_match(
+            template, resampling=Resampling.nearest
+        )
+
+    depth = on_template.to_numpy()
+    modelled = np.isfinite(depth)
+    filled = np.where(modelled, depth, default_depth_m)
+
+    scored = susceptibility.groundwater_value(filled)
+    return _as_grid(scored, template, "groundwater_value"), modelled
+
+
+def describe_geology(landforms, factor):
+    """Print the landform classes read and the factor value each was given."""
+    print(RULE)
+    print("Geology, from the NLM geomorphology l3_yp material classes:")
+
+    total = landforms.area.sum()
+    by_material = landforms.groupby("l3_yp").apply(
+        lambda frame: frame.area.sum() / total, include_groups=False
+    )
+    for material, share in by_material.sort_values(ascending=False).items():
+        value = susceptibility.NLM_MATERIAL_GEOLOGY_VALUES[material]
+        scored = "unscored" if np.isnan(value) else f"F = {value:>4.0f}"
+        print(f"  {material:<24} {scored:<10} {share:>6.1%} of the extent")
+
+    unmapped = np.isnan(factor.to_numpy()).mean()
+    if unmapped:
+        print(f"  {'not mapped or water':<24} {'unscored':<10} {unmapped:>6.1%}")
+
+
+def describe_groundwater(factor, modelled, *, default_depth_m):
+    """Print where the depth was modelled and what the factor came out as."""
+    print(RULE)
+    print("Groundwater, from the NLM median depth grid:")
+    print(
+        f"  modelled over {modelled.mean():>6.1%} of the extent; the rest is "
+        f"assumed at {default_depth_m:g} m"
+    )
+
+    values = factor.to_numpy()
+    scored = np.isfinite(values)
+    labels = {
+        susceptibility.GROUNDWATER_SATURATED: "saturated",
+        susceptibility.GROUNDWATER_POORLY_DRAINED: "poorly drained",
+        susceptibility.GROUNDWATER_WELL_DRAINED: "well drained",
+    }
+    for value, label in labels.items():
+        share = (values == value).sum() / scored.sum() if scored.sum() else 0.0
+        print(f"  {label:<16} F = {value:>4.0f}   {share:>6.1%}")
+
+
+def describe_landslide_constant(landslide_value):
+    """Print the one factor still held constant, and why."""
+    print(RULE)
+    print(
+        f"Existing landslides: F = {landslide_value:.0f} everywhere, "
+        f"weighted {landslide_value * susceptibility.LANDSLIDE_WEIGHT:.0f}."
+    )
+    print("  No inventory is held. Zero is the honest value, not a finding.")
+
+
+def describe_baseline(geology, groundwater, landslide_value):
+    """Print what a cell scores before any terrain is read.
+
+    Worth printing because the first zone band is only 20 points wide. If the
+    factors that do not depend on terrain already exceed it, no cell can land in
+    the lowest zone whatever the ground does, and flat land comes back one zone
+    more severe than the published map puts it.
+    """
     baseline = susceptibility.susceptibility_rating(
-        slope=np.zeros(1),
-        modification=np.zeros(1),
-        height=np.zeros(1),
-        geology=np.full(1, geology_value),
-        landslides=np.full(1, landslide_value),
-        groundwater=np.full(1, groundwater_value),
-    )[0]
+        slope=np.zeros(geology.shape),
+        modification=np.zeros(geology.shape),
+        height=np.zeros(geology.shape),
+        geology=geology.to_numpy(),
+        landslides=np.full(geology.shape, landslide_value),
+        groundwater=groundwater.to_numpy(),
+    )
+    finite = baseline[np.isfinite(baseline)]
+    if not finite.size:
+        return
 
     print(RULE)
-    print("Factors supplied as constants rather than mapped:")
     print(
-        f"  geology      F = {geology_value:>4.0f}  weighted {geology_value * 2:>4.0f}"
-    )
-    print(
-        f"  landslides   F = {landslide_value:>4.0f}  weighted "
-        f"{landslide_value * 2:>4.0f}   (no inventory held)"
-    )
-    print(
-        f"  groundwater  F = {groundwater_value:>4.0f}  weighted "
-        f"{groundwater_value * 1:>4.0f}"
-    )
-    print(
-        f"  every cell therefore starts at {baseline:.0f} of "
-        f"{susceptibility.MAX_RATING}"
+        f"Before any terrain is read a cell scores {finite.min():.0f} to "
+        f"{finite.max():.0f} of {susceptibility.MAX_RATING}, median "
+        f"{np.median(finite):.0f}."
     )
 
-    # A baseline above the first band means no cell can land in it, whatever the
-    # terrain does. That is a consequence of holding three factors constant, not
-    # a reading of the ground, and it shows up as flat land coming back one zone
-    # more severe than the published map puts it.
     lowest_band = susceptibility.ZONE_BREAKS[0]
-    if baseline >= lowest_band:
-        unreachable = susceptibility.ZONE_LABELS[susceptibility.ZONE_RANKS[0]]
+    reachable = (finite < lowest_band).mean()
+    lowest = susceptibility.ZONE_LABELS[susceptibility.ZONE_RANKS[0]].lower()
+    if reachable:
         print(
-            f"  which is above the {lowest_band:.0f} point band, so the "
-            f"'{unreachable.lower()}' zone is unreachable:"
+            f"  {reachable:.1%} of the extent starts under the {lowest_band:.0f} "
+            f"point band, so the '{lowest}' zone is reachable there."
         )
-        print("  flat ground scores one zone more severe than the published map.")
+    else:
+        print(
+            f"  All of it is above the {lowest_band:.0f} point band, so the "
+            f"'{lowest}' zone is unreachable and flat ground scores one zone "
+            "more severe than the published map."
+        )
 
 
 def describe_zones(zone, resolution):
@@ -459,9 +609,8 @@ def main(
     coarse_resolution_m,
     fine_resolution_m,
     slope_height_window_m,
-    geology_value,
+    default_groundwater_depth_m,
     landslide_value,
-    groundwater_value,
     use_cached_dem,
 ):
     """Score slope failure susceptibility over the extent and write it out.
@@ -474,9 +623,9 @@ def main(
             measured at.
         slope_height_window_m: The neighbourhood the face height is measured
             over.
-        geology_value: The geology factor, held constant.
+        default_groundwater_depth_m: The depth to groundwater to assume off
+            the modelled footprint of the NLM grid.
         landslide_value: The existing landslides factor, held constant.
-        groundwater_value: The groundwater factor, held constant.
         use_cached_dem: Whether to reuse an already-fetched elevation model.
     """
     study_areas = get_study_areas(constants.DEFAULT_CRS)
@@ -487,11 +636,7 @@ def main(
     earthworks = read_earthworks(bbox=bbox)
 
     describe_extent(extent_name, bbox, earthworks)
-    describe_constants(
-        geology_value=geology_value,
-        landslide_value=landslide_value,
-        groundwater_value=groundwater_value,
-    )
+    describe_landslide_constant(landslide_value)
 
     padding_m = (
         buffer_cells(
@@ -533,13 +678,18 @@ def main(
     modification = to_coarse_maximum(modification, slope_value)
     height = to_coarse_maximum(height, slope_value)
 
+    geology, landforms = geology_factor(slope_value)
+    groundwater, modelled = groundwater_factor(
+        slope_value, default_depth_m=default_groundwater_depth_m
+    )
+
     rating = susceptibility.susceptibility_rating(
         slope=slope_value.to_numpy(),
         modification=modification.to_numpy(),
         height=height.to_numpy(),
-        geology=np.full(slope_value.shape, geology_value),
+        geology=geology.to_numpy(),
         landslides=np.full(slope_value.shape, landslide_value),
-        groundwater=np.full(slope_value.shape, groundwater_value),
+        groundwater=groundwater.to_numpy(),
     )
     rating = _as_grid(rating, slope_value, "susceptibility_rating")
     zone = _as_grid(
@@ -551,7 +701,17 @@ def main(
     rating = trim_to_extent(rating, bbox)
     zone = trim_to_extent(zone, bbox)
     modification = trim_to_extent(modification, bbox)
+    geology = trim_to_extent(geology, bbox)
+    groundwater = trim_to_extent(groundwater, bbox)
+    modelled = trim_to_extent(
+        _as_grid(modelled.astype(float), slope_value, "modelled"), bbox
+    ).to_numpy()
 
+    describe_geology(landforms, geology)
+    describe_groundwater(
+        groundwater, modelled > 0, default_depth_m=default_groundwater_depth_m
+    )
+    describe_baseline(geology, groundwater, landslide_value)
     describe_modification(modification, coarse_resolution_m)
     describe_zones(zone, coarse_resolution_m)
 
@@ -574,8 +734,7 @@ if __name__ == "__main__":
         coarse_resolution_m=config.COARSE_RESOLUTION_M,
         fine_resolution_m=config.FINE_RESOLUTION_M,
         slope_height_window_m=config.SLOPE_HEIGHT_WINDOW_M,
-        geology_value=config.GEOLOGY_VALUE,
+        default_groundwater_depth_m=config.DEFAULT_GROUNDWATER_DEPTH_M,
         landslide_value=config.LANDSLIDE_VALUE,
-        groundwater_value=config.GROUNDWATER_VALUE,
         use_cached_dem=config.USE_CACHED_DEM,
     )
