@@ -30,6 +30,14 @@ import numpy as np
 # to be assumed.
 GST_RATE = 0.15
 
+# How much dearer a replacement wall is than the one it replaces, over and above
+# the site multiplier. A failed wall is rebuilt to a more substantial current
+# standard rather than like for like, and the square-metre rates carry no
+# allowance for that -- so without this, repair cost and undepreciated value
+# differ only by site difficulty, which was the misreading behind **L-34**.
+# Agreed with Maxim Millen on 2026-09-24 as a flat 20%, pending anything better.
+REPLACEMENT_SPEC_UPLIFT = 0.20
+
 # Both sub-caps are per dwelling in the residential building -- not per wall, not
 # per owner, and not per property. A site carrying two residential buildings has
 # two caps, worked out separately.
@@ -63,6 +71,9 @@ class PolicySettings:
             dwellings there are.
         area_cap_m2: The largest area of damaged land that is valued. Damage
             beyond it is valued as though it stopped here.
+        replacement_spec_uplift: How much dearer the replacement wall is than
+            the one it replaces, as a fraction, over and above the site
+            multiplier. Zero prices a like-for-like rebuild.
         total_cap_nzd: A single cap over the whole land settlement. ``None`` is
             the present Act, which has no such cap; a figure is the setting
             under test.
@@ -77,6 +88,7 @@ class PolicySettings:
     excess_per_dwelling_nzd: float = LAND_EXCESS_PER_DWELLING_NZD
     excess_max_nzd: float = LAND_EXCESS_MAX_NZD
     area_cap_m2: float = AREA_CAP_M2
+    replacement_spec_uplift: float = REPLACEMENT_SPEC_UPLIFT
     total_cap_nzd: float | None = None
     include_imminent_damage: bool = True
 
@@ -88,6 +100,7 @@ class PolicySettings:
             "bridge_culvert_sub_cap_nzd": self.bridge_culvert_sub_cap_nzd,
             "excess_per_dwelling_nzd": self.excess_per_dwelling_nzd,
             "excess_max_nzd": self.excess_max_nzd,
+            "replacement_spec_uplift": self.replacement_spec_uplift,
         }
         for name, value in negatives.items():
             if not np.isfinite(value) or value < 0:

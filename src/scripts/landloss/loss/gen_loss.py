@@ -3,22 +3,23 @@
     uv run --frozen python src/scripts/landloss/loss/gen_loss.py
 
 Reads what the vulnerability module wrote, so `gen_vul.py` runs first, and with
-it the exposure and hazard modules it depends on. One step today: step 0 builds
-the land cover cap on each claim, ``temp/loss/land-cover-cap-r<nnn>[-pilot].parquet``.
+it the exposure and hazard modules it depends on. Two steps: step 0 builds the
+land cover cap on each claim, and step 1 builds the repair cost and settles
+against it, writing ``land-cover-cap-r<nnn>[-pilot].parquet`` and
+``settlement-r<nnn>[-pilot].parquet`` under ``temp/loss``.
 
 The extent and realisations come from ``config.py`` beside this; anything else a
 step reads comes from that step's own ``config.py``.
 
-**The module stops at the cap rather than at a settlement.** A settlement is
-``min(repair cost, cap)`` less the excess, and nothing produces a repair cost
-yet -- a wall's needs the three site ratings (**Q-10**) and damaged land has no
-Land SOW behind it. The settlement step joins this pipeline when one of them
-does, which is why the module already runs through a pipeline rather than a
-single script.
+**Every repair cost in step 1 rests on a stated assumption**, and the three site
+ratings are proxied off exposure layers rather than measured. Step 1's docstring
+lists each one. The module settles, but what it settles is a model whose
+placeholders are named rather than hidden.
 """
 
 from scripts.landloss.loss import config
 from scripts.landloss.loss.steps.s0_land_cover_cap import s0_gen_land_cover_cap
+from scripts.landloss.loss.steps.s1_settlement import s1_gen_settlement
 from scripts.landloss.pipeline import run_steps
 
 
@@ -36,6 +37,10 @@ def main(*, pilot, realisation_ids):
             (
                 "s0, the land cover cap per claim",
                 lambda: s0_gen_land_cover_cap.main(**ids),
+            ),
+            (
+                "s1, the settlement per claim",
+                lambda: s1_gen_settlement.main(**ids),
             ),
         ],
     )

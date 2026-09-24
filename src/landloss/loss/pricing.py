@@ -85,6 +85,7 @@ The rates and the multiplier table came from the costing tool itself; the
 meeting they were walked through at is ``.agents/context/nhc-costing-tool.md``.
 """
 
+import hashlib
 from dataclasses import dataclass
 
 import numpy as np
@@ -130,6 +131,20 @@ WALL_RATE_EXCL_GST_NZD_PER_M2 = {
 # When the rates above were taken from the tool. They are revised every four
 # months, so a run made long after this date is pricing on stale figures.
 WALL_RATES_AS_AT = "2026-09-23"
+
+# The beta's stand-in for a construction type. Nothing maps a modelled wall onto
+# one of the 29 types, so a share of walls is priced as concrete and the rest is
+# spread across the four timber pole rates rather than averaged.
+#
+# The point is the **spread, not the mean**. Every wall at one rate gives a
+# population with no cheap walls and no dear ones, so no wall ever approaches a
+# sub-cap and the question of whether the sub-caps bind is answered by the
+# averaging rather than by the evidence. Spreading the timber rates leaves the
+# mean where it was -- the four are drawn evenly, so their average is still
+# :data:`BETA_WALL_RATE_EXCL_GST_NZD_PER_M2` -- and gives the population a tail
+# at each end. Agreed with Maxim Millen on 2026-09-24. **The share is assumed.**
+BETA_CONCRETE_SHARE = 0.30
+BETA_CONCRETE_WALL_TYPE = "Reinforced Concrete"
 
 EASY = "E"
 MODERATE = "M"
@@ -193,6 +208,11 @@ BETA_SIZE_CLASS_HEIGHT_M = {
     "large": 2.75,
 }
 
+# The size classes in ascending order, which is the order the heights above are
+# written in. Taken from that mapping rather than restated, so a class cannot be
+# added to one and forgotten in the other.
+SIZE_CLASSES = tuple(BETA_SIZE_CLASS_HEIGHT_M)
+
 # Inundation volume, in cubic metres, at which clearing the spoil stops being
 # one kind of job and becomes the next. They set the **earthworks required**
 # rating, which is the one of the three site ratings a land claim can answer
@@ -226,6 +246,96 @@ BETA_SIZE_CLASS_HEIGHT_M = {
 # - **Difficult, above 200 m3.** A full-size excavator and truck cartage, which
 #   needs proper site access and usually traffic management -- the largest
 #   single cost driver Chris Ewens named.
+# Bands for the two site ratings nothing measures, proxied off exposure layers
+# that do exist. **All four numbers are invented.** They are placeholders with a
+# bounded cost: each rating contributes at most 0.10 to the site multiplier and
+# the three together cap at 0.30, so the whole proxy can move a wall's repair
+# cost by 30% at the outside -- against the factor of 21 that the construction
+# type spans. Getting these roughly right matters far less than getting the
+# rate right, which is why guessing them is worth doing and guessing the rate
+# is not.
+#
+# Construction access is proxied by the driveway `exposure` routes from the
+# building to the road: a longer run is further to carry plant and material.
+# Length is a poor stand-in for what actually makes access hard -- width,
+# gradient, gateways, overhead lines -- so this orders sites rather than
+# measuring them.
+EASY_ACCESS_MAX_DRIVEWAY_M = 20.0
+MODERATE_ACCESS_MAX_DRIVEWAY_M = 50.0
+
+# Constructability and reinstatement are proxied by the slope at the address.
+# Steeper ground is harder to build a wall on and harder to leave tidy. The
+# slope is sampled at the address point, not at the wall, so a flat house site
+# on a steep section reads as easy.
+EASY_CONSTRUCTABILITY_MAX_SLOPE_DEG = 10.0
+MODERATE_CONSTRUCTABILITY_MAX_SLOPE_DEG = 20.0
+
+# Where landslide damage is remediated by building a wall that was never there,
+# these bands turn the damaged area into a size class. **Invented**, and set low
+# on the reasoning that ground which has actually failed is not retained by a
+# garden edge: a slip worth remediating wants a wall of consequence, so the
+# small class is reserved for the slightest loss rather than being the default.
+# Against the pilot's slips -- a median of 17 m2 and a quartile range of 6 to
+# 70 -- these put most claims in the medium class and leave both others
+# reachable.
+SMALL_LANDSLIDE_MAX_AREA_M2 = 10.0
+MEDIUM_LANDSLIDE_MAX_AREA_M2 = 100.0
+
+# The same bands read as a volume, used where an inundated depth makes one
+# available. Set at the area bands times a nominal half-metre slip, so the two
+# measures agree on a deposit of that depth and the deeper one wins otherwise.
+# **Invented**, on the same footing as the areas.
+SMALL_LANDSLIDE_MAX_VOLUME_M3 = 5.0
+MEDIUM_LANDSLIDE_MAX_VOLUME_M3 = 50.0
+
+# The shape of the ground a slip takes, and the wall that goes back in its place.
+# A failure on a residential section takes a strip off the slope, wider along the
+# face than it is deep into the section, so the wall follows the width. Two to
+# one is the assumed aspect; the margin is the length beyond the failure at each
+# end, because a wall is not stopped at the edge of the ground that moved; and
+# the minimum is what it is worth mobilising for at all. **All three invented.**
+# How far back from a wall the ground it retains is taken to be reinstated by
+# repairing it. One metre along the wall's whole length, so a claim with a
+# damaged wall pays nothing extra for that much damaged land and pays for the
+# rest. Agreed with Maxim Millen on 2026-09-24. **Assumed.**
+LAND_REINSTATED_PER_WALL_METRE_M = 1.0
+
+LANDSLIDE_WALL_ASPECT_RATIO = 2.0
+LANDSLIDE_WALL_MARGIN_M = 2.0
+MIN_LANDSLIDE_WALL_LENGTH_M = 5.0
+
+# What it costs to clear a cubic metre of slip debris off a section.
+#
+# **From the costing tool's own `lists` sheet**, not assumed: the line item
+# "Clear site: Load, cart and tip material", unit m3, rate 150. Excluding GST,
+# on the same basis as the retaining wall square metre rates that come off the
+# same sheet.
+#
+# The sheet's only other cubic metre option is a skip bin -- $340 for 3.5 m3 and
+# $450 for 6.0 m3, which work out dearer per cubic metre on a small job and
+# cheaper on none. Load, cart and tip is the line that describes clearing a
+# slip, so it is the one used.
+INUNDATION_REMOVAL_RATE_EXCL_GST_NZD_PER_M3 = 150.0
+INUNDATION_REMOVAL_LINE_ITEM = "Clear site: Load, cart and tip material"
+
+# The professional fees a claim carries beyond the physical work, **from the
+# costing tool's own `lists` sheet**, its "Fee type" table. Mileage is the one
+# fee left out, on instruction; the tool carries it at zero in any case, so
+# leaving it out changes no number and only says where the line is.
+#
+# These answer a question the study had open: the square metre rates do **not**
+# carry design, consent or survey. They are separate line items, so a wall
+# priced on the rate alone was missing all of them.
+PROFESSIONAL_FEES_EXCL_GST_NZD = {
+    "Consent costs": 1000.0,
+    "Design costs": 800.0,
+    "Engineering costs": 1000.0,
+    "H&S costs": 300.0,
+    "Project management costs": 1000.0,
+    "Survey costs": 1000.0,
+}
+PROFESSIONAL_FEES_TOTAL_EXCL_GST_NZD = sum(PROFESSIONAL_FEES_EXCL_GST_NZD.values())
+
 EASY_INUNDATION_MAX_VOLUME_M3 = 20.0
 MODERATE_INUNDATION_MAX_VOLUME_M3 = 200.0
 
@@ -328,6 +438,84 @@ def inundation_volume_m3(
     return area * depth
 
 
+def professional_fees_incl_gst_nzd(
+    *,
+    ratings: SiteRatings,
+    policy: PolicySettings,
+    fees_excl_gst_nzd: float = PROFESSIONAL_FEES_TOTAL_EXCL_GST_NZD,
+) -> np.ndarray:
+    """Return a claim's professional fees, including GST.
+
+    Consent, design, engineering, health and safety, project management and
+    survey, summed from :data:`PROFESSIONAL_FEES_EXCL_GST_NZD`. Mileage is
+    excluded on instruction.
+
+    **The site multiplier applies to the fees too.** They are added before it,
+    so a difficult site costs more to design, consent and manage as well as more
+    to build, which is the reading agreed on 2026-09-24. They do not carry the
+    specification uplift: that is about the wall being built to a better
+    standard, not about the paperwork around it.
+
+    **Fees are per claim, not per wall or per cost line.** A claim gets one
+    consent, one design and one survey however many walls stand on it, so this
+    is charged once and not folded into a wall's square metre cost. The caller
+    decides which claims pay them; a wall, failed or invented, is what gets
+    designed and consented.
+
+    Args:
+        ratings: How hard the site is to work on.
+        policy: The settings this scenario runs under, which carry the GST rate.
+        fees_excl_gst_nzd: The fees before GST, defaulting to the tool's own.
+
+    Returns:
+        The fees in GST-inclusive dollars, one per claim.
+    """
+    scaled = fees_excl_gst_nzd * (1.0 + ratings.multiplier)
+    return np.asarray(scaled, dtype=float) * (1.0 + policy.gst_rate)
+
+
+def inundation_removal_cost_incl_gst_nzd(
+    volume_m3: np.ndarray | float,
+    *,
+    policy: PolicySettings,
+    rate_excl_gst_nzd_per_m3: float = INUNDATION_REMOVAL_RATE_EXCL_GST_NZD_PER_M3,
+) -> np.ndarray:
+    """Return what it costs to clear the spoil a landslide left, including GST.
+
+    The volume times a rate, and nothing else. No minimum, no mobilisation, no
+    allowance for where the material has to go -- all of which a real quote
+    would carry and none of which there is a basis for here.
+
+    **The spoil now costs something as well as setting a rating.** It used to do
+    only the latter, which meant a claim with buried ground and no retaining
+    wall was charged nothing at all for the clearing -- real work priced at zero
+    (**L-33**). That is now closed, at the price of a possible double count
+    worth watching: the same volume still sets ``earthworks_required``, which
+    marks up wall construction. The rating is about how hard the site is to
+    build on and this is the cost of carting material away, so they are
+    different things, but nothing has confirmed that the costing tool sees it
+    the same way.
+
+    Args:
+        volume_m3: Volume of spoil, from :func:`inundation_volume_m3`.
+        policy: The settings this scenario runs under, which carry the GST rate.
+        rate_excl_gst_nzd_per_m3: What a cubic metre costs to clear, excluding
+            GST. Defaults to the costing tool's own
+            :data:`INUNDATION_REMOVAL_LINE_ITEM` rate.
+
+    Returns:
+        The cost in GST-inclusive dollars.
+
+    Raises:
+        ValueError: If any volume is negative or not finite.
+    """
+    volumes = np.asarray(volume_m3, dtype=float)
+    if not np.all(np.isfinite(volumes)) or np.any(volumes < 0):
+        msg = "volume_m3 must be finite and not negative"
+        raise ValueError(msg)
+    return volumes * rate_excl_gst_nzd_per_m3 * (1.0 + policy.gst_rate)
+
+
 def classify_inundation_earthworks(volume_m3: np.ndarray | float) -> np.ndarray:
     """Return the earthworks rating the spoil volume implies.
 
@@ -365,6 +553,237 @@ def classify_inundation_earthworks(volume_m3: np.ndarray | float) -> np.ndarray:
         [EASY, MODERATE],
         default=DIFFICULT,
     )
+
+
+def _classify(
+    values: np.ndarray | float,
+    name: str,
+    easy_max: float,
+    moderate_max: float,
+) -> np.ndarray:
+    """Return E/M/D for values against two ascending thresholds.
+
+    Args:
+        values: The measure, scalar or array.
+        name: The measure's name, for the error message.
+        easy_max: At or below this is easy.
+        moderate_max: At or below this is moderate; above it is difficult.
+
+    Returns:
+        ``"E"``, ``"M"`` or ``"D"`` per element.
+
+    Raises:
+        ValueError: If any value is negative or not finite.
+    """
+    measured = np.asarray(values, dtype=float)
+    if not np.all(np.isfinite(measured)) or np.any(measured < 0):
+        msg = f"{name} must be finite and not negative"
+        raise ValueError(msg)
+    return np.select(
+        [measured <= easy_max, measured <= moderate_max],
+        [EASY, MODERATE],
+        default=DIFFICULT,
+    )
+
+
+def classify_construction_access(driveway_length_m: np.ndarray | float) -> np.ndarray:
+    """Return the construction access rating the driveway length implies.
+
+    A **proxy, not a measurement**. `exposure` routes a driveway from each
+    building to the road, and its length stands in for how far plant and
+    material have to be carried. The bands are
+    :data:`EASY_ACCESS_MAX_DRIVEWAY_M` and
+    :data:`MODERATE_ACCESS_MAX_DRIVEWAY_M`, both invented.
+
+    A claim with no driveway routed is the caller's to handle: this reads a
+    zero length as the easiest site, which is right for a house on the street
+    front and wrong for one the router could not reach at all.
+
+    Args:
+        driveway_length_m: Length of the routed driveway.
+
+    Returns:
+        ``"E"``, ``"M"`` or ``"D"``, ready for :class:`SiteRatings`.
+
+    Raises:
+        ValueError: If any length is negative or not finite.
+    """
+    return _classify(
+        driveway_length_m,
+        "driveway_length_m",
+        EASY_ACCESS_MAX_DRIVEWAY_M,
+        MODERATE_ACCESS_MAX_DRIVEWAY_M,
+    )
+
+
+def classify_constructability(slope_deg: np.ndarray | float) -> np.ndarray:
+    """Return the constructability rating the ground slope implies.
+
+    A **proxy, not a measurement**, on the same footing as
+    :func:`classify_construction_access`. Steeper ground is harder to build a
+    wall on and harder to reinstate on the way out. The bands are
+    :data:`EASY_CONSTRUCTABILITY_MAX_SLOPE_DEG` and
+    :data:`MODERATE_CONSTRUCTABILITY_MAX_SLOPE_DEG`, both invented, and the
+    slope is sampled at the address rather than at the wall.
+
+    Args:
+        slope_deg: Ground slope in degrees.
+
+    Returns:
+        ``"E"``, ``"M"`` or ``"D"``, ready for :class:`SiteRatings`.
+
+    Raises:
+        ValueError: If any slope is negative or not finite.
+    """
+    return _classify(
+        slope_deg,
+        "slope_deg",
+        EASY_CONSTRUCTABILITY_MAX_SLOPE_DEG,
+        MODERATE_CONSTRUCTABILITY_MAX_SLOPE_DEG,
+    )
+
+
+def classify_landslide_wall_size(
+    damaged_area_m2: np.ndarray | float,
+    inundated_volume_m3: np.ndarray | float = 0.0,
+) -> np.ndarray:
+    """Return the size of wall a landslide-damaged area is remediated with.
+
+    Where a landslide takes ground on a claim that carries **no damaged
+    retaining wall**, reinstating the land is assumed to mean building one,
+    sized by how much ground went.
+
+    **Both measures are used where both are available.** Area always is;
+    volume only where an inundated mean depth came through, and it is zero
+    otherwise. Each gives a class, and the **larger of the two** is taken, so a
+    deep deposit over a small footprint is not read as a small job. The bands
+    are :data:`SMALL_LANDSLIDE_MAX_AREA_M2`,
+    :data:`MEDIUM_LANDSLIDE_MAX_AREA_M2`,
+    :data:`SMALL_LANDSLIDE_MAX_VOLUME_M3` and
+    :data:`MEDIUM_LANDSLIDE_MAX_VOLUME_M3`, and all four are **assumed, not
+    sourced**.
+
+    This is a remediation cost, not an asset: a wall that never existed has no
+    undepreciated value, so it belongs on the repair side of
+    ``min(repair, cap)`` and must not be added to the cap.
+
+    Args:
+        damaged_area_m2: Insured area taken by the landslide.
+        inundated_volume_m3: Volume of the deposit, from
+            :func:`inundation_volume_m3`. Zero where no depth was sent.
+
+    Returns:
+        ``"small"``, ``"medium"`` or ``"large"``, ready for
+        :func:`beta_wall_face_area_m2`.
+
+    Raises:
+        ValueError: If any area or volume is negative or not finite.
+    """
+    areas = np.asarray(damaged_area_m2, dtype=float)
+    volumes = np.asarray(inundated_volume_m3, dtype=float)
+    for name, values in (
+        ("damaged_area_m2", areas),
+        ("inundated_volume_m3", volumes),
+    ):
+        if not np.all(np.isfinite(values)) or np.any(values < 0):
+            msg = f"{name} must be finite and not negative"
+            raise ValueError(msg)
+    by_area = np.select(
+        [areas <= SMALL_LANDSLIDE_MAX_AREA_M2, areas <= MEDIUM_LANDSLIDE_MAX_AREA_M2],
+        [0, 1],
+        default=2,
+    )
+    by_volume = np.select(
+        [
+            volumes <= SMALL_LANDSLIDE_MAX_VOLUME_M3,
+            volumes <= MEDIUM_LANDSLIDE_MAX_VOLUME_M3,
+        ],
+        [0, 1],
+        default=2,
+    )
+    return np.asarray(SIZE_CLASSES)[np.maximum(by_area, by_volume)]
+
+
+def landslide_wall_length_m(damaged_area_m2: np.ndarray | float) -> np.ndarray:
+    """Return the length of the wall a landslide-damaged area is remediated with.
+
+    The wall follows the **width of the failure**, not a side of it. Ground lost
+    off a residential slope goes as a strip that is wider along the face than it
+    is deep into the section, taken here as
+    :data:`LANDSLIDE_WALL_ASPECT_RATIO` to one, so a slip of area ``A`` is
+    ``sqrt(A / 2)`` deep and twice that wide. To the width is added
+    :data:`LANDSLIDE_WALL_MARGIN_M` at each end, because a wall is not stopped
+    at the edge of the ground that moved, and the result is floored at
+    :data:`MIN_LANDSLIDE_WALL_LENGTH_M`, because remediation does not scale down
+    to nothing -- there is a length below which nobody mobilises.
+
+    That floor is what stops the pilot's many small slips pricing at almost
+    zero. **Every one of the three numbers is invented**, and together they set
+    how large the invented walls are, which is the largest single lever on the
+    landslide side of the repair cost.
+
+    Args:
+        damaged_area_m2: Insured area taken by the landslide.
+
+    Returns:
+        The length in metres.
+
+    Raises:
+        ValueError: If any area is negative or not finite.
+    """
+    areas = np.asarray(damaged_area_m2, dtype=float)
+    if not np.all(np.isfinite(areas)) or np.any(areas < 0):
+        msg = "damaged_area_m2 must be finite and not negative"
+        raise ValueError(msg)
+    across = LANDSLIDE_WALL_ASPECT_RATIO * np.sqrt(areas / LANDSLIDE_WALL_ASPECT_RATIO)
+    return np.maximum(
+        across + 2.0 * LANDSLIDE_WALL_MARGIN_M, MIN_LANDSLIDE_WALL_LENGTH_M
+    )
+
+
+def beta_wall_rate_excl_gst_nzd_per_m2(rw_id: np.ndarray | str) -> np.ndarray:
+    """Return the rate each wall is priced at, concrete or timber pole.
+
+    :data:`BETA_CONCRETE_SHARE` of walls are priced as
+    :data:`BETA_CONCRETE_WALL_TYPE`. The rest take **one of the four timber
+    pole rates in :data:`BETA_WALL_TYPES`, drawn evenly**, rather than their
+    average -- so some walls come out cheaper than the old flat rate and some
+    dearer, while the mean of the timber share stays exactly
+    :data:`BETA_WALL_RATE_EXCL_GST_NZD_PER_M2`.
+
+    **Which wall gets which is decided by its own id, not by a random draw.**
+    The id is hashed to a fraction, and that one fraction settles both
+    questions: below the concrete share it is concrete, and above it the
+    remainder is divided evenly between the timber rates. So the same wall is
+    the same construction every run, on any machine, whatever order the walls
+    arrive in and however many there are -- none of which is true of a seeded
+    generator. Nothing about the wall other than its id bears on it, which is
+    the honest position: nothing in the data says what a wall is made of.
+
+    Args:
+        rw_id: The wall identifier, scalar or array.
+
+    Returns:
+        The rate for each wall, excluding GST.
+    """
+    ids = np.atleast_1d(np.asarray(rw_id, dtype=object))
+    draws = np.array(
+        [
+            int.from_bytes(
+                hashlib.blake2b(str(value).encode(), digest_size=8).digest(), "big"
+            )
+            / 2**64
+            for value in ids
+        ]
+    )
+    concrete = WALL_RATE_EXCL_GST_NZD_PER_M2[BETA_CONCRETE_WALL_TYPE]
+    timber = np.array([WALL_RATE_EXCL_GST_NZD_PER_M2[name] for name in BETA_WALL_TYPES])
+    # The part of the draw above the concrete share, rescaled to [0, 1) and cut
+    # into as many equal pieces as there are timber rates.
+    above = (draws - BETA_CONCRETE_SHARE) / (1.0 - BETA_CONCRETE_SHARE)
+    which = np.clip((above * len(timber)).astype(int), 0, len(timber) - 1)
+    rates = np.where(draws < BETA_CONCRETE_SHARE, concrete, timber[which])
+    return rates if np.ndim(rw_id) else rates[0]
 
 
 def wall_rate_excl_gst_nzd_per_m2(wall_type: np.ndarray | str) -> np.ndarray:
@@ -477,18 +896,27 @@ def _wall_cost_incl_gst_nzd(
     face_area_m2: np.ndarray | float,
     *,
     site_multiplier: np.ndarray | float,
+    spec_uplift: float = 0.0,
     policy: PolicySettings,
 ) -> np.ndarray:
     """Return a wall's cost from a rate and a site allowance, including GST.
 
     The one calculation behind both numbers this module produces. Repair cost
-    passes the site multiplier; undepreciated value passes zero, which is the
-    whole of the difference between them.
+    passes the site multiplier and the specification uplift; undepreciated value
+    passes neither, which is the whole of the difference between them.
+
+    The two allowances are different things and both belong on the repair side.
+    The **site multiplier** is what this particular site costs to work on. The
+    **specification uplift** is that a failed wall is rebuilt to a more
+    substantial current standard than the one that failed, which the rates carry
+    no allowance for (**L-34**).
 
     Args:
         rate_excl_gst_nzd_per_m2: The square metre rate, excluding GST.
         face_area_m2: Area of wall face.
         site_multiplier: The site allowance, or zero for none.
+        spec_uplift: The specification allowance, or zero for a like-for-like
+            rebuild. Undepreciated value always passes zero.
         policy: The settings this scenario runs under.
 
     Returns:
@@ -501,7 +929,9 @@ def _wall_cost_incl_gst_nzd(
     if not np.all(np.isfinite(area)) or np.any(area < 0):
         msg = "face_area_m2 must be finite and not negative"
         raise ValueError(msg)
-    excl_gst = rate_excl_gst_nzd_per_m2 * area * (1.0 + site_multiplier)
+    excl_gst = (
+        rate_excl_gst_nzd_per_m2 * area * (1.0 + site_multiplier) * (1.0 + spec_uplift)
+    )
     return excl_gst * (1.0 + policy.gst_rate)
 
 
@@ -537,6 +967,7 @@ def wall_repair_cost_incl_gst_nzd(
         wall_rate_excl_gst_nzd_per_m2(wall_type),
         face_area_m2,
         site_multiplier=ratings.multiplier,
+        spec_uplift=policy.replacement_spec_uplift,
         policy=policy,
     )
 
@@ -597,13 +1028,18 @@ def beta_wall_repair_cost_incl_gst_nzd(
     face_area_m2: np.ndarray | float,
     *,
     ratings: SiteRatings,
+    rate_excl_gst_nzd_per_m2: np.ndarray | float = BETA_WALL_RATE_EXCL_GST_NZD_PER_M2,
     policy: PolicySettings,
 ) -> np.ndarray:
     """Return what it costs to replace a wall of unknown type, including GST.
 
-    Prices every wall at :data:`BETA_WALL_RATE_EXCL_GST_NZD_PER_M2`, because
-    nothing yet says which of the tool's 29 construction types a modelled wall
-    is. The ``beta`` prefix is the same one
+    Defaults to :data:`BETA_WALL_RATE_EXCL_GST_NZD_PER_M2`, because nothing yet
+    says which of the tool's 29 construction types a modelled wall is. A caller
+    pricing a population should pass
+    :func:`beta_wall_rate_excl_gst_nzd_per_m2` instead, which mixes a concrete
+    share in and gives the population a spread rather than one rate.
+
+    The ``beta`` prefix is the same one
     :mod:`landloss.exposure.rw.beta_population` carries and means the same
     thing: this is deleted once the study settles the mapping, and no result
     from it is evidence about Wellington.
@@ -611,6 +1047,7 @@ def beta_wall_repair_cost_incl_gst_nzd(
     Args:
         face_area_m2: Area of wall face, from :func:`wall_face_area_m2`.
         ratings: How hard the site is to work on.
+        rate_excl_gst_nzd_per_m2: The square metre rate, excluding GST.
         policy: The settings this scenario runs under.
 
     Returns:
@@ -622,9 +1059,10 @@ def beta_wall_repair_cost_incl_gst_nzd(
             one the costing tool carries.
     """
     return _wall_cost_incl_gst_nzd(
-        BETA_WALL_RATE_EXCL_GST_NZD_PER_M2,
+        rate_excl_gst_nzd_per_m2,
         face_area_m2,
         site_multiplier=ratings.multiplier,
+        spec_uplift=policy.replacement_spec_uplift,
         policy=policy,
     )
 
@@ -632,6 +1070,7 @@ def beta_wall_repair_cost_incl_gst_nzd(
 def beta_wall_udv_incl_gst_nzd(
     face_area_m2: np.ndarray | float,
     *,
+    rate_excl_gst_nzd_per_m2: np.ndarray | float = BETA_WALL_RATE_EXCL_GST_NZD_PER_M2,
     policy: PolicySettings,
 ) -> np.ndarray:
     """Return the undepreciated value of a wall of unknown type, including GST.
@@ -642,6 +1081,9 @@ def beta_wall_udv_incl_gst_nzd(
 
     Args:
         face_area_m2: Area of wall face, from :func:`beta_wall_face_area_m2`.
+        rate_excl_gst_nzd_per_m2: The square metre rate, excluding GST. Pass
+            :func:`beta_wall_rate_excl_gst_nzd_per_m2` so a wall is valued at
+            the rate its repair is priced at.
         policy: The settings this scenario runs under.
 
     Returns:
@@ -651,7 +1093,7 @@ def beta_wall_udv_incl_gst_nzd(
         ValueError: If the area is negative or not finite.
     """
     return _wall_cost_incl_gst_nzd(
-        BETA_WALL_RATE_EXCL_GST_NZD_PER_M2,
+        rate_excl_gst_nzd_per_m2,
         face_area_m2,
         site_multiplier=0.0,
         policy=policy,

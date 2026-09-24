@@ -56,6 +56,7 @@ import pandas as pd
 
 from landloss.domain.loss_contract import (
     IS_DAMAGED_BY_SHAKING_COLUMN,
+    IS_DAMAGED_COLUMN,
     IS_EVACUATED_COLUMN,
     IS_INUNDATED_COLUMN,
     LANDSLIDE_AREA_COLUMN,
@@ -173,6 +174,16 @@ LIQ_STATE_NONE = 1.0
 # `$/m2 market value`, which says nothing about GST.
 DAMAGED_AREA_COLUMN = "damaged_area_m2"
 LAND_RATE_COLUMN = "land_rate_incl_gst_nzd_per_m2"
+
+# Every damage flag either crossing table might carry. Which ones are present
+# differs between culverts and bridges (**Q-09**), so they are looked for rather
+# than required.
+CROSSING_FLAG_COLUMNS = (
+    IS_DAMAGED_COLUMN,
+    IS_DAMAGED_BY_SHAKING_COLUMN,
+    IS_EVACUATED_COLUMN,
+    IS_INUNDATED_COLUMN,
+)
 
 
 def damaged_area_m2(land: pd.DataFrame) -> np.ndarray:
@@ -308,3 +319,38 @@ def damaged_walls(rw: pd.DataFrame) -> pd.DataFrame:
     for flag in flags:
         damaged |= rw[flag].to_numpy(dtype=bool)
     return rw.loc[damaged]
+
+
+def damaged_crossings(crossings: pd.DataFrame) -> pd.DataFrame:
+    """Return the culverts or bridges a settlement has to replace.
+
+    The two tables describe damage asymmetrically -- a culvert carries a
+    generic ``is_damaged`` and no ``is_evacuated``, a bridge carries
+    ``is_damaged_by_shaking`` and does -- and whether that is deliberate is
+    **Q-09**. Rather than assume, this keeps a row where **any flag the table
+    actually carries** is true, so neither table has to be special-cased and a
+    flag appearing later is picked up without a change here.
+
+    Args:
+        crossings: The contract's culvert or bridge table.
+
+    Returns:
+        The rows carrying at least one damage flag. An empty table in, an empty
+        table out.
+
+    Raises:
+        ValueError: If the table carries no damage flag at all.
+    """
+    flags = [column for column in CROSSING_FLAG_COLUMNS if column in crossings.columns]
+    if not flags:
+        msg = (
+            "the crossing table carries none of the damage flags "
+            f"{list(CROSSING_FLAG_COLUMNS)}, so nothing says what is damaged"
+        )
+        raise ValueError(msg)
+    if crossings.empty:
+        return crossings
+    damaged = np.zeros(len(crossings), dtype=bool)
+    for flag in flags:
+        damaged |= crossings[flag].to_numpy(dtype=bool)
+    return crossings.loc[damaged]

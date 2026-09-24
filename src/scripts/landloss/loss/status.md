@@ -1,8 +1,9 @@
 # Loss: status
 
-**Status:** The land cover cap runs on real data. Step 0 caps the 4,388 pilot
-claims from vul's four tables; a settlement still waits on a repair cost, which
-nothing produces for either a wall or damaged land.
+**Status:** The module settles. Step 0 caps the 4,388 pilot claims and step 1
+prices the repair and pays `min(repair, cap)` less the excess — $10.1 m over
+2,027 claims. Every repair cost rests on a named placeholder: the wall rate, the
+three site ratings, and the wall invented to reinstate landslide ground.
 
 **Updated:** 2026-09-24
 
@@ -92,9 +93,20 @@ The settlement core is built and is the only part that needed no upstream data.
   `damaged_walls()`. Polygon areas add; the market rate is averaged weighted by
   the damaged area it values; a wall carrying any of the three flags is one
   replacement.
-- **The cap stops short of a settlement, and nothing pretends otherwise.** No
-  repair cost exists for either side of the comparison, so `settle` is not
-  called. The step prints what it could not count rather than omitting it.
+- **Step 1 settles.** It prices a damaged wall's replacement, treats that wall
+  as also reinstating the land it retained, invents a wall where landslide
+  ground has none, carries the Canterbury liquefaction cost through the
+  contract, and settles a damaged crossing at its sub-cap. It re-derives the cap
+  and checks it against step 0's, which agree exactly.
+- **The three site ratings are proxied, not measured** — driveway length for
+  access, ground slope for constructability, inundated volume for earthworks.
+  Every band is invented. What bounds the risk is the ceiling: all three
+  together move a wall's cost by at most 30%, against the factor of 21 the
+  construction type spans.
+- **`capped` is an artefact on claims with no damaged land.** 1,030 pilot claims
+  cap; only 2 of them have damaged ground. On the rest the cap is the wall's
+  value and the repair cost is that value plus the multiplier, so capping is
+  arithmetic. Read the count with damaged land.
 
 ## Next
 
@@ -212,6 +224,12 @@ Raised by Perrie Gilbert, 2026-09-24. Not yet numbered in
 - The same question for survey and any other flat cost: are they added, and if
   so **before or after** the multiplier is applied? The two give different
   answers.
+
+**The Canterbury costs are not in today's dollars.**
+
+- They are 2010/2011 NZD, grossed up for GST but **not inflated**, and are
+  compared against land values and wall rates in present-day dollars. Nothing in
+  the repository supplies an index. How much does that understate the land side?
 
 **The damaged area, which the two causes measure differently.**
 

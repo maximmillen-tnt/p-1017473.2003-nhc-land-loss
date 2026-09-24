@@ -16,18 +16,31 @@ from landloss.loss.pricing import (
     BETA_WALL_TYPES,
     DIFFICULT,
     EASY,
+    EASY_ACCESS_MAX_DRIVEWAY_M,
+    EASY_CONSTRUCTABILITY_MAX_SLOPE_DEG,
     EASY_INUNDATION_MAX_VOLUME_M3,
+    LANDSLIDE_WALL_MARGIN_M,
     MAX_SITE_MULTIPLIER,
+    MEDIUM_LANDSLIDE_MAX_AREA_M2,
+    MEDIUM_LANDSLIDE_MAX_VOLUME_M3,
+    MIN_LANDSLIDE_WALL_LENGTH_M,
     MODERATE,
+    MODERATE_ACCESS_MAX_DRIVEWAY_M,
+    MODERATE_CONSTRUCTABILITY_MAX_SLOPE_DEG,
     MODERATE_INUNDATION_MAX_VOLUME_M3,
+    SMALL_LANDSLIDE_MAX_AREA_M2,
     WALL_RATE_EXCL_GST_NZD_PER_M2,
     SiteRatings,
     beta_wall_face_area_m2,
     beta_wall_height_m,
     beta_wall_repair_cost_incl_gst_nzd,
     beta_wall_udv_incl_gst_nzd,
+    classify_constructability,
+    classify_construction_access,
     classify_inundation_earthworks,
+    classify_landslide_wall_size,
     inundation_volume_m3,
+    landslide_wall_length_m,
     wall_face_area_m2,
     wall_rate_excl_gst_nzd_per_m2,
     wall_repair_cost_incl_gst_nzd,
@@ -35,6 +48,10 @@ from landloss.loss.pricing import (
 )
 
 ACT = PolicySettings()
+
+# Every repair cost carries this on top of the site multiplier; an
+# undepreciated value carries neither.
+SPEC = 1.0 + ACT.replacement_spec_uplift
 
 # The costing tool's own combination table, transcribed row for row. The three
 # letters are construction access, earthworks required, and constructability
@@ -191,7 +208,7 @@ def test_repair_cost_is_rate_by_area_by_multiplier_grossed_up():
         ratings=ratings_from("EMM"),
         policy=ACT,
     )
-    assert cost == pytest.approx(744.69 * 18.0 * 1.10 * 1.15)
+    assert cost == pytest.approx(744.69 * 18.0 * 1.10 * SPEC * 1.15)
 
 
 def test_an_easy_site_pays_the_bare_rate_plus_gst():
@@ -201,7 +218,7 @@ def test_an_easy_site_pays_the_bare_rate_plus_gst():
         ratings=ratings_from("EEE"),
         policy=ACT,
     )
-    assert cost == pytest.approx(1_010.58 * 10.0 * 1.15)
+    assert cost == pytest.approx(1_010.58 * 10.0 * SPEC * 1.15)
 
 
 def test_the_hardest_site_pays_thirty_percent_more_than_the_easiest():
@@ -220,7 +237,7 @@ def test_repair_cost_is_gst_inclusive_on_the_scenarios_rate():
     zero_gst = PolicySettings(gst_rate=0.0)
     assert wall_repair_cost_incl_gst_nzd(
         "Concrete Block", 10.0, ratings=ratings_from("EEE"), policy=zero_gst
-    ) == pytest.approx(1_010.58 * 10.0)
+    ) == pytest.approx(1_010.58 * 10.0 * SPEC)
 
 
 def test_a_portfolio_prices_in_one_call():
@@ -234,7 +251,9 @@ def test_a_portfolio_prices_in_one_call():
         ),
         policy=ACT,
     )
-    assert cost == pytest.approx([226.67 * 5.0 * 1.15, 1_010.58 * 10.0 * 1.30 * 1.15])
+    assert cost == pytest.approx(
+        [226.67 * 5.0 * SPEC * 1.15, 1_010.58 * 10.0 * 1.30 * SPEC * 1.15]
+    )
 
 
 def test_an_undamaged_wall_costs_nothing():
@@ -279,7 +298,7 @@ def test_beta_cost_is_the_flat_rate_by_area_by_multiplier_grossed_up():
     cost = beta_wall_repair_cost_incl_gst_nzd(
         wall_face_area_m2(1.8, 10.0), ratings=ratings_from("EMM"), policy=ACT
     )
-    assert cost == pytest.approx(766.6375 * 18.0 * 1.10 * 1.15)
+    assert cost == pytest.approx(766.6375 * 18.0 * 1.10 * SPEC * 1.15)
 
 
 def test_beta_cost_sits_between_the_cheapest_and_dearest_timber_pole():
@@ -378,7 +397,7 @@ def test_a_wall_prices_straight_from_what_vul_sends():
         ratings=ratings_from("EMM"),
         policy=ACT,
     )
-    assert cost == pytest.approx(766.6375 * 21.0 * 1.10 * 1.15)
+    assert cost == pytest.approx(766.6375 * 21.0 * 1.10 * SPEC * 1.15)
 
 
 def test_beta_cost_prices_a_population_in_one_call():
@@ -393,8 +412,8 @@ def test_beta_cost_prices_a_population_in_one_call():
     )
     assert cost == pytest.approx(
         [
-            766.6375 * 5.0 * 1.15,
-            766.6375 * 10.0 * 1.30 * 1.15,
+            766.6375 * 5.0 * SPEC * 1.15,
+            766.6375 * 10.0 * 1.30 * SPEC * 1.15,
         ]
     )
 
@@ -485,17 +504,42 @@ def test_udv_ignores_the_site_ratings_entirely():
     easy_site_repair = wall_repair_cost_incl_gst_nzd(
         "Concrete Block", 10.0, ratings=ratings_from("EEE"), policy=ACT
     )
+    # On an easy site the multiplier is zero, so what separates them is the
+    # specification uplift alone.
     assert wall_udv_incl_gst_nzd("Concrete Block", 10.0, policy=ACT) == pytest.approx(
-        easy_site_repair
+        easy_site_repair / SPEC
     )
 
 
-def test_the_site_multiplier_is_the_whole_difference_between_the_two():
+def test_the_site_multiplier_and_spec_uplift_are_the_whole_difference():
+    # Two allowances separate repair from value, and they are different things:
+    # the multiplier is what this site costs to work on, the uplift is that the
+    # replacement is built to a better standard than what failed (L-34).
     udv = wall_udv_incl_gst_nzd("Concrete Block", 10.0, policy=ACT)
     repair = wall_repair_cost_incl_gst_nzd(
         "Concrete Block", 10.0, ratings=ratings_from("DDD"), policy=ACT
     )
+    assert repair == pytest.approx(udv * (1.0 + MAX_SITE_MULTIPLIER) * SPEC)
+
+
+def test_a_like_for_like_rebuild_differs_only_by_the_site_multiplier():
+    # Turning the uplift off recovers the old behaviour exactly, which is what
+    # makes it a scenario setting rather than a hardcoded change of basis.
+    like_for_like = PolicySettings(replacement_spec_uplift=0.0)
+    udv = wall_udv_incl_gst_nzd("Concrete Block", 10.0, policy=like_for_like)
+    repair = wall_repair_cost_incl_gst_nzd(
+        "Concrete Block", 10.0, ratings=ratings_from("DDD"), policy=like_for_like
+    )
     assert repair == pytest.approx(udv * (1.0 + MAX_SITE_MULTIPLIER))
+
+
+def test_the_uplift_never_reaches_an_undepreciated_value():
+    # UDV is what the wall was worth, not what a better one would cost.
+    assert wall_udv_incl_gst_nzd("Concrete Block", 10.0, policy=ACT) == pytest.approx(
+        wall_udv_incl_gst_nzd(
+            "Concrete Block", 10.0, policy=PolicySettings(replacement_spec_uplift=0.0)
+        )
+    )
 
 
 @pytest.mark.parametrize("combo", TOOL_COMBINATION_TABLE)
@@ -546,4 +590,116 @@ def test_a_wall_gives_both_numbers_from_what_vul_sends():
     udv = beta_wall_udv_incl_gst_nzd(area, policy=ACT)
     repair = beta_wall_repair_cost_incl_gst_nzd(area, ratings=ratings, policy=ACT)
     assert udv == pytest.approx(766.6375 * 27.5 * 1.15)
-    assert repair == pytest.approx(udv * 1.15)
+    assert repair == pytest.approx(udv * 1.15 * SPEC)
+
+
+# ---------------------------------------------------------------------------
+# The proxies. Every band in them is invented, so what is worth testing is the
+# shape of the mapping and the bound on what it can cost -- not the numbers.
+# ---------------------------------------------------------------------------
+
+
+def test_construction_access_worsens_with_driveway_length():
+    lengths = [0.0, EASY_ACCESS_MAX_DRIVEWAY_M, MODERATE_ACCESS_MAX_DRIVEWAY_M, 1_000.0]
+    assert classify_construction_access(lengths).tolist() == [
+        EASY,
+        EASY,
+        MODERATE,
+        DIFFICULT,
+    ]
+
+
+def test_constructability_worsens_with_slope():
+    slopes = [
+        0.0,
+        EASY_CONSTRUCTABILITY_MAX_SLOPE_DEG,
+        MODERATE_CONSTRUCTABILITY_MAX_SLOPE_DEG,
+        89.0,
+    ]
+    assert classify_constructability(slopes).tolist() == [
+        EASY,
+        EASY,
+        MODERATE,
+        DIFFICULT,
+    ]
+
+
+@pytest.mark.parametrize(
+    "classify", [classify_construction_access, classify_constructability]
+)
+def test_the_proxies_refuse_a_negative_measure(classify):
+    with pytest.raises(ValueError, match="must be finite and not negative"):
+        classify([-1.0])
+
+
+def test_the_three_proxies_together_cannot_exceed_the_ceiling():
+    # The whole point of proxying rather than waiting: all three being wrong in
+    # the worst direction moves a wall's cost by the site multiplier's ceiling
+    # and no further.
+    worst = SiteRatings(
+        construction_access=classify_construction_access([1e6]),
+        earthworks_required=classify_inundation_earthworks([1e6]),
+        constructability_reinstatement=classify_constructability([89.0]),
+    )
+    assert worst.multiplier == pytest.approx(MAX_SITE_MULTIPLIER)
+
+
+# ---------------------------------------------------------------------------
+# The wall invented to reinstate land a landslide took.
+# ---------------------------------------------------------------------------
+
+
+def test_the_invented_wall_grows_with_the_damaged_area():
+    areas = [
+        1.0,
+        SMALL_LANDSLIDE_MAX_AREA_M2,
+        MEDIUM_LANDSLIDE_MAX_AREA_M2,
+        10_000.0,
+    ]
+    assert classify_landslide_wall_size(areas).tolist() == [
+        "small",
+        "small",
+        "medium",
+        "large",
+    ]
+
+
+def test_a_deep_deposit_on_a_small_footprint_is_not_a_small_job():
+    # Area alone would call this small. The volume is what says otherwise, and
+    # the larger of the two classes is the one taken.
+    small_area = [SMALL_LANDSLIDE_MAX_AREA_M2]
+    assert classify_landslide_wall_size(small_area).tolist() == ["small"]
+    deep = [MEDIUM_LANDSLIDE_MAX_VOLUME_M3 + 1.0]
+    assert classify_landslide_wall_size(small_area, deep).tolist() == ["large"]
+
+
+def test_no_volume_falls_back_to_the_area_alone():
+    areas = [MEDIUM_LANDSLIDE_MAX_AREA_M2 + 1.0]
+    assert classify_landslide_wall_size(areas, [0.0]).tolist() == (
+        classify_landslide_wall_size(areas).tolist()
+    )
+
+
+def test_the_invented_wall_follows_the_width_of_the_failure():
+    # 200 m2 at two to one is 10 m deep and 20 m across, plus a margin each end.
+    expected = 20.0 + 2.0 * LANDSLIDE_WALL_MARGIN_M
+    assert landslide_wall_length_m([200.0]).tolist() == [pytest.approx(expected)]
+
+
+def test_the_invented_wall_is_never_shorter_than_worth_mobilising_for():
+    # The floor binds only on the very smallest slips: the margin at each end
+    # already carries most walls past it. A no-area claim is the clear case.
+    assert landslide_wall_length_m([0.0]).tolist() == [MIN_LANDSLIDE_WALL_LENGTH_M]
+    areas = np.array([0.0, 0.5, 5.0, 50.0, 500.0])
+    assert (landslide_wall_length_m(areas) >= MIN_LANDSLIDE_WALL_LENGTH_M).all()
+
+
+def test_the_invented_wall_is_wider_than_the_ground_is_deep():
+    # The old model took a side of a square, which under-read every slip.
+    area = 400.0
+    assert landslide_wall_length_m([area])[0] > area**0.5
+
+
+def test_the_invented_wall_refuses_a_negative_area():
+    with pytest.raises(ValueError, match="must be finite and not negative"):
+        landslide_wall_length_m([-1.0])
