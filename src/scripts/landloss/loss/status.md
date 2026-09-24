@@ -1,8 +1,8 @@
 # Loss: status
 
-**Status:** Settlement arithmetic and retaining wall repair pricing implemented
-and tested. Nothing reads real data yet — no upstream module emits what it
-consumes.
+**Status:** The land cover cap runs on real data. Step 0 caps the 4,388 pilot
+claims from vul's four tables; a settlement still waits on a repair cost, which
+nothing produces for either a wall or damaged land.
 
 **Updated:** 2026-09-24
 
@@ -82,10 +82,19 @@ The settlement core is built and is the only part that needed no upstream data.
   module exists to prevent. `test_pricing.py` checks the multiplier against all
   27 rows of the tool's combination table, which is why the module computes the
   figure rather than storing the table.
-- Nothing reads a real layer. No module upstream emits the damage rows this one
-  consumes: `vul` produces nothing for Wellington yet, `exposure.rw` and
-  `exposure.culverts_bridges` are empty, and the shaking hazard has no code at
-  all, so the structures half of the pricing matrix has no input.
+- **The module runs.** `gen_loss.py` runs step 0,
+  `steps/s0_land_cover_cap/`, over vul's four tables and writes one row per
+  claim to `temp/loss/land-cover-cap-r<nnn>[-pilot].parquet`. On the pilot that
+  is 4,388 claims, 1,835 with damaged ground, a land cover cap of $1.18 bn, of
+  which $8.3 m is retaining wall undepreciated value.
+- **The aggregation onto `claim_id` is built**, which was item 5 of Next.
+  `landloss.loss.claims` gained `land_by_claim()`, `damaged_area_m2()` and
+  `damaged_walls()`. Polygon areas add; the market rate is averaged weighted by
+  the damaged area it values; a wall carrying any of the three flags is one
+  replacement.
+- **The cap stops short of a settlement, and nothing pretends otherwise.** No
+  repair cost exists for either side of the comparison, so `settle` is not
+  called. The step prints what it could not count rather than omitting it.
 
 ## Next
 
@@ -95,12 +104,12 @@ The settlement core is built and is the only part that needed no upstream data.
 2. Generate the three site ratings, without which no wall prices at all
    (**Q-10**).
 3. Price culverts and bridges.
-4. Build a stub input generator matching the contract in
-   `.agents/plans/beta-build.md`, so the module can run end to end before the
-   upstream modules emit anything.
-5. Aggregate `vul`'s four tables onto `claim_id`.
-6. Wire to the real layers as each lands, structures last since shaking gates
-   them.
+4. ~~Build a stub input generator~~ — **not needed.** The real tables arrived
+   first, so the module was wired to those instead.
+5. ~~Aggregate `vul`'s four tables onto `claim_id`~~ — **done**, in
+   `landloss.loss.claims`.
+6. Settle, once a repair cost exists for either side. The cap is built and
+   `settle` is tested, so this is wiring rather than arithmetic.
 
 ## Validation
 
@@ -203,6 +212,18 @@ Raised by Perrie Gilbert, 2026-09-24. Not yet numbered in
 - The same question for survey and any other flat cost: are they added, and if
   so **before or after** the multiplier is applied? The two give different
   answers.
+
+**The damaged area, which the two causes measure differently.**
+
+- Does a damaging liquefaction state damage the polygon's **whole insured
+  area**? That is the reading step 0 takes, on the grounds that the Canterbury
+  rates the state indexes are per property — but `vul` sends a state and no
+  area, so nothing confirms it. It sets the land half of every liquefaction
+  claim's cap.
+- Where one polygon is both liquefied and hit by a landslide, the two areas are
+  combined with a **maximum rather than a sum**, so the overlap is valued once.
+  Exact where one cause covers all the ground the other did, conservative
+  otherwise. Is that the right treatment?
 
 **The wall's condition, as a proxy for replacement specification.**
 

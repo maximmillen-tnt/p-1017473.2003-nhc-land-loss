@@ -2,11 +2,17 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from landloss.domain import loss_contract
 from landloss.exposure.land import extent
 from landloss.loss.claims import (
     CLAIM_ID_COLUMN,
+    DAMAGED_AREA_COLUMN,
     DWELLING_COUNT_COLUMN,
+    LAND_RATE_COLUMN,
+    damaged_area_m2,
+    damaged_walls,
     dwelling_counts,
+    land_by_claim,
 )
 from landloss.loss.policy import PolicySettings
 from landloss.loss.settlement import DamagedClaim, settle
@@ -132,3 +138,125 @@ def test_the_excess_stops_growing_where_the_sub_caps_do_not():
     counts = dwelling_counts(["c1"], table)
     assert ACT.excess_nzd(counts) == pytest.approx(5_000.0)
     assert ACT.retaining_wall_limit_nzd(counts) == pytest.approx(20 * 57_500.0)
+
+
+# ---------------------------------------------------------------------------
+# Bringing vul's tables onto the claim. The damaged area is assembled from two
+# causes that are measured differently, which is where the reading lives.
+# ---------------------------------------------------------------------------
+
+
+def land_table(rows):
+    """Build a land table from (claim, liq state, total area, landslide area)."""
+    return pd.DataFrame(
+        {
+            CLAIM_ID_COLUMN: [row[0] for row in rows],
+            loss_contract.LIQ_LD_STATE_COLUMN: [row[1] for row in rows],
+            loss_contract.TOTAL_INSURED_LAND_AREA_COLUMN: [row[2] for row in rows],
+            loss_contract.LANDSLIDE_AREA_COLUMN: [row[3] for row in rows],
+            loss_contract.MARKET_VALUE_COLUMN: [row[4] for row in rows],
+            DWELLING_COUNT_COLUMN: [row[5] for row in rows],
+        }
+    )
+
+
+def test_a_damaging_liquefaction_state_damages_the_whole_insured_area():
+    land = land_table([("c1", 3.0, 500.0, 0.0, 750.0, 1)])
+    assert damaged_area_m2(land).tolist() == [500.0]
+
+
+def test_state_one_is_no_damage_and_neither_is_a_missing_state():
+    land = land_table(
+        [("c1", 1.0, 500.0, 0.0, 750.0, 1), ("c2", np.nan, 500.0, 0.0, 750.0, 1)]
+    )
+    assert damaged_area_m2(land).tolist() == [0.0, 0.0]
+
+
+def test_the_two_causes_are_combined_with_a_maximum_not_a_sum():
+    # Ground both liquefied and buried is one piece of damaged ground. Adding
+    # would value the overlap twice, which on this row would give 700.
+    land = land_table([("c1", 4.0, 500.0, 200.0, 750.0, 1)])
+    assert damaged_area_m2(land).tolist() == [500.0]
+
+
+def test_landslide_alone_is_the_damaged_area_where_nothing_liquefied():
+    land = land_table([("c1", 1.0, 500.0, 200.0, 750.0, 1)])
+    assert damaged_area_m2(land).tolist() == [200.0]
+
+
+def test_the_polygons_of_a_claim_have_their_damaged_areas_added():
+    land = land_table(
+        [("c1", 1.0, 500.0, 100.0, 750.0, 1), ("c1", 1.0, 500.0, 300.0, 750.0, 1)]
+    )
+    claims = land_by_claim(land)
+    assert claims.loc["c1", DAMAGED_AREA_COLUMN] == pytest.approx(400.0)
+
+
+def test_the_rate_is_weighted_by_the_damaged_area_it_values():
+    # 100 m2 at $1,000 and 300 m2 at $500 is $250,000 over 400 m2, so the one
+    # rate that values the claim the same is $625 -- not the plain mean of $750.
+    land = land_table(
+        [("c1", 1.0, 500.0, 100.0, 1000.0, 1), ("c1", 1.0, 500.0, 300.0, 500.0, 1)]
+    )
+    claims = land_by_claim(land)
+    assert claims.loc["c1", LAND_RATE_COLUMN] == pytest.approx(625.0)
+    area = claims.loc["c1", DAMAGED_AREA_COLUMN]
+    assert area * claims.loc["c1", LAND_RATE_COLUMN] == pytest.approx(250_000.0)
+
+
+def test_a_claim_with_no_damaged_ground_falls_back_to_the_plain_rate():
+    land = land_table([("c1", 1.0, 500.0, 0.0, 800.0, 1)])
+    claims = land_by_claim(land)
+    assert claims.loc["c1", DAMAGED_AREA_COLUMN] == 0.0
+    assert claims.loc["c1", LAND_RATE_COLUMN] == pytest.approx(800.0)
+
+
+def test_polygons_disagreeing_about_the_dwelling_count_are_refused():
+    land = land_table(
+        [("c1", 1.0, 500.0, 0.0, 750.0, 1), ("c1", 1.0, 500.0, 0.0, 750.0, 4)]
+    )
+    with pytest.raises(ValueError, match="disagree about the dwelling count"):
+        land_by_claim(land)
+
+
+def test_the_aggregated_land_table_can_supply_its_own_dwelling_counts():
+    # The land table carries the count the contract sends, so the reader that
+    # validates it works against this frame as well as against exposure's.
+    land = land_table([("c1", 3.0, 500.0, 0.0, 750.0, 2)])
+    claims = land_by_claim(land)
+    assert dwelling_counts(claims.index.to_numpy(), claims.reset_index()) == [2.0]
+
+
+# ---------------------------------------------------------------------------
+# Which walls a cap has to count.
+# ---------------------------------------------------------------------------
+
+
+def wall_table(flags):
+    """Build a wall table from (shaking, evacuated, inundated) triples."""
+    return pd.DataFrame(
+        {
+            CLAIM_ID_COLUMN: [f"c{number}" for number in range(len(flags))],
+            loss_contract.IS_DAMAGED_BY_SHAKING_COLUMN: [row[0] for row in flags],
+            loss_contract.IS_EVACUATED_COLUMN: [row[1] for row in flags],
+            loss_contract.IS_INUNDATED_COLUMN: [row[2] for row in flags],
+        }
+    )
+
+
+def test_any_damage_flag_keeps_a_wall():
+    walls = wall_table(
+        [(True, False, False), (False, True, False), (False, False, True)]
+    )
+    assert len(damaged_walls(walls)) == 3
+
+
+def test_an_undamaged_wall_is_dropped_rather_than_priced_at_zero():
+    walls = wall_table([(False, False, False), (True, False, False)])
+    kept = damaged_walls(walls)
+    assert kept[CLAIM_ID_COLUMN].tolist() == ["c1"]
+
+
+def test_a_wall_damaged_three_ways_is_still_one_wall():
+    walls = wall_table([(True, True, True)])
+    assert len(damaged_walls(walls)) == 1
