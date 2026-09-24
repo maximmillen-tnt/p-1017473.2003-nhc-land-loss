@@ -580,23 +580,23 @@
     },
     {
       "ID": "L-33",
-      "Limitation": "The insured land extent is clipped to the claim's own property boundary, so a right of way or shared accessway over another title carries no insured land even though the claimant has an interest in it. A fee simple rear lot is unaffected, its leg being part of its own title.",
-      "Affects": "Insured land extent, and every hazard measured against it",
-      "Source": "Insured land extent rebuild 2026-09-23",
-      "Status": "Open"
-    },
-    {
-      "ID": "L-34",
       "Limitation": "Inundation removal is folded into the earthworks difficulty rating rather than costed as its own line. The spoil volume sets the rating and buys nothing else, and because the site multiplier reaches wall construction alone, a claim with inundated ground and no retaining wall attracts nothing for the clearing -- real work priced at zero. Whether inundation removal should instead be its own line item, at a rate per cubic metre, is undecided.",
       "Affects": "loss pricing, land repair cost",
       "Source": "Inundation removal 2026-09-23",
       "Status": "Open"
     },
     {
-      "ID": "L-35",
+      "ID": "L-34",
       "Limitation": "Repair cost and undepreciated value come off the same retaining wall square-metre rate, the difference between them being the site multiplier alone. That is how the costing spreadsheet itself works, confirmed 2026-09-23, and it keeps repair cost above UDV by construction. The limitation is specification rather than rates: it assumes the replacement wall matches the one that failed, where in practice a failed wall is often rebuilt to a more substantial current standard, which would warrant a higher rate on the repair side than on the UDV side. The bias has a known direction: settlement is min(repair, cap) less the excess, so understating repair cost can only lower a settlement, meaning the study under-reports NHC's liability rather than over-reporting it.",
       "Affects": "loss pricing, retaining wall settlements",
       "Source": "Perrie Gilbert 2026-09-23",
+      "Status": "Open"
+    },
+    {
+      "ID": "L-35",
+      "Limitation": "The insured land extent is clipped to the claim's own property boundary, so a right of way or shared accessway over another title carries no insured land even though the claimant has an interest in it. A fee simple rear lot is unaffected, its leg being part of its own title.",
+      "Affects": "Insured land extent, and every hazard measured against it",
+      "Source": "Insured land extent rebuild 2026-09-23",
       "Status": "Open"
     }
   ],
