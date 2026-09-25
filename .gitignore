@@ -167,3 +167,11 @@ src/**/_version.py
 
 .idea/
 temp/
+.koopcache/
+.tdrivecache/
+
+# Generated report figures
+fig/
+
+# Generated weekly update PDFs; the .typ is the deliverable
+release_updates/*.pdf

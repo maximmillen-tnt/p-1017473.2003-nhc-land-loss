@@ -1,0 +1,125 @@
+"""Run every exposure step end to end.
+
+    uv run --frozen python src/scripts/landloss/exposure/gen_exposure.py
+
+The address spine, the land value per address, the insured land extent and the
+dwellings on each claim, then the retaining wall and crossing populations that
+hang off the insured land. The extent and realisations come from ``config.py``
+beside this; anything else a step reads, such as whether to reuse a cached
+download, comes from that step's own ``config.py``.
+"""
+
+from scripts.landloss.exposure import config
+from scripts.landloss.exposure.culverts_bridges.steps.s7_crossing_population import (
+    config as crossing_config,
+)
+from scripts.landloss.exposure.culverts_bridges.steps.s7_crossing_population import (
+    gen_crossing_population,
+)
+from scripts.landloss.exposure.land.steps.s2_land_value import (
+    config as land_value_config,
+)
+from scripts.landloss.exposure.land.steps.s2_land_value import (
+    s1_build_terrain_attributes,
+    s4_estimate_land_value,
+)
+from scripts.landloss.exposure.land.steps.s5_insured_land_extent import (
+    config as insured_land_config,
+)
+from scripts.landloss.exposure.land.steps.s5_insured_land_extent import (
+    gen_insured_land,
+)
+from scripts.landloss.exposure.rw.steps.s6_wall_population import (
+    config as wall_config,
+)
+from scripts.landloss.exposure.rw.steps.s6_wall_population import (
+    gen_wall_population,
+)
+from scripts.landloss.exposure.steps.s1_address_spine import (
+    config as spine_config,
+)
+from scripts.landloss.exposure.steps.s1_address_spine import (
+    s1_build_address_spine,
+)
+from scripts.landloss.exposure.steps.s3_dwellings_per_property import (
+    config as dwellings_config,
+)
+from scripts.landloss.exposure.steps.s3_dwellings_per_property import (
+    gen_dwellings_per_property,
+)
+from scripts.landloss.pipeline import run_steps
+
+
+def main(*, pilot, realisation_ids):
+    """Run the exposure steps in order.
+
+    Args:
+        pilot: Whether to run over the small Wellington pilot box.
+        realisation_ids: Which modelled earthquakes to draw the wall and
+            crossing populations for.
+    """
+    run_steps(
+        "exposure",
+        [
+            (
+                "s1, address spine",
+                lambda: s1_build_address_spine.main(
+                    pilot=pilot, fresh=spine_config.FRESH, out=spine_config.OUT
+                ),
+            ),
+            (
+                "land s2, terrain attributes",
+                lambda: s1_build_terrain_attributes.main(
+                    pilot=pilot,
+                    fresh=land_value_config.FRESH,
+                    spine=land_value_config.SPINE,
+                    out=land_value_config.TERRAIN,
+                    window=land_value_config.WINDOW_M,
+                ),
+            ),
+            (
+                "land s2, land value per address",
+                lambda: s4_estimate_land_value.main(
+                    pilot=pilot,
+                    fresh=land_value_config.FRESH,
+                    spine=land_value_config.SPINE,
+                    terrain=land_value_config.TERRAIN,
+                    out=land_value_config.LAND_VALUE_OUT,
+                    cohorts=land_value_config.COHORTS_OUT,
+                ),
+            ),
+            (
+                "land s5, insured land extent",
+                lambda: gen_insured_land.main(
+                    pilot=pilot,
+                    use_cached_extent=insured_land_config.USE_CACHED_EXTENT,
+                ),
+            ),
+            (
+                "s3, dwellings per property",
+                lambda: gen_dwellings_per_property.main(
+                    pilot=pilot, use_cached_extent=dwellings_config.USE_CACHED_EXTENT
+                ),
+            ),
+            (
+                "rw s6, wall population",
+                lambda: gen_wall_population.main(
+                    pilot=pilot,
+                    realisation_ids=realisation_ids,
+                    use_cached_dem=wall_config.USE_CACHED_DEM,
+                ),
+            ),
+            (
+                "culverts and bridges s7, crossing population",
+                lambda: gen_crossing_population.main(
+                    pilot=pilot,
+                    realisation_ids=realisation_ids,
+                    use_cached_extent=crossing_config.USE_CACHED_EXTENT,
+                ),
+            ),
+        ],
+    )
+
+
+if __name__ == "__main__":
+    main(pilot=config.PILOT, realisation_ids=config.REALISATION_IDS)
