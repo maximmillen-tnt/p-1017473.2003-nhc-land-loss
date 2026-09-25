@@ -146,9 +146,7 @@ def main() -> int:
         )
         return 1
 
-    costs = pd.read_csv(COSTS_PATH, keep_default_na=False).set_index(
-        "LD_refined_state"
-    )
+    costs = pd.read_csv(COSTS_PATH, keep_default_na=False).set_index("LD_refined_state")
     out = escalated(costs, ESCALATION_FACTOR)
     out.reset_index().to_csv(OUT_PATH, index=False)
     README_PATH.write_text(readme(ESCALATION_FACTOR, costs, out), encoding="utf-8")

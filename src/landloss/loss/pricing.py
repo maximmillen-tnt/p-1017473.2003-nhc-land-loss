@@ -704,6 +704,42 @@ def classify_landslide_wall_size(
     return np.asarray(SIZE_CLASSES)[np.maximum(by_area, by_volume)]
 
 
+def at_least_the_existing_wall(
+    size: np.ndarray,
+    existing_size: np.ndarray,
+) -> np.ndarray:
+    """Return the larger of a proposed wall's size class and the one already there.
+
+    **A wall built to hold ground that has failed is not smaller than the wall
+    the site already had.** Where a claim carries a damaged wall and landslide
+    ground beyond what repairing it reinstates, the ground has already shown it
+    needs a wall of at least that size -- so sizing the new one on the leftover
+    area alone can propose a garden edge beside a two-metre structure.
+
+    A claim with no existing wall is not floored: there is nothing to be no
+    smaller than.
+
+    Args:
+        size: The class the damaged area implies, from
+            :func:`classify_landslide_wall_size`.
+        existing_size: The class of the claim's own damaged wall, or an empty
+            string or missing value where it has none.
+
+    Returns:
+        The class to build, one of :data:`SIZE_CLASSES`.
+    """
+    rank = {name: index for index, name in enumerate(SIZE_CLASSES)}
+    proposed = np.atleast_1d(np.asarray(size, dtype=object))
+    existing = np.atleast_1d(np.asarray(existing_size, dtype=object))
+    out = np.array(
+        [
+            SIZE_CLASSES[max(rank[str(a)], rank.get(str(b), -1))]
+            for a, b in zip(proposed, existing, strict=True)
+        ]
+    )
+    return out if np.ndim(size) else out[0]
+
+
 def landslide_wall_length_m(damaged_area_m2: np.ndarray | float) -> np.ndarray:
     """Return the length of the wall a landslide-damaged area is remediated with.
 

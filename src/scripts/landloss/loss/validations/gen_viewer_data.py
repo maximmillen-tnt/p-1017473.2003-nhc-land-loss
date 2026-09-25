@@ -181,9 +181,10 @@ def settled_in_python(rows: pd.DataFrame, policy: PolicySettings) -> pd.DataFram
         rows["dwellings"]
     )
 
-    land_value = np.minimum(rows["damaged_area_m2"], policy.area_cap_m2) * rows[
-        "land_rate_incl_gst"
-    ]
+    land_value = (
+        np.minimum(rows["damaged_area_m2"], policy.area_cap_m2)
+        * rows["land_rate_incl_gst"]
+    )
     cap = (
         land_value
         + np.minimum(udv, policy.retaining_wall_limit_nzd(rows["dwellings"]))

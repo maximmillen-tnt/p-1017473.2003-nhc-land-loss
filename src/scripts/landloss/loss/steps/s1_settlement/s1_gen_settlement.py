@@ -79,6 +79,7 @@ from landloss.loss.pricing import (
     BETA_SIZE_CLASS_HEIGHT_M,
     LAND_REINSTATED_PER_WALL_METRE_M,
     SiteRatings,
+    at_least_the_existing_wall,
     beta_wall_face_area_m2,
     beta_wall_rate_excl_gst_nzd_per_m2,
     beta_wall_repair_cost_incl_gst_nzd,
@@ -292,6 +293,7 @@ def land_repair_by_claim(
     ratings: pd.DataFrame,
     *,
     wall_length_m: pd.Series,
+    wall_size: pd.Series,
     policy: PolicySettings,
 ) -> pd.DataFrame:
     """Return the cost of reinstating land a landslide took, by claim.
@@ -312,6 +314,8 @@ def land_repair_by_claim(
         ratings: The site ratings per claim.
         wall_length_m: Total damaged wall length per claim, indexed by
             ``claim_id``. A claim with no damaged wall need not appear.
+        wall_size: The size class of each claim's damaged wall, which the new
+            wall is never smaller than.
         policy: The settings this scenario runs under.
 
     Returns:
@@ -358,6 +362,15 @@ def land_repair_by_claim(
         building["uncovered"].to_numpy(), building["volume"].to_numpy()
     )
     length = landslide_wall_length_m(building["uncovered"].to_numpy())
+
+    # A new wall is never smaller than the one the site already had, in either
+    # dimension: the ground has shown what it needs.
+    size = at_least_the_existing_wall(
+        size, wall_size.reindex(building.index).fillna("").to_numpy()
+    )
+    length = np.maximum(
+        length, wall_length_m.reindex(building.index).fillna(0.0).to_numpy()
+    )
     out.loc[needs_wall, NEW_WALL_SIZE_COLUMN] = size
     out.loc[needs_wall, NEW_WALL_HEIGHT_COLUMN] = [
         BETA_SIZE_CLASS_HEIGHT_M[value] for value in size
@@ -530,7 +543,11 @@ def main(*, pilot, realisation_ids):
         # How much damaged wall each claim has, which is how much of its
         # damaged ground the wall repair is taken to reinstate.
         damaged_walls = loss_claims.damaged_walls(rw)
-        wall_length = damaged_walls.groupby(CLAIM_ID_COLUMN)[RW_LENGTH_COLUMN].sum()
+        by_claim = damaged_walls.groupby(CLAIM_ID_COLUMN)
+        wall_length = by_claim[RW_LENGTH_COLUMN].sum()
+        wall_size = by_claim[RW_SIZE_COLUMN].agg(
+            lambda sizes: max(sizes, key=list(BETA_SIZE_CLASS_HEIGHT_M).index)
+        )
 
         claims[WALL_REPAIR_COLUMN] = (
             wall_repair_by_claim(rw, ratings, policy=policy)
@@ -538,7 +555,11 @@ def main(*, pilot, realisation_ids):
             .fillna(0.0)
         )
         land_repair = land_repair_by_claim(
-            land, ratings, wall_length_m=wall_length, policy=policy
+            land,
+            ratings,
+            wall_length_m=wall_length,
+            wall_size=wall_size,
+            policy=policy,
         ).reindex(claims.index)
         claims[LAND_REPAIR_COLUMN] = land_repair[LAND_REPAIR_COLUMN].fillna(0.0)
         claims[SYNTHETIC_WALL_COLUMN] = (
